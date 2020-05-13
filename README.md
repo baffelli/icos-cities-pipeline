@@ -3,7 +3,7 @@
 The LP8 measurement processing is applied for two model versions:
 - version [3]: full model -> database table: **CarboSense_CO2_TEST01**
 - version [2]: simplified model -> database table: **CarboSense_CO2_TEST00**
-- *version [1]: not used anymore (database table: CarboSense_CO2)*
+- [*version [1]: not used anymore (database table: CarboSense_CO2)*]
 
 
 File **Carbosense_LP8_DATA_PROCESSING.sh** contains a set of processing chains sequentially calling the scripts described below with specific input options.
@@ -14,7 +14,7 @@ First part: Computation of processed measurements, outlier correction, discontin
 - Compute_CarboSense_CO2_values.r **CronJob**
   - Required input variables: par1: partial/complete processing [T/F]; par2: version [1/2/3]; optional_par3: processing only measurements from DUE1 [DUE] 
   - Tasks:
-    - Computes LP8 measurements based on calibration model/parameters
+    - Computation of CO2 concentration based on raw measurements and calibration model/parameters
     - Export processed measurements to database tables CarboSense_CO2_TEST01, CarboSense_CO2_TEST00 or CarboSense_CO2 (depending on **version**)
     - Flags outliers based on SHT21_RH [-> FLAG]
 - Empa_OutlierDetection_P.r **CronJob**
@@ -57,6 +57,28 @@ Second part: analysis+visualisation of results
   - Required input variables: par1: Version [1/2/3]
   - Tasks:
     - Compares LP8 measurements with measurements of co-located HPP instruments [sites HAE, PAY, DUE, RIG, BRM, LAEG]
+
+# HPP_measurement_processing
+- Compute_CarboSense_HPP_CO2_values.r **CronJob**
+  - Required input variables: par1: partial/complete processing [T/F]; optional_par2: LocationName (if omitted only operational sites are processed)
+  - Tasks:
+    - Computation of CO2 concentrations based on raw measurements, calibration model and on-site calibration
+    - Export of computed concentrations to CarboSense.CarboSense_HPP_CO2
+    - Reports of calibration conditions (delta HPP-REF, H2O, RH, cylinder pressure)
+- Plot_HPP_CO2.r **CronJob**
+  - Tasks:
+    - Generation of HPP CO2 time series
+- Comparison_CO2_HPP_REF.r **CronJob**
+  - Tasks:
+    - Comparison of HPP measurements and measurements from Picarro instruments
+- Comparison_H2O_HPP_MCH.r **CronJob**
+  - Tasks:
+    - Comparison of computed HPP H2O values with H2O values computed from MeteoSwiss measurements
+
+# REF_measurement_processing
+- Plot_REF_CO2.r **CronJob**
+  - Tasks:
+    - Generation of reference site CO2 time series
 
 # HPP_sensor_calibration
 - CO2_HPP_SensorCalibration_LINUX_IR_2S.r **WorkingScript** 
