@@ -122,19 +122,24 @@ Second part: analysis+visualisation of results
 - Import_DB_table_NABEL_DUE.r **CronJob** [1]
   - Imports data files (Picarro, Gases, Meteo) from directory "K:/Nabel/Daten/Stationen/DUE/" ("/newhome/muem/mnt/Win_K/Daten/Stationen/DUE/")
   - Exclusion periods accounted in the script
+  - **to be changed: path /newhome/muem/mnt/Win_K/ according to user's permissions**
 - Import_DB_table_NABEL_HAE.r [1]
   - Imports data files (**LICOR**, Gases, Meteo) from directory "K:/Nabel/Daten/Stationen/HAE/" ("/newhome/muem/mnt/Win_K/Daten/Stationen/HAE/")
   - Reads relevant entries from CarboSense.RefMeasExclusionPeriods
+  - **to be changed: path /newhome/muem/mnt/Win_K/ according to user's permissions**
 - Import_DB_table_NABEL_HAE_PIC.r **CronJob** [1]
   - Imports data files (**Picarro**, Gases, Meteo) from directory "K:/Nabel/Daten/Stationen/HAE/" ("/newhome/muem/mnt/Win_K/Daten/Stationen/HAE/")
   - Reads relevant entries from CarboSense.RefMeasExclusionPeriods
   - Replaced "Import_DB_table_NABEL_HAE.r" on 2020-03-13.
+  - **to be changed: path /newhome/muem/mnt/Win_K/ according to user's permissions**
 - Import_DB_table_NABEL_PAY.r **CronJob** [1]
   - Imports data files (Picarro, Gases, Meteo) from directory "K:/Nabel/Daten/Stationen/PAY/" ("/newhome/muem/mnt/Win_K/Daten/Stationen/PAY/")
   - Reads relevant entries from CarboSense.RefMeasExclusionPeriods
+  - **to be changed: path /newhome/muem/mnt/Win_K/ according to user's permissions**
 - Import_DB_table_NABEL_RIG.r **CronJob** [1]
   - Imports data files (Picarro, Gases, Meteo) from directory "K:/Nabel/Daten/Stationen/RIG/" ("/newhome/muem/mnt/Win_K/Daten/Stationen/RIG/")
   - Reads relevant entries from CarboSense.RefMeasExclusionPeriods
+  - **to be changed: path /newhome/muem/mnt/Win_K/ according to user's permissions**
 
 [1] Requires access to "K:/Nabel" from Linux.
 
