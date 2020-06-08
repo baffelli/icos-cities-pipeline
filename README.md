@@ -138,7 +138,6 @@ Second part: analysis+visualisation of results
   - **to be changed: path /newhome/muem/mnt/Win_K/ according to user's permissions**
 - Import_DB_table_NABEL_RIG.r **CronJob** [1]
   - Imports data files (Picarro, Gases, Meteo) from directory "K:/Nabel/Daten/Stationen/RIG/" ("/newhome/muem/mnt/Win_K/Daten/Stationen/RIG/")
-  - Reads relevant entries from CarboSense.RefMeasExclusionPeriods
   - **to be changed: path /newhome/muem/mnt/Win_K/ according to user's permissions**
 
 [1] Requires access to "K:/Nabel" from Linux.
@@ -157,6 +156,7 @@ Second part: analysis+visualisation of results
 - DB_REF_MEAS_Processing.r **CronJob**
   - Computes columns "?_10MIN_AV" in CarboSense database tables that contain data for LP8 calibration ("NABEL_DUE", "NABEL_HAE","NABEL_RIG", "NABEL_PAY", "ClimateChamber_00_DUE", "PressureChamber_01_DUE", "PressureChamber_00_METAS"). Only data of tables "NABEL_?" should be processed on a daily basis.
   - Filtering criteria are coded in the script and depend on specific tables
+  - Applies CO2/H2O calibration for Picarros in DUE, HAE, PAY, RIG (e.g. CO2_DRY_CAL)
 - Compute_NABEL_Picarro_CO2_WET.r **CronJob**
   - Computes CO2_WET_COMP for tables NABEL_DUE, NABEL_HAE, NABEL_PAY and NABEL_RIG
 
