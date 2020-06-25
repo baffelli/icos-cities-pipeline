@@ -1,0 +1,23 @@
+name: carbosense
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - snakemake[version='>5.0']
+  - airflow
+  - werkzeug==0.16.1
+  - pylint
+  - sqlalchemy==1.3.15
+  - libsodium
+  - libsecret
+  - r=3.6
+  - r-devtools
+  - r-tidyverse
+  - gdal
+  - mysql-connector-python
+  - netcdf4
+  - pymysql
+  - mysql-connector-c
+  - mysqlclient
+prefix: /newhome/basi/.conda/envs/carbosense
