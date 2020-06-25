@@ -1,3 +1,7 @@
+# CarboSenseUtilities
+- CarboSenseFunctions.r
+  - Collection of plot functions, etc.
+
 # LP8_measurement_processing
 
 The LP8 measurement processing is applied for two model versions:
@@ -153,23 +157,23 @@ Second part: analysis+visualisation of results
 
 [2] Contact regarding data availability and access to empaGSN: Stephan Henne
 
-- Import_DB_table_PressureChamber_00_METAS.r
+- Import_DB_table_PressureChamber_00_METAS.r **WorkingScript**
   - Imports the measurement files collected during the pressure calibration at METAS (directory: K:/Carbosense/Data/Druckkammer_Versuche_Metas/Data/) into database table "PressureChamber_00_METAS"
     - Empty database table before running the script
     - **CS_DB_user, CS_DB_pass for Carbosense meta-database have to be set according to user in the script**
   - Pressure calibration at METAS was carried out only once in May 2017.
-- Import_DB_table_ClimateChamber_00_DUE.r [3]
+- Import_DB_table_ClimateChamber_00_DUE.r **WorkingScript** [3]
   - Imports the measurement files (climate chamber data, CO2, pressure) collected during the climate chamber calibrations in LA064 (directory: K:/Carbosense/Data/Klimakammer_Versuche_27022017_XXXXXXXX) into database table "ClimateChamber_00_DUE"
     - Empty database table before running the script
     - Review code in terms of correct time zones (CEST,CET,UTC) when importing data from an additional calibration run. Climate chamber data is usually in local time.
     - **CS_DB_user, CS_DB_pass for Carbosense meta-database have to be set according to user in the script**
-- Import_DB_table_PressureChamber_01_DUE.r [3]
+- Import_DB_table_PressureChamber_01_DUE.r **WorkingScript** [3]
   - Imports the measurement files (CO2, pressure) collected during the pressure calibration in LA003 (directory: K:/Carbosense/Data//Druckkammer_Versuche_Empa_LA003/) into database table "PressureChamber_01_DUE"
     - Empty database table before running the script
-    - Review code in terms of correct time zones (CEST,CET,UTC) when importing data from an additional calibration run. Pressure data from the Additel pressure instrument might be in local time.
+    - Review code in terms of correct time zones (CEST,CET,UTC) when importing data from an additional calibration run. Pressure data from the Additel pressure instrument might refer to local time.
     - **CS_DB_user, CS_DB_pass for Carbosense meta-database have to be set according to user in the script**
 
-[3] Only run scripts after calibration runs have been completed.
+[3] Only run these scripts after calibration runs have been completed.
  
 - DB_REF_MEAS_Processing.r **CronJob**
   - Computes columns "?_10MIN_AV" in CarboSense database tables that contain data for LP8 calibration ("NABEL_DUE", "NABEL_HAE","NABEL_RIG", "NABEL_PAY", "ClimateChamber_00_DUE", "PressureChamber_01_DUE", "PressureChamber_00_METAS"). Only data of tables "NABEL_?" should be processed on a daily basis.
