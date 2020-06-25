@@ -120,24 +120,24 @@ Second part: analysis+visualisation of results
 
 # CarbosenseDatabaseTools
 - Import_DB_table_NABEL_DUE.r **CronJob** [1]
-  - Imports data files (Picarro, Gases, Meteo) from directory "K:/Nabel/Daten/Stationen/DUE/" ("/newhome/muem/mnt/Win_K/Daten/Stationen/DUE/")
+  - Imports data files (Picarro, Gases, Meteo) from directory "K:/Nabel/Daten/Stationen/DUE/" ("/newhome/muem/mnt/Win_K/Daten/Stationen/DUE/") into database table "NABEL_DUE"
   - Exclusion periods accounted in the script
   - **to be changed: path /newhome/muem/mnt/Win_K/ according to user's permissions**
 - Import_DB_table_NABEL_HAE.r [1]
-  - Imports data files (**LICOR**, Gases, Meteo) from directory "K:/Nabel/Daten/Stationen/HAE/" ("/newhome/muem/mnt/Win_K/Daten/Stationen/HAE/")
+  - Imports data files (**LICOR**, Gases, Meteo) from directory "K:/Nabel/Daten/Stationen/HAE/" ("/newhome/muem/mnt/Win_K/Daten/Stationen/HAE/") into database table "NABEL_HAE"
   - Reads relevant entries from CarboSense.RefMeasExclusionPeriods
   - **to be changed: path /newhome/muem/mnt/Win_K/ according to user's permissions**
 - Import_DB_table_NABEL_HAE_PIC.r **CronJob** [1]
-  - Imports data files (**Picarro**, Gases, Meteo) from directory "K:/Nabel/Daten/Stationen/HAE/" ("/newhome/muem/mnt/Win_K/Daten/Stationen/HAE/")
+  - Imports data files (**Picarro**, Gases, Meteo) from directory "K:/Nabel/Daten/Stationen/HAE/" ("/newhome/muem/mnt/Win_K/Daten/Stationen/HAE/") into database table "NABEL_HAE"
   - Reads relevant entries from CarboSense.RefMeasExclusionPeriods
   - Replaced "Import_DB_table_NABEL_HAE.r" on 2020-03-13.
   - **to be changed: path /newhome/muem/mnt/Win_K/ according to user's permissions**
 - Import_DB_table_NABEL_PAY.r **CronJob** [1]
-  - Imports data files (Picarro, Gases, Meteo) from directory "K:/Nabel/Daten/Stationen/PAY/" ("/newhome/muem/mnt/Win_K/Daten/Stationen/PAY/")
+  - Imports data files (Picarro, Gases, Meteo) from directory "K:/Nabel/Daten/Stationen/PAY/" ("/newhome/muem/mnt/Win_K/Daten/Stationen/PAY/") into database table "NABEL_PAY"
   - Reads relevant entries from CarboSense.RefMeasExclusionPeriods
   - **to be changed: path /newhome/muem/mnt/Win_K/ according to user's permissions**
 - Import_DB_table_NABEL_RIG.r **CronJob** [1]
-  - Imports data files (Picarro, Gases, Meteo) from directory "K:/Nabel/Daten/Stationen/RIG/" ("/newhome/muem/mnt/Win_K/Daten/Stationen/RIG/")
+  - Imports data files (Picarro, Gases, Meteo) from directory "K:/Nabel/Daten/Stationen/RIG/" ("/newhome/muem/mnt/Win_K/Daten/Stationen/RIG/") into database table "NABEL_RIG"
   - **to be changed: path /newhome/muem/mnt/Win_K/ according to user's permissions**
 
 [1] Requires access to "K:/Nabel" from Linux.
@@ -153,6 +153,24 @@ Second part: analysis+visualisation of results
 
 [2] Contact regarding data availability and access to empaGSN: Stephan Henne
 
+- Import_DB_table_PressureChamber_00_METAS.r
+  - Imports the measurement files collected during the pressure calibration at METAS (directory: K:/Carbosense/Data/Druckkammer_Versuche_Metas/Data/) into database table "PressureChamber_00_METAS"
+    - Empty database table before running the script
+    - **CS_DB_user, CS_DB_pass for Carbosense meta-database have to be set according to user in the script**
+  - Pressure calibration at METAS was carried out only once in May 2017.
+- Import_DB_table_ClimateChamber_00_DUE.r [3]
+  - Imports the measurement files (climate chamber data, CO2, pressure) collected during the climate chamber calibrations in LA064 (directory: K:/Carbosense/Data/Klimakammer_Versuche_27022017_XXXXXXXX) into database table "ClimateChamber_00_DUE"
+    - Empty database table before running the script
+    - Review code in terms of correct time zones (CEST,CET,UTC) when importing data from an additional calibration run. Climate chamber data is usually in local time.
+    - **CS_DB_user, CS_DB_pass for Carbosense meta-database have to be set according to user in the script**
+- Import_DB_table_PressureChamber_01_DUE.r [3]
+  - Imports the measurement files (CO2, pressure) collected during the pressure calibration in LA003 (directory: K:/Carbosense/Data//Druckkammer_Versuche_Empa_LA003/) into database table "PressureChamber_01_DUE"
+    - Empty database table before running the script
+    - Review code in terms of correct time zones (CEST,CET,UTC) when importing data from an additional calibration run. Pressure data from the Additel pressure instrument might be in local time.
+    - **CS_DB_user, CS_DB_pass for Carbosense meta-database have to be set according to user in the script**
+
+[3] Only run scripts after calibration runs have been completed.
+ 
 - DB_REF_MEAS_Processing.r **CronJob**
   - Computes columns "?_10MIN_AV" in CarboSense database tables that contain data for LP8 calibration ("NABEL_DUE", "NABEL_HAE","NABEL_RIG", "NABEL_PAY", "ClimateChamber_00_DUE", "PressureChamber_01_DUE", "PressureChamber_00_METAS"). Only data of tables "NABEL_?" should be processed on a daily basis.
   - Filtering criteria are coded in the script and depend on specific tables
