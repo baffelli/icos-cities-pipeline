@@ -62,6 +62,13 @@ Second part: analysis+visualisation of results
   - Tasks:
     - Compares LP8 measurements with measurements of co-located HPP instruments [sites HAE, PAY, DUE, RIG, BRM, LAEG]
 
+Miscellaneous:
+- SpatialSiteClassification.r
+  - Required input variables: par1 [DEPLOYMENT/GRID]
+  - Output of script [option "DEPLOYMENT"] is used for script "LP8_ConsistencyCheck.r"
+  - Tasks:
+    - Computes spatial characteristics for sensor locations / grid
+
 # HPP_measurement_processing
 - Compute_CarboSense_HPP_CO2_values.r **CronJob**
   - Required input variables: par1: partial/complete processing [T/F]; optional_par2: LocationName (if omitted only operational sites are processed)
@@ -206,3 +213,6 @@ Contacts related to "swiss.co2.live": Khash-Erdene Jalsan (khash.jalsan@decentla
   - Selects all data (first of month) / data of last 21 days (daily) from CarboSense_CO2_FINAL and uploads it to swiss.co2.live
 - Upload_HPP_processed_one_sensor_to_Decentlab_DB.r
   - Selects all data (first of month) / data of last 21 days (daily) from CarboSense_HPP_CO2 and uploads it to swiss.co2.live
+
+- Upload_Carbosense_MetaDBtables_to_DecentlabSFTP.pl
+  - Uploads Carbosense meta-database table dump to Decentlab's FTP server  
