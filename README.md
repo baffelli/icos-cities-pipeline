@@ -82,12 +82,18 @@ Second part: analysis+visualisation of results
 # REF_measurement_processing
 - Plot_REF_CO2.r **CronJob**
   - Tasks:
-    - Generation of reference site CO2 time series
+    - Generation of CO2 time series for sites equipped with Picarro or Licor instrument (CO2_WET_COMP or CO2 depending on measurement site)
 
 # HPP_sensor_calibration
 - CO2_HPP_SensorCalibration_LINUX_IR_2S.r **WorkingScript** 
   - Determination of HPP calibration model parameters (HPP 426-445)
     - Option to select / define different models
+    - Data that is used for calibration
+      -  CV_mode:
+        -  1 --> all data from calibration periods
+        -  4 --> data from pressure chamber calibration + 2 weeks before and after chamber calibration (selection of particular chamber calibration run coded in the script because some sensors were calibrated more than once.)
+        -  **New feature required**
+           -  Possibility for several calibration parameter sets per sensor which are valid for specific time periods in case a sensor has substantially drifted. Requires additional changes in database table "ProcessingParameters" and in script "Compute_CarboSense_HPP_CO2_values.r"
     - Export of model parameters CarboSense.CalibrationParameters
 - CO2_HPP_SensorCalibration_LINUX_IR.r **WorkingScript**
   - Determination of HPP calibration model parameters (HPP 342+390)
@@ -181,6 +187,7 @@ Second part: analysis+visualisation of results
   - Applies CO2/H2O calibration for Picarros in DUE, HAE, PAY, RIG (e.g. CO2_DRY_CAL)
 - Compute_NABEL_Picarro_CO2_WET.r **CronJob**
   - Computes CO2_WET_COMP for tables NABEL_DUE, NABEL_HAE, NABEL_PAY and NABEL_RIG
+  - As the Picarros in HAE, PAY and RIG measures air that is dried before the measuring cell (since early 2020), meteo measurements (T,RH,P) from NABHAE, PAY and NABRIG are required for the computation of H2O. 
 
 Miscellaneous:
 - AddCantonNameToTableLocation.r
