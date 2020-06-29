@@ -62,6 +62,13 @@ Second part: analysis+visualisation of results
   - Tasks:
     - Compares LP8 measurements with measurements of co-located HPP instruments [sites HAE, PAY, DUE, RIG, BRM, LAEG]
 
+Miscellaneous:
+- SpatialSiteClassification.r
+  - Required input variables: par1 [DEPLOYMENT/GRID]
+  - Output of script [option "DEPLOYMENT"] is used for script "LP8_ConsistencyCheck.r"
+  - Tasks:
+    - Computes spatial characteristics for sensor locations / grid
+
 # HPP_measurement_processing
 - Compute_CarboSense_HPP_CO2_values.r **CronJob**
   - Required input variables: par1: partial/complete processing [T/F]; optional_par2: LocationName (if omitted only operational sites are processed)
@@ -82,12 +89,18 @@ Second part: analysis+visualisation of results
 # REF_measurement_processing
 - Plot_REF_CO2.r **CronJob**
   - Tasks:
-    - Generation of reference site CO2 time series
+    - Generation of CO2 time series for sites equipped with Picarro or Licor instrument (CO2_WET_COMP or CO2 depending on measurement site)
 
 # HPP_sensor_calibration
 - CO2_HPP_SensorCalibration_LINUX_IR_2S.r **WorkingScript** 
   - Determination of HPP calibration model parameters (HPP 426-445)
     - Option to select / define different models
+    - Data that is used for calibration
+      -  CV_mode:
+        -  1 --> all data from calibration periods
+        -  4 --> data from pressure chamber calibration + 2 weeks before and after chamber calibration (selection of particular chamber calibration run coded in the script because some sensors were calibrated more than once.)
+        -  **New feature required**
+           -  Possibility for several calibration parameter sets per sensor which are valid for specific time periods in case a sensor has substantially drifted. Requires additional changes in database table "ProcessingParameters" and in script "Compute_CarboSense_HPP_CO2_values.r"
     - Export of model parameters CarboSense.CalibrationParameters
 - CO2_HPP_SensorCalibration_LINUX_IR.r **WorkingScript**
   - Determination of HPP calibration model parameters (HPP 342+390)
@@ -181,6 +194,7 @@ Second part: analysis+visualisation of results
   - Applies CO2/H2O calibration for Picarros in DUE, HAE, PAY, RIG (e.g. CO2_DRY_CAL)
 - Compute_NABEL_Picarro_CO2_WET.r **CronJob**
   - Computes CO2_WET_COMP for tables NABEL_DUE, NABEL_HAE, NABEL_PAY and NABEL_RIG
+  - As the Picarros in HAE, PAY and RIG measures air that is dried before the measuring cell (since early 2020), meteo measurements (T,RH,P) from NABHAE, PAY and NABRIG are required for the computation of H2O. 
 
 Miscellaneous:
 - AddCantonNameToTableLocation.r
@@ -199,3 +213,6 @@ Contacts related to "swiss.co2.live": Khash-Erdene Jalsan (khash.jalsan@decentla
   - Selects all data (first of month) / data of last 21 days (daily) from CarboSense_CO2_FINAL and uploads it to swiss.co2.live
 - Upload_HPP_processed_one_sensor_to_Decentlab_DB.r
   - Selects all data (first of month) / data of last 21 days (daily) from CarboSense_HPP_CO2 and uploads it to swiss.co2.live
+
+- Upload_Carbosense_MetaDBtables_to_DecentlabSFTP.pl
+  - Uploads Carbosense meta-database table dump to Decentlab's FTP server  
