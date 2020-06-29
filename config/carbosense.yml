@@ -20,4 +20,5 @@ dependencies:
   - pymysql
   - mysql-connector-c
   - mysqlclient
+  - r-argparse
 prefix: /newhome/basi/.conda/envs/carbosense
