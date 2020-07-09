@@ -31,7 +31,7 @@ KML_fn <- "/project/CarboSense/Carbosense_Network/CarboSense_KML/MeteoSwissNetwo
 # MCH sites
 query_str       <- paste("SELECT DISTINCT LocationName FROM METEOSWISS_Measurements;",sep="")
 drv             <- dbDriver("MySQL")
-con             <- dbConnect(drv, group="CarboSense_MySQL")
+con <-carboutil::get_conn()
 res             <- dbSendQuery(con, query_str)
 tbl_MCH_sites   <- fetch(res, n=-1)
 dbClearResult(res)
@@ -43,7 +43,7 @@ tmp_IN <- paste("('",paste(tbl_MCH_sites$LocationName,collapse = "','"),"')",sep
 
 query_str       <- paste("SELECT * FROM Location WHERE LocationName IN ",tmp_IN,";",sep="")
 drv             <- dbDriver("MySQL")
-con             <- dbConnect(drv, group="CarboSense_MySQL")
+con <-carboutil::get_conn()
 res             <- dbSendQuery(con, query_str)
 tbl_MCH_sites   <- fetch(res, n=-1)
 dbClearResult(res)
@@ -66,7 +66,7 @@ for(ith_MCH_site in 1:n_MCH_sites){
   
   query_str       <- paste("SELECT min(timestamp) as MIN_TS, max(timestamp) as MAX_TS FROM METEOSWISS_Measurements WHERE LocationName='",tbl_MCH_sites$LocationName[ith_MCH_site],"' and Pressure != -999;",sep="")
   drv             <- dbDriver("MySQL")
-  con             <- dbConnect(drv, group="CarboSense_MySQL")
+  con <-carboutil::get_conn()
   res             <- dbSendQuery(con, query_str)
   tmp             <- fetch(res, n=-1)
   dbClearResult(res)
@@ -79,7 +79,7 @@ for(ith_MCH_site in 1:n_MCH_sites){
   
   query_str       <- paste("SELECT min(timestamp) as MIN_TS, max(timestamp) as MAX_TS FROM METEOSWISS_Measurements WHERE LocationName='",tbl_MCH_sites$LocationName[ith_MCH_site],"' and Windspeed != -999;",sep="")
   drv             <- dbDriver("MySQL")
-  con             <- dbConnect(drv, group="CarboSense_MySQL")
+  con <-carboutil::get_conn()
   res             <- dbSendQuery(con, query_str)
   tmp             <- fetch(res, n=-1)
   dbClearResult(res)
@@ -92,7 +92,7 @@ for(ith_MCH_site in 1:n_MCH_sites){
   
   query_str       <- paste("SELECT min(timestamp) as MIN_TS, max(timestamp) as MAX_TS FROM METEOSWISS_Measurements WHERE LocationName='",tbl_MCH_sites$LocationName[ith_MCH_site],"' and Temperature != -999;",sep="")
   drv             <- dbDriver("MySQL")
-  con             <- dbConnect(drv, group="CarboSense_MySQL")
+  con <-carboutil::get_conn()
   res             <- dbSendQuery(con, query_str)
   tmp             <- fetch(res, n=-1)
   dbClearResult(res)

@@ -1,80 +1,96 @@
 timezone: Europe/Zurich
 
+_export:
+    base_folder: '/project/CarboSense/Software'
 
 +meteo:
-    _export:
-        base_folder: '/project/CarboSense/Software/MeteoSwissData4Carbosense'
     +import_meteoswiss:
-        sh>: ${base_folder}/upload_meteo_data.sh 
-        echo>: "Load Meteoswiss data"
+        sh>: Rscript ${base_folder}/MeteoSwissData4Carbosense/Import_DB_table_METEOSWISS_Measurements_sb.r 
     +pressure_interpolation:
-        sh>: Rscript ${base_folder}/METEOSWISS_PressureInterpolation.r
+        sh>: Rscript ${base_folder}/MeteoSwissData4Carbosense/METEOSWISS_PressureInterpolation.r
+    +diurnal_variations:
+        sh>: Rscript ${base_folder}/MeteoSwissData4Carbosense/MCH_MEAS_DiurnalVariationsPerMonth.r
+    +timeseries:
+        sh>: Rscript ${base_folder}/MeteoSwissData4Carbosense/MCH_MEAS_TimeSeries.r
 
 
 +reference_data:
-    _export:
-        base_folder: '/project/CarboSense/Software/CarbosenseDatabaseTools'
     +import:
         +NABEL_DUE:
-            sh>: Rscript ${base_folder}/Import_DB_table_NABEL_DUE.r 
+            sh>: Rscript ${base_folder}/CarbosenseDatabaseTools/Import_DB_table_NABEL_DUE.r 
         +NABEL_HAE:
-            sh>: Rscript ${base_folder}/Import_DB_table_NABEL_HAE.r  
+            sh>: Rscript ${base_folder}/CarbosenseDatabaseTools/Import_DB_table_NABEL_HAE.r  
         +NABEL_HAE_pic:
-            sh>: Rscript ${base_folder}/Import_DB_table_NABEL_HAE_PIC.r
+            sh>: Rscript ${base_folder}/CarbosenseDatabaseTools/Import_DB_table_NABEL_HAE_PIC.r
         +NABEL_PAY:
-            sh>: Rscript ${base_folder}/Import_DB_table_NABEL_PAY.r
+            sh>: Rscript ${base_folder}/CarbosenseDatabaseTools/Import_DB_table_NABEL_PAY.r
         +NABEL_RIG:
-            sh>: Rscript ${base_folder}/Import_DB_table_NABEL_RIG.r
+            sh>: Rscript ${base_folder}/CarbosenseDatabaseTools/Import_DB_table_NABEL_RIG.r
         +EMPA_LAEG:
-            sh>: Rscript ${base_folder}/Import_DB_table_EMPA_LAEG.r
+            sh>: Rscript ${base_folder}/CarbosenseDatabaseTools/Import_DB_table_EMPA_LAEG.r
         +UNIBE_GIMM:
-            sh>: Rscript ${base_folder}/Import_DB_table_UNIBE_GIMM.r 
+            sh>: Rscript ${base_folder}/CarbosenseDatabaseTools/Import_DB_table_UNIBE_GIMM.r 
         +UNIBE_BRM:
-            sh>: Rscript ${base_folder}/Import_DB_table_UNIBE_BRM.r 
+            sh>: Rscript ${base_folder}/CarbosenseDatabaseTools/Import_DB_table_UNIBE_BRM.r 
     +process:
-        plot_ref_ts:
+        +ref_processing:
+            sh>: Rscript  ${base_folder}/CarbosenseDatabaseTools/DB_REF_MEAS_Processing.r
+        +picarro_wet:
+            sh>: Rscript ${base_folder}/CarbosenseDatabaseTools/CarbosenseDatabaseTools/Compute_NABEL_Picarro_CO2_WET.r
+        +plot_ref_ts:
             sh>:  Rscript '/project/CarboSense/Software/REF_measurement_processing/Plot_REF_CO2'
 
+#all fixed
++network_state:
+    +deployment_km:
+        sh>: Rscript ${base_folder}/CarbosenseNetworkStatus/CarboSenseDeployment2KML.r
+    +links:
+        sh>: Rscript ${base_folder}/CarbosenseNetworkStatus/GEO_ADMIN_LINKS_for_active_deployments.r
+    +sensor_health:
+        sh>: Rscript ${base_folder}/CarbosenseNetworkStatus/Check_CarboSense_SensorHealth.r
+    +meteoswiss_km:
+        sh>: Rscript ${base_folder}/CarbosenseNetworkStatus/MeteoSwissNetwork2KML.r
 
-+sensor_state:
-    
 
 +lp8:
-    _export:
-        base_folder: '/project/CarboSense/Software/LP8_measurement_processing'
-    +process_lp8:
-        +compute_co2_values:
-            sh>: Rscript ${base_folder}/Compute_CarboSense_CO2_values.r F 3
+    for_each>: 
+        config: [[2, 'NO_DUE'], [3, 'NO_DUE'], [2, 'DUE'], [3, 'DUE']]
+    _do:
+        +process_lp8:
+            +compute_co2_values:
+                sh>: Rscript ${base_folder}/LP8_measurement_processing/Compute_CarboSense_CO2_values.r F ${config[0]} ${config[1]}
 
-        +outlier_detection:
-            sh>: Rscript ${base_folder}/Empa_OutlierDetection_P.r 3 NO_DUE
-            
-        +measurement_analysis:
-            sh>: Rscript ${base_folder}/LP8_measurement_analysis.r 3
+            +outlier_detection:
+                sh>: Rscript ${base_folder}/LP8_measurement_processing/Empa_OutlierDetection_P.r ${config[0]} ${config[1]}
+                
+            +measurement_analysis:
+                sh>: Rscript ${base_folder}/LP8_measurement_processing/LP8_measurement_analysis.r ${config[0]}
 
-        +drift_correction:
-            sh>: Rscript ${base_folder}/LP8_DriftCorrection.r 3 F
+            +drift_correction:
+                sh>: Rscript ${base_folder}/LP8_measurement_processing/LP8_DriftCorrection.r ${config[0]} F
 
-        +consistency_check:
-            sh>: Rscript ${base_folder}/LP8_ConsistencyCheck.r 3
+            +consistency_check:
+                sh>: Rscript ${base_folder}/LP8_measurement_processing/LP8_ConsistencyCheck.r ${config[0]}
+            +plot_lp8:
+                if>: ${config[1]} == 'NO_DUE'
+                _do:
+                    +plots:
+                        +plot_lp8_ts:
+                            sh>: Rscript ${base_folder}/Plot_CarboSense_CO2_TS.r ${config[0]}
 
-    +plot_lp8:
-        +plot_lp8_ts:
-            sh>: Rscript ${base_folder}/Plot_CarboSense_CO2_TS.r 3
+                        +plot_diurnal_concentration:
+                            sh>: Rscript ${base_folder}/Compute_Diurnal_CO2concentrations.r ${config[0]}
+                    
+                        +comparison_l8_ref:
+                            for_each>: type = [DRY, WET]
+                            _do:
+                                sh>:  Rscript ${base_folder}/Comparison_CO2_LP8_REF.r 3 ${type}
 
-        +plot_diurnal_concentration:
-            sh>: Rscript ${base_folder}/Compute_Diurnal_CO2concentrations.r 3
-        
-        +comparison_l8_ref:
-            for_each>: type = [DRY, WET]
-            _do:
-                sh>:  Rscript ${base_folder}/Comparison_CO2_LP8_REF.r 3 ${type}
+                        +comparison_lp8_lp8:
+                            sh>: Rscript ${base_folder}/Comparison_CO2_LP8_LP8.r ${config[0]}
 
-        +comparison_lp8_lp8:
-            sh>: Rscript ${base_folder}/Comparison_CO2_LP8_LP8.r 3
-
-        +comparison_lp8_HPP:
-            sh>: Rscript ${base_folder}/Comparison_CO2_LP8_HPP.r 3
+                        +comparison_lp8_HPP:
+                            sh>: Rscript ${base_folder}/Comparison_CO2_LP8_HPP.r ${config[0]}
 
 +HPP:
     _export:
@@ -91,3 +107,17 @@ timezone: Europe/Zurich
         base_folder: '/project/CarboSense/Software/UploadProcessedMeasurementsToDecentlabDB'
     +upload_lp8:
         sh>: Rscript ${base_folder}/Upload_LP8_Measurements_To_swiss_co2_live.sh
+
+
++calibration:
+    _export:
+        base_folder: '/project/CarboSense/Software/HPP_sensor_calibration'
+        hpp_result_folder: "/project/CarboSense/Carbosense_Network/HPP_Calibration/HPP_2ndGen_RESULTS_CV04/"
+        lp8_result_folder: '/project/CarboSense/Carbosense_Network/LP8_Calibration/LP8_CAL_02-June-2020_CV00_M/"'
+    +second_generation_HPP: 
+        +calibrate:
+            sh>: Rscript  ${base_folder}/CO2_HPP_SensorCalibration_LINUX_IR_2S.r 4 ${hpp_result_folder}
+        +plot:
+            sh>:  ${base_folder}/CONVERT_HPP_2ndGENERATION_FIGURES.sh ${hpp_result_folder}
+    +calibrate_lp8:
+        sh>: Rscript ${base_folder}/LP8_sensor_calibration/CO2_LP8_SensorCalibration_LINUX_DRY.r ${lp8_result_folder}

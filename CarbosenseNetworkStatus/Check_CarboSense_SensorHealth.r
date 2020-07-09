@@ -20,6 +20,7 @@ library(DBI)
 require(RMySQL)
 require(chron)
 library(data.table)
+library(carboutil)
 
 ##
 
@@ -62,14 +63,14 @@ DL_DB_apiKey_EMPA <- "eyJrIjoiWkJaZjFDTEhUYm5sNmdWUG14a3NpdVcwTmZCaHloZVEiLCJuIj
 ### ----------------------------------------------------------------------------------------------------------------------------
 
 
-
+con <- carboutil::get_conn()
 query_str       <- paste("SELECT * FROM Deployment;",sep="")
 drv             <- dbDriver("MySQL")
-con             <- dbConnect(drv, group="CarboSense_MySQL")
+#con             <- dbConnect(drv, group="CarboSense_MySQL")
 res             <- dbSendQuery(con, query_str)
 tbl_deployment  <- fetch(res, n=-1)
 dbClearResult(res)
-dbDisconnect(con)
+#dbDisconnect(con)
 
 tbl_deployment$Date_UTC_from <- strptime(tbl_deployment$Date_UTC_from,"%Y-%m-%d %H:%M:%S",tz="UTC")
 tbl_deployment$Date_UTC_to   <- strptime(tbl_deployment$Date_UTC_to,  "%Y-%m-%d %H:%M:%S",tz="UTC")
@@ -84,11 +85,11 @@ if(length(id)>0){
 
 query_str       <- paste("SELECT * FROM Calibration;",sep="")
 drv             <- dbDriver("MySQL")
-con             <- dbConnect(drv, group="CarboSense_MySQL")
+#con             <- dbConnect(drv, group="CarboSense_MySQL")
 res             <- dbSendQuery(con, query_str)
 tbl_calibration <- fetch(res, n=-1)
 dbClearResult(res)
-dbDisconnect(con)
+#dbDisconnect(con)
 
 tbl_calibration$Date_UTC_from <- strptime(tbl_calibration$Date_UTC_from,"%Y-%m-%d %H:%M:%S",tz="UTC")
 tbl_calibration$Date_UTC_to   <- strptime(tbl_calibration$Date_UTC_to,  "%Y-%m-%d %H:%M:%S",tz="UTC")
@@ -103,11 +104,11 @@ if(length(id)>0){
 
 query_str       <- paste("SELECT * FROM Sensors;",sep="")
 drv             <- dbDriver("MySQL")
-con             <- dbConnect(drv,group="CarboSense_MySQL")
+#con             <- dbConnect(drv,group="CarboSense_MySQL")
 res             <- dbSendQuery(con, query_str)
 tbl_sensors     <- fetch(res, n=-1)
 dbClearResult(res)
-dbDisconnect(con)
+#dbDisconnect(con)
 
 tbl_sensors$Date_UTC_from <- strptime(tbl_sensors$Date_UTC_from,"%Y-%m-%d %H:%M:%S",tz="UTC")
 tbl_sensors$Date_UTC_to   <- strptime(tbl_sensors$Date_UTC_to,  "%Y-%m-%d %H:%M:%S",tz="UTC")
@@ -116,21 +117,21 @@ tbl_sensors$Date_UTC_to   <- strptime(tbl_sensors$Date_UTC_to,  "%Y-%m-%d %H:%M:
 
 query_str       <- paste("SELECT * FROM Location;",sep="")
 drv             <- dbDriver("MySQL")
-con             <- dbConnect(drv, group="CarboSense_MySQL")
+#con             <- dbConnect(drv, group="CarboSense_MySQL")
 res             <- dbSendQuery(con, query_str)
 tbl_location    <- fetch(res, n=-1)
 dbClearResult(res)
-dbDisconnect(con)
+#dbDisconnect(con)
 
 #
 
 query_str       <- paste("SELECT * FROM SensorUnits;",sep="")
 drv             <- dbDriver("MySQL")
-con             <- dbConnect(drv, group="CarboSense_MySQL")
+#con             <- dbConnect(drv, group="CarboSense_MySQL")
 res             <- dbSendQuery(con, query_str)
 tbl_sensorUnits <- fetch(res, n=-1)
 dbClearResult(res)
-dbDisconnect(con)
+#dbDisconnect(con)
 
 ### ----------------------------------------------------------------------------------------------------------------------------
 

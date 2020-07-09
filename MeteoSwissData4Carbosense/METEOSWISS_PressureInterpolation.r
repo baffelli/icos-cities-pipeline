@@ -20,7 +20,7 @@ gc()
 library(DBI)
 require(RMySQL)
 require(chron)
-
+library(carboutil)
 ### ----------------------------------------------------------------------------------------------------------------------------
 
 # Steering parameters
@@ -65,7 +65,7 @@ timestamp_end   <- as.numeric(difftime(time1=Date_UTC_end,  time2=strptime("1970
 
 query_str       <- paste("SELECT * FROM Location;",sep="")
 drv             <- dbDriver("MySQL")
-con             <- dbConnect(drv, group="CarboSense_MySQL")
+con <-carboutil::get_conn()
 res             <- dbSendQuery(con, query_str)
 tbl_Location    <- fetch(res, n=-1)
 dbClearResult(res)
@@ -75,7 +75,7 @@ dbDisconnect(con)
 
 query_str       <- paste("SELECT * FROM Deployment WHERE SensorUnit_ID > 1000 OR SensorUnit_ID BETWEEN 426 AND 445;",sep="")
 drv             <- dbDriver("MySQL")
-con             <- dbConnect(drv, group="CarboSense_MySQL")
+con <-carboutil::get_conn()
 res             <- dbSendQuery(con, query_str)
 tbl_Deployment  <- fetch(res, n=-1)
 dbClearResult(res)
@@ -95,7 +95,7 @@ if(T){
   
   query_str       <- paste("DELETE FROM `PressureInterpolation` WHERE timestamp >= ",timestamp_start," and timestamp <= ",timestamp_end,";",sep="")
   drv             <- dbDriver("MySQL")
-  con             <- dbConnect(drv, group="CarboSense_MySQL")
+  con <-carboutil::get_conn()
   res             <- dbSendQuery(con, query_str)
   dbClearResult(res)
   dbDisconnect(con)
@@ -104,7 +104,7 @@ if(T){
   
   query_str       <- paste("DELETE FROM `PressureParameter` WHERE timestamp >= ",timestamp_start," and timestamp <= ",timestamp_end,";",sep="")
   drv             <- dbDriver("MySQL")
-  con             <- dbConnect(drv, group="CarboSense_MySQL")
+  con <-carboutil::get_conn()
   res             <- dbSendQuery(con, query_str)
   dbClearResult(res)
   dbDisconnect(con)
@@ -143,7 +143,7 @@ while(timestamp_now<timestamp_end){
     
     query_str       <- paste("SELECT LocationName,timestamp,Pressure as pressure FROM METEOSWISS_Measurements WHERE timestamp >= ",timestamp_get_data_from," and timestamp < ",timestamp_get_data_to,";",sep="")
     drv             <- dbDriver("MySQL")
-    con             <- dbConnect(drv, group="CarboSense_MySQL")
+    con <-carboutil::get_conn()
     res             <- dbSendQuery(con, query_str)
     tbl_MCH_P       <- fetch(res, n=-1)
     dbClearResult(res)
@@ -425,7 +425,7 @@ while(timestamp_now<timestamp_end){
       query_str <- paste(query_str,paste(";",sep=""))
       
       drv             <- dbDriver("MySQL")
-      con             <- dbConnect(drv, group="CarboSense_MySQL")
+      con <-carboutil::get_conn()
       res             <- dbSendQuery(con, query_str)
       dbClearResult(res)
       dbDisconnect(con)
@@ -451,7 +451,7 @@ while(timestamp_now<timestamp_end){
                          paste(";"))
       
       drv             <- dbDriver("MySQL")
-      con             <- dbConnect(drv, group="CarboSense_MySQL")
+      con <-carboutil::get_conn()
       res             <- dbSendQuery(con, query_str)
       dbClearResult(res)
       dbDisconnect(con)

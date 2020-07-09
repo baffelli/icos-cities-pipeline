@@ -69,7 +69,7 @@ SensorUnit_ID_2_cal   <- c(426:445)
 # SensorUnit_ID_2_cal   <- c(435)
 # SensorUnit_ID_2_cal   <- c(444,442,426:441,443,445)
 # SensorUnit_ID_2_cal   <- c(444,442,427,430,434,443,426,428,429,431:433,435:441,445)
-SensorUnit_ID_2_cal   <- c(431,433,435)
+# SensorUnit_ID_2_cal   <- c(431,433,435)
 n_SensorUnit_ID_2_cal <- length(SensorUnit_ID_2_cal)
 
 ### ----------------------------------------------------------------------------------------------------------------------------
@@ -1791,6 +1791,9 @@ for(ith_SensorUnit_ID_2_cal in 1:n_SensorUnit_ID_2_cal){
         if(ith_temp_data_selections<1){
           next
         }else{
+          
+          # 01-01-2019 (timestamp: 1546300800)
+          
           ts_1                 <- min(data$timestamp[data$CalMode %in% c(2,3) & data$timestamp < 1546300800]) - 14*86400
           ts_2                 <- max(data$timestamp[data$CalMode %in% c(2,3) & data$timestamp < 1546300800]) + 14*86400
           
@@ -1802,7 +1805,9 @@ for(ith_SensorUnit_ID_2_cal in 1:n_SensorUnit_ID_2_cal){
           
           ##
           
-          if(F & sensors2cal[ith_sensor2cal] %in% c(1427,430,434)){
+          # 01-01-2019 (timestamp: 1546300800) / 01-02-2019 (timestamp: 1548979200)
+          
+          if(T & sensors2cal[ith_sensor2cal] %in% c(1427)){
             ts_1                 <- min(data$timestamp[data$CalMode %in% c(2,3) & data$timestamp > 1546300800 & data$timestamp < 1548979200]) - 14*86400
             ts_2                 <- max(data$timestamp[data$CalMode %in% c(2,3) & data$timestamp > 1546300800 & data$timestamp < 1548979200]) + 14*86400
             
@@ -1815,7 +1820,9 @@ for(ith_SensorUnit_ID_2_cal in 1:n_SensorUnit_ID_2_cal){
           
           ##
           
-          if(T & sensors2cal[ith_sensor2cal] %in% c(430,434,436,439)){
+          # 01-01-2020 (timestamp: 1577836800) / 01-02-2020 (timestamp: 1580515200)
+          
+          if(T & sensors2cal[ith_sensor2cal] %in% c(430,434)){
             ts_1                 <- min(data$timestamp[data$CalMode %in% c(2,3) & data$timestamp > 1577836800 & data$timestamp < 1580515200]) - 14*86400
             ts_2                 <- max(data$timestamp[data$CalMode %in% c(2,3) & data$timestamp > 1577836800 & data$timestamp < 1580515200]) + 14*86400
             
@@ -1828,7 +1835,9 @@ for(ith_SensorUnit_ID_2_cal in 1:n_SensorUnit_ID_2_cal){
           
           ##
           
-          if(T & sensors2cal[ith_sensor2cal] %in% c(431,433,435)){
+          # 01-05-2020 (timestamp: 1588291200) / 18-05-2020 (timestamp: 1589760000)
+          
+          if(F & sensors2cal[ith_sensor2cal] %in% c(431,433,435)){
             ts_1                 <- min(data$timestamp[data$CalMode %in% c(2,3) & data$timestamp > 1588291200 & data$timestamp < 1589760000])
             ts_2                 <- max(data$timestamp[data$CalMode %in% c(2,3) & data$timestamp > 1588291200 & data$timestamp < 1589760000]) + 28*86400
             

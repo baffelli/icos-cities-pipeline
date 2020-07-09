@@ -209,7 +209,7 @@ timestamp_LP8_SU_upgrade_01 <- as.numeric(difftime(time1=date_UTC_LP8_SU_upgrade
 
 query_str       <- paste("SELECT * FROM CalibrationParameters;",sep="")
 drv             <- dbDriver("MySQL")
-con             <- dbConnect(drv, group="CarboSense_MySQL")
+con<-carboutil::get_conn()
 res             <- dbSendQuery(con, query_str)
 tbl_calPar      <- fetch(res, n=-1)
 dbClearResult(res)
@@ -222,7 +222,7 @@ if(!COMP_DUE){
   query_str       <- paste("SELECT * FROM Deployment WHERE LocationName NOT IN ('DUE1','DUE2','DUE3','DUE4','DUE5','MET1') ",sep="")
   query_str       <- paste(query_str, "AND SensorUnit_ID >= 1010 AND SensorUnit_ID <= 1334;",sep="")
   drv             <- dbDriver("MySQL")
-  con             <- dbConnect(drv, group="CarboSense_MySQL")
+  con<-carboutil::get_conn()
   res             <- dbSendQuery(con, query_str)
   tbl_deployment  <- fetch(res, n=-1)
   dbClearResult(res)
@@ -236,7 +236,7 @@ if(!COMP_DUE){
   query_str       <- paste("SELECT * FROM Deployment WHERE LocationName = 'DUE1' and Date_UTC_to > '2017-12-01 00:00:00' ",sep="")
   query_str       <- paste(query_str, "AND SensorUnit_ID >= 1010 AND SensorUnit_ID <= 1334;",sep="")
   drv             <- dbDriver("MySQL")
-  con             <- dbConnect(drv, group="CarboSense_MySQL")
+  con<-carboutil::get_conn()
   res             <- dbSendQuery(con, query_str)
   tbl_deployment  <- fetch(res, n=-1)
   dbClearResult(res)
@@ -277,7 +277,7 @@ if(as.integer(args[2])%in%c(20,30)){
 
 query_str       <- paste("SELECT * FROM Sensors WHERE Type = 'LP8';",sep="")
 drv             <- dbDriver("MySQL")
-con             <- dbConnect(drv, group="CarboSense_MySQL")
+con<-carboutil::get_conn()
 res             <- dbSendQuery(con, query_str)
 tbl_sensors     <- fetch(res, n=-1)
 dbClearResult(res)
@@ -290,7 +290,7 @@ tbl_sensors$Date_UTC_to   <- strptime(tbl_sensors$Date_UTC_to,  "%Y-%m-%d %H:%M:
 
 query_str       <- paste("SELECT * FROM Location;",sep="")
 drv             <- dbDriver("MySQL")
-con             <- dbConnect(drv, group="CarboSense_MySQL")
+con<-carboutil::get_conn()
 res             <- dbSendQuery(con, query_str)
 tbl_location    <- fetch(res, n=-1)
 dbClearResult(res)
@@ -300,7 +300,7 @@ dbDisconnect(con)
 
 query_str       <- paste("SELECT * FROM SensorExclusionPeriods WHERE Type = 'LP8';",sep="")
 drv             <- dbDriver("MySQL")
-con             <- dbConnect(drv, group="CarboSense_MySQL")
+con<-carboutil::get_conn()
 res             <- dbSendQuery(con, query_str)
 tbl_SEP         <- fetch(res, n=-1)
 dbClearResult(res)
@@ -576,7 +576,7 @@ for(ith_SensorUnit_ID_2_proc in 1:n_SensorUnit_ID_2_proc){
       
       query_str       <- paste("SELECT * FROM PressureInterpolation WHERE LocationName = '",tbl_deployment$LocationName[id_depl[ith_depl]],"' and timestamp > ",timestamp_depl_from," and timestamp < ",timestamp_depl_to,";",sep="")
       drv             <- dbDriver("MySQL")
-      con             <- dbConnect(drv, group="CarboSense_MySQL")
+      con<-carboutil::get_conn()
       res             <- dbSendQuery(con, query_str)
       tbl_PressureInterpolation   <- fetch(res, n=-1)
       dbClearResult(res)
@@ -590,7 +590,7 @@ for(ith_SensorUnit_ID_2_proc in 1:n_SensorUnit_ID_2_proc){
       
       query_str       <- paste("SELECT * FROM PressureParameter WHERE timestamp > ",timestamp_depl_from," and timestamp < ",timestamp_depl_to,";",sep="")
       drv             <- dbDriver("MySQL")
-      con             <- dbConnect(drv, group="CarboSense_MySQL")
+      con<-carboutil::get_conn()
       res             <- dbSendQuery(con, query_str)
       tbl_PressureParameter   <- fetch(res, n=-1)
       dbClearResult(res)
@@ -913,7 +913,7 @@ for(ith_SensorUnit_ID_2_proc in 1:n_SensorUnit_ID_2_proc){
   }
   
   drv             <- dbDriver("MySQL")
-  con             <- dbConnect(drv, group="CarboSense_MySQL")
+  con<-carboutil::get_conn()
   res             <- dbSendQuery(con, query_str)
   dbClearResult(res)
   dbDisconnect(con)
@@ -961,7 +961,7 @@ for(ith_SensorUnit_ID_2_proc in 1:n_SensorUnit_ID_2_proc){
       )
       
       drv             <- dbDriver("MySQL")
-      con             <- dbConnect(drv, group="CarboSense_MySQL")
+      con<-carboutil::get_conn()
       res             <- dbSendQuery(con, query_str)
       dbClearResult(res)
       dbDisconnect(con)

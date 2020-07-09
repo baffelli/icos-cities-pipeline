@@ -7,7 +7,8 @@ library(lubridate)
 ca <- commandArgs()
 complete_import <- ifelse(is.na(ca[[1]]),ca[[1]],F)
 #Get database connection
-con <- dbConnect(dbDriver("MySQL"),group='CarboSense_MySQL', host='du-gsn1')
+con <- con<-carboutil::get_conn()
+
 
 data_sources <- "/project/CarboSense/Data/METEO/MCH_DAILY_DATA_DUMP"
 
