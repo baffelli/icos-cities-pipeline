@@ -222,4 +222,10 @@ Contacts related to "swiss.co2.live": Khash-Erdene Jalsan (khash.jalsan@decentla
   - Selects all data (first of month) / data of last 21 days (daily) from CarboSense_HPP_CO2 and uploads it to swiss.co2.live
 
 - Upload_Carbosense_MetaDBtables_to_DecentlabSFTP.pl
-  - Uploads Carbosense meta-database table dump to Decentlab's FTP server  
+  - Uploads Carbosense meta-database table dump to Decentlab's FTP server
+
+# ICOS_Carbosense_T_RH_Data_Release_October_2019
+- Compute_CarboSense_T_RH_values_Version_October_2019.r
+  - Download LP8 measurements from the Decentlab database, measurement processing (e.g. adjusting of timestamp, removal of duplicates, status), export in Carbosense database
+- Carbosense_data_release_2019-10.r
+  - Script that created the files for the ICOS data release in October 2019  
