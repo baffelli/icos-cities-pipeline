@@ -29,7 +29,7 @@ DB_group <- "CarboSense_MySQL"
 ## Directories
 
 fdirectory <- "K:/Nabel/Daten/Stationen/DUE/"
-fdirectory <- "/newhome/muem/mnt/Win_K/Daten/Stationen/DUE/"
+fdirectory <- "/project/CarboSense/Win_K/Daten/Stationen/DUE/"
 
 ## ----------------------------------------------------------------------------------------------------------------------
 
@@ -104,7 +104,7 @@ if(T){
     
     query_str <- "SELECT MAX(timestamp) AS MAX_timestamp FROM NABEL_DUE WHERE NO2!=-999 or O3!=-999;";
     drv             <- dbDriver("MySQL")
-    con             <- dbConnect(drv,group=DB_group)
+    con<-carboutil::get_conn(group=DB_group)
     res             <- dbSendQuery(con, query_str)
     MAX_timestamp   <- fetch(res, n=-1)
     dbClearResult(res)
@@ -174,7 +174,7 @@ if(T){
       
       
       drv             <- dbDriver("MySQL")
-      con             <- dbConnect(drv,group=DB_group)
+      con<-carboutil::get_conn(group=DB_group)
       res             <- dbSendQuery(con, query_str)
       dbClearResult(res)
       dbDisconnect(con)
@@ -197,7 +197,7 @@ if(T){
 
 if(F){
   
-  files   <- list.files(path = "/newhome/muem/mnt/Win_G/503_Themen/Immissionen/muem/CarboSense_DUE_Picarro_Dec_16-Jan_17",pattern = "_MM10.txt",full.names = T)
+  files   <- list.files(path = "/project/CarboSense/Win_G/503_Themen/Immissionen/muem/CarboSense_DUE_Picarro_Dec_16-Jan_17",pattern = "_MM10.txt",full.names = T)
   n_files <- length(files)
   
   data_ref <- NULL
@@ -288,7 +288,7 @@ if(F){
     
     
     drv             <- dbDriver("MySQL")
-    con             <- dbConnect(drv,group=DB_group)
+    con<-carboutil::get_conn(group=DB_group)
     res             <- dbSendQuery(con, query_str)
     dbClearResult(res)
     dbDisconnect(con)
@@ -504,7 +504,7 @@ if(T){
     
     query_str <- "SELECT MAX(timestamp) AS MAX_timestamp FROM NABEL_DUE WHERE CO2 != -999;";
     drv             <- dbDriver("MySQL")
-    con             <- dbConnect(drv,group=DB_group)
+    con<-carboutil::get_conn(group=DB_group)
     res             <- dbSendQuery(con, query_str)
     MAX_timestamp   <- fetch(res, n=-1)
     dbClearResult(res)
@@ -547,7 +547,7 @@ if(T){
                          paste(" ON DUPLICATE KEY UPDATE timestamp=VALUES(timestamp), CO2=VALUES(CO2), CO2_MIN=VALUES(CO2_MIN), CO2_MAX=VALUES(CO2_MAX), CO2_F=VALUES(CO2_F), CO2_DRY=VALUES(CO2_DRY), CO2_DRY_F=VALUES(CO2_DRY_F), H2O=VALUES(H2O), H2O_F=VALUES(H2O_F);"))
       
       drv             <- dbDriver("MySQL")
-      con             <- dbConnect(drv,group=DB_group)
+      con<-carboutil::get_conn(group=DB_group)
       res             <- dbSendQuery(con, query_str)
       dbClearResult(res)
       dbDisconnect(con)
@@ -601,7 +601,7 @@ if(F){
     
     query_str  <- paste("SELECT timestamp,CO2,CO2_F,CO2_DRY,CO2_DRY_F,H2O,H2O_F FROM NABEL_DUE WHERE timestamp>=",min_timestamp," and timestamp<=",max_timestamp,";",sep="")
     drv        <- dbDriver("MySQL")
-    con        <- dbConnect(drv,group=DB_group)
+    con<-carboutil::get_conn(group=DB_group)
     res        <- dbSendQuery(con, query_str)
     data_db    <- fetch(res, n=-1)
     dbClearResult(res)
@@ -652,7 +652,7 @@ if(F){
       for(ith_row in which(update==T)){
         query_str  <- paste("UPDATE NABEL_DUE SET CO2_DRY=",data_ref$CO2_DRY[ith_row],", CO2_DRY_F=1,H2O=",data_ref$H2O[ith_row],",H2O_F=1 WHERE timestamp=",data_ref$timestamp[ith_row],";",sep="")
         drv        <- dbDriver("MySQL")
-        con        <- dbConnect(drv,group=DB_group)
+        con<-carboutil::get_conn(group=DB_group)
         res        <- dbSendQuery(con, query_str)
         dbClearResult(res)
         dbDisconnect(con)
@@ -731,7 +731,7 @@ if(T){
   for(ii in 1:dim(timestamps)[1]){
     query_str <- paste("UPDATE `NABEL_DUE` SET `CO2`=-999,`CO2_MIN`=-999,`CO2_MAX`=-999,`CO2_F`=0,`CO2_DRY`=-999,`CO2_DRY_CAL`=-999,`CO2_DRY_F`=0,`H2O`=-999,`H2O_F`=0, `CO2_10MIN_AV`=-999, `CO2_DRY_10MIN_AV`=-999, `CO2_DRY_CAL_10MIN_AV`=-999, `H2O_10MIN_AV`=-999, `CO2_WET_COMP`=-999 WHERE timestamp >= ",timestamps$t1[ii]," and timestamp <= ",timestamps$t2[ii],";",sep="")
     drv        <- dbDriver("MySQL")
-    con        <- dbConnect(drv,group=DB_group)
+    con<-carboutil::get_conn(group=DB_group)
     res        <- dbSendQuery(con, query_str)
     dbClearResult(res)
     dbDisconnect(con)

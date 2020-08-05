@@ -31,7 +31,7 @@ DB_group_out <- "CarboSense_MySQL"
 
 query_str               <- "SELECT * FROM RefMeasExclusionPeriods WHERE LocationName = 'GIMM';";
 drv                     <- dbDriver("MySQL")
-con                     <- dbConnect(drv,group=DB_group_out)
+con                     <- carboutil::get_conn(group=DB_group_out)
 res                     <- dbSendQuery(con, query_str)
 RefMeasExclusionPeriods <- fetch(res, n=-1)
 dbClearResult(res)
@@ -51,7 +51,7 @@ RefMeasExclusionPeriods$timestamp_to   <- as.numeric(difftime(time1=RefMeasExclu
 
 query_str       <- paste("SELECT * from gimmiz_1min_cal WHERE timed >= 1483228800000;",sep="")
 drv             <- dbDriver("MySQL")
-con             <- dbConnect(drv,group=DB_group_in)
+con             <- carboutil::get_conn(group=DB_group_in)
 res             <- dbSendQuery(con, query_str)
 data            <- fetch(res, n=-1)
 dbClearResult(res)
@@ -189,7 +189,7 @@ if(n_id_excl>0){
 
 query_str       <- paste("DELETE from UNIBE_GIMM;",sep="")
 drv             <- dbDriver("MySQL")
-con             <- dbConnect(drv,group=DB_group_out)
+con             <- carboutil::get_conn(group=DB_group_out)
 res             <- dbSendQuery(con, query_str)
 dbClearResult(res)
 dbDisconnect(con)
@@ -226,7 +226,7 @@ for(row_A in seq(1,dim(data)[1],N_dataPackets2insert)){
   
   
   drv             <- dbDriver("MySQL")
-  con             <- dbConnect(drv,group=DB_group_out)
+  con             <- carboutil::get_conn(group=DB_group_out)
   res             <- dbSendQuery(con, query_str)
   dbClearResult(res)
   dbDisconnect(con)

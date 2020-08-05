@@ -523,7 +523,7 @@ for(ith_SensorUnit_ID_2_cal in 1:n_SensorUnit_ID_2_cal){
   
   query_str       <- paste("SELECT * FROM Calibration where SensorUnit_ID=",SensorUnit_ID_2_cal[ith_SensorUnit_ID_2_cal]," and CalMode IN (1,2,3);",sep="")
   drv             <- dbDriver("MySQL")
-  con             <- dbConnect(drv, group="CarboSense_MySQL")
+ con <-carboutil::get_conn( group="CarboSense_MySQL")
   res             <- dbSendQuery(con, query_str)
   tbl_calibration <- fetch(res, n=-1)
   dbClearResult(res)
@@ -537,7 +537,7 @@ for(ith_SensorUnit_ID_2_cal in 1:n_SensorUnit_ID_2_cal){
   
   query_str   <- paste("SELECT * FROM Sensors where SensorUnit_ID=",SensorUnit_ID_2_cal[ith_SensorUnit_ID_2_cal]," and Type='HPP';",sep="")
   drv         <- dbDriver("MySQL")
-  con         <- dbConnect(drv, group="CarboSense_MySQL")
+  con <-carboutil::get_conn( group="CarboSense_MySQL")
   res         <- dbSendQuery(con, query_str)
   tbl_sensors <- fetch(res, n=-1)
   dbClearResult(res)
@@ -617,7 +617,7 @@ for(ith_SensorUnit_ID_2_cal in 1:n_SensorUnit_ID_2_cal){
     
     query_str   <- paste("SELECT * FROM SensorExclusionPeriods where SensorUnit_ID=",SensorUnit_ID_2_cal[ith_SensorUnit_ID_2_cal]," and Serialnumber='",sensors2cal[ith_sensor2cal],"' and Type='HPP';",sep="")
     drv         <- dbDriver("MySQL")
-    con         <- dbConnect(drv, group="CarboSense_MySQL")
+    con <-carboutil::get_conn( group="CarboSense_MySQL")
     res         <- dbSendQuery(con, query_str)
     SEP         <- fetch(res, n=-1)
     dbClearResult(res)
@@ -767,7 +767,7 @@ for(ith_SensorUnit_ID_2_cal in 1:n_SensorUnit_ID_2_cal){
       }
       
       drv       <- dbDriver("MySQL")
-      con       <- dbConnect(drv, group="CarboSense_MySQL")
+      con <-carboutil::get_conn( group="CarboSense_MySQL")
       res       <- dbSendQuery(con, query_str)
       tmp       <- fetch(res, n=-1)
       dbClearResult(res)
@@ -1004,7 +1004,7 @@ for(ith_SensorUnit_ID_2_cal in 1:n_SensorUnit_ID_2_cal){
     
     
     # abs humidity (sensor, reference) / H2O
-    # [W. Wagner and A. Pruß: The IAPWS Formulation 1995 for the Thermodynamic Properties of Ordinary Water Substance for General and Scientific Use, Journal of Physical and Chemical Reference Data, June 2002 ,Volume 31, Issue 2, pp. 387535]
+    # [W. Wagner and A. Pruï¿½: The IAPWS Formulation 1995 for the Thermodynamic Properties of Ordinary Water Substance for General and Scientific Use, Journal of Physical and Chemical Reference Data, June 2002 ,Volume 31, Issue 2, pp. 387535]
     
     coef_1 <-  -7.85951783
     coef_2 <-   1.84408259
@@ -1405,11 +1405,11 @@ for(ith_SensorUnit_ID_2_cal in 1:n_SensorUnit_ID_2_cal){
         n_id_ok     <- length(id_ok)
         
         if(comparison_info$one2one[ith_cmp]){
-          xrange <- range(c(data[id_ok,pos_factor_1],data[id_ok,pos_factor_2]))
+          xrange <- range(c(data[id_ok,pos_factor_1],data[id_ok,pos_factor_2]), na.rm=T)
           yrange <- xrange
         }else{
-          xrange <- range(data[id_ok,pos_factor_1])
-          yrange <- range(data[id_ok,pos_factor_2])
+          xrange <- range(data[id_ok,pos_factor_1], na.rm=T)
+          yrange <- range(data[id_ok,pos_factor_2], na.rm=T)
         }
         
         fit_cmp     <- lm(y~x,data.frame(x=data[id_ok,pos_factor_1],y=data[id_ok,pos_factor_2]))
@@ -2090,7 +2090,7 @@ for(ith_SensorUnit_ID_2_cal in 1:n_SensorUnit_ID_2_cal){
           pdf(file = figname, width=12, height=8, onefile=T, pointsize=12, colormodel="srgb")
           par(mai=c(1,1,0.5,0.5),mfrow=c(1,1))
           
-          yrange <- range(c(nullingPeriods_df$CO2,nullingPeriods_df$HPP_CO2)) + c(0,15)
+          yrange <- range(c(nullingPeriods_df$CO2,nullingPeriods_df$HPP_CO2), na.rm=T) + c(0,15)
           
           plot(nullingPeriods_df$date,nullingPeriods_df$CO2,pch=16,col=1,cex=0.5,ylim=yrange,xlab="Date",ylab=expression(paste("CO"[2]*" [PRED/HPP] in nulling periods [ppm]")),cex.lab=1.25,cex.axis=1.25)
           
@@ -2121,7 +2121,7 @@ for(ith_SensorUnit_ID_2_cal in 1:n_SensorUnit_ID_2_cal){
             par(mai=c(1,1,0.5,0.5),mfrow=c(1,1))
             
             id        <- which(abs(nullingPeriods_df$IR-mean(nullingPeriods_df$IR))<10*mad(nullingPeriods_df$IR))
-            yrange    <- range(nullingPeriods_df$IR[id])
+            yrange    <- range(nullingPeriods_df$IR[id], na.rm=T)
             xTicks    <- seq(strptime("20170102000000","%Y%m%d%H%M%S",tz="UTC"),strptime("20180102000000","%Y%m%d%H%M%S",tz="UTC"),"week")
             xTicksLab <- strftime(xTicks,"%Y-%m-%d",tz="UTC")
             
@@ -2140,7 +2140,7 @@ for(ith_SensorUnit_ID_2_cal in 1:n_SensorUnit_ID_2_cal){
             par(mai=c(1,1,0.5,0.5),mfrow=c(1,1))
             
             id        <- which(abs(nullingPeriods_df$HPP_CO2-mean(nullingPeriods_df$HPP_CO2))<10*mad(nullingPeriods_df$HPP_CO2))
-            yrange    <- range(nullingPeriods_df$HPP_CO2[id])
+            yrange    <- range(nullingPeriods_df$HPP_CO2[id], na.rm=T)
             xTicks    <- seq(strptime("20170102000000","%Y%m%d%H%M%S",tz="UTC"),strptime("20180102000000","%Y%m%d%H%M%S",tz="UTC"),"week")
             xTicksLab <- strftime(xTicks,"%Y-%m-%d",tz="UTC")
             
@@ -2233,7 +2233,7 @@ for(ith_SensorUnit_ID_2_cal in 1:n_SensorUnit_ID_2_cal){
           pdf(file = figname, width=12, height=8, onefile=T, pointsize=12, colormodel="srgb")
           par(mai=c(1,1,0.5,0.5),mfrow=c(1,1))
           
-          yrange <- range(bottle_cal_periods_df$CO2_PRED-bottle_cal_periods_df$CO2)
+          yrange <- range(bottle_cal_periods_df$CO2_PRED-bottle_cal_periods_df$CO2, na.rm=T)
           
           plot(bottle_cal_periods_df$date,bottle_cal_periods_df$CO2_PRED-bottle_cal_periods_df$CO2,pch=16,col=1,cex=0.5,ylim=yrange,xlab="Date",ylab=expression(paste("CO"[2]*" PRED - CO"[2]*" REF [ppm]")),cex.lab=1.25,cex.axis=1.25)
           
@@ -2311,36 +2311,36 @@ for(ith_SensorUnit_ID_2_cal in 1:n_SensorUnit_ID_2_cal){
           COR_COEF_PRED_BCP  <- NA
         }
         
-        Q000_FIT       <- quantile(residuals_FIT,probs=0.00)
-        Q001_FIT       <- quantile(residuals_FIT,probs=0.01)
-        Q005_FIT       <- quantile(residuals_FIT,probs=0.05)
-        Q010_FIT       <- quantile(residuals_FIT,probs=0.10)
-        Q050_FIT       <- quantile(residuals_FIT,probs=0.50)
-        Q090_FIT       <- quantile(residuals_FIT,probs=0.90)
-        Q095_FIT       <- quantile(residuals_FIT,probs=0.95)
-        Q099_FIT       <- quantile(residuals_FIT,probs=0.99)
-        Q100_FIT       <- quantile(residuals_FIT,probs=1.00)
-        
-        Q000_PRED      <- quantile(residuals_PRED,probs=0.00)
-        Q001_PRED      <- quantile(residuals_PRED,probs=0.01)
-        Q005_PRED      <- quantile(residuals_PRED,probs=0.05)
-        Q010_PRED      <- quantile(residuals_PRED,probs=0.10)
-        Q050_PRED      <- quantile(residuals_PRED,probs=0.50)
-        Q090_PRED      <- quantile(residuals_PRED,probs=0.90)
-        Q095_PRED      <- quantile(residuals_PRED,probs=0.95)
-        Q099_PRED      <- quantile(residuals_PRED,probs=0.99)
-        Q100_PRED      <- quantile(residuals_PRED,probs=1.00)
+        Q000_FIT       <- quantile(residuals_FIT,probs=0.00,na.rm=T)
+        Q001_FIT       <- quantile(residuals_FIT,probs=0.01,na.rm=T)
+        Q005_FIT       <- quantile(residuals_FIT,probs=0.05,na.rm=T)
+        Q010_FIT       <- quantile(residuals_FIT,probs=0.10,na.rm=T)
+        Q050_FIT       <- quantile(residuals_FIT,probs=0.50,na.rm=T)
+        Q090_FIT       <- quantile(residuals_FIT,probs=0.90,na.rm=T)
+        Q095_FIT       <- quantile(residuals_FIT,probs=0.95,na.rm=T)
+        Q099_FIT       <- quantile(residuals_FIT,probs=0.99,na.rm=T)
+        Q100_FIT       <- quantile(residuals_FIT,probs=1.00,na.rm=T)
+
+        Q000_PRED      <- quantile(residuals_PRED,probs=0.00, na.rm=T)
+        Q001_PRED      <- quantile(residuals_PRED,probs=0.01, na.rm=T)
+        Q005_PRED      <- quantile(residuals_PRED,probs=0.05, na.rm=T)
+        Q010_PRED      <- quantile(residuals_PRED,probs=0.10, na.rm=T)
+        Q050_PRED      <- quantile(residuals_PRED,probs=0.50, na.rm=T)
+        Q090_PRED      <- quantile(residuals_PRED,probs=0.90, na.rm=T)
+        Q095_PRED      <- quantile(residuals_PRED,probs=0.95, na.rm=T)
+        Q099_PRED      <- quantile(residuals_PRED,probs=0.99, na.rm=T)
+        Q100_PRED      <- quantile(residuals_PRED,probs=1.00, na.rm=T)
         
         if(n_id_bottle_cal_periods>1 & CV_mode%in%c(4,6,7)){
-          Q000_PRED_BCP  <- quantile(residuals_PRED_BCP,probs=0.00)
-          Q001_PRED_BCP  <- quantile(residuals_PRED_BCP,probs=0.01)
-          Q005_PRED_BCP  <- quantile(residuals_PRED_BCP,probs=0.05)
-          Q010_PRED_BCP  <- quantile(residuals_PRED_BCP,probs=0.10)
-          Q050_PRED_BCP  <- quantile(residuals_PRED_BCP,probs=0.50)
-          Q090_PRED_BCP  <- quantile(residuals_PRED_BCP,probs=0.90)
-          Q095_PRED_BCP  <- quantile(residuals_PRED_BCP,probs=0.95)
-          Q099_PRED_BCP  <- quantile(residuals_PRED_BCP,probs=0.99)
-          Q100_PRED_BCP  <- quantile(residuals_PRED_BCP,probs=1.00)
+          Q000_PRED_BCP  <- quantile(residuals_PRED_BCP,probs=0.00, na.rm=T)
+          Q001_PRED_BCP  <- quantile(residuals_PRED_BCP,probs=0.01, na.rm=T)
+          Q005_PRED_BCP  <- quantile(residuals_PRED_BCP,probs=0.05, na.rm=T)
+          Q010_PRED_BCP  <- quantile(residuals_PRED_BCP,probs=0.10, na.rm=T)
+          Q050_PRED_BCP  <- quantile(residuals_PRED_BCP,probs=0.50, na.rm=T)
+          Q090_PRED_BCP  <- quantile(residuals_PRED_BCP,probs=0.90, na.rm=T)
+          Q095_PRED_BCP  <- quantile(residuals_PRED_BCP,probs=0.95, na.rm=T)
+          Q099_PRED_BCP  <- quantile(residuals_PRED_BCP,probs=0.99, na.rm=T)
+          Q100_PRED_BCP  <- quantile(residuals_PRED_BCP,probs=1.00, na.rm=T)
         }else{
           Q000_PRED_BCP  <- NA
           Q001_PRED_BCP  <- NA
@@ -2450,7 +2450,7 @@ for(ith_SensorUnit_ID_2_cal in 1:n_SensorUnit_ID_2_cal){
               str23      <- paste("N:   ", sprintf("%6.0f", n_id_use4cal))
               leg_vec    <- c(str21,str22,str23)
               
-              xrange     <- range(c(data$CO2[id_use4cal],data$hpp_co2[id_use4cal]))
+              xrange     <- range(c(data$CO2[id_use4cal],data$hpp_co2[id_use4cal]), na.rm=T)
               yrange     <- xrange
               xlabString <- paste("PIC CO2 [ppm]",sep="")
               ylabString <- paste(sensor_descriptor," CO2 [ppm]",sep="")
@@ -2464,7 +2464,7 @@ for(ith_SensorUnit_ID_2_cal in 1:n_SensorUnit_ID_2_cal){
               str23      <- paste("N:   ", sprintf("%6.0f", n_id_use4cal))
               leg_vec    <- c(str23)
               
-              xrange     <- range(c(data$CO2[id_use4cal],data$hpp_co2[id_use4cal]))
+              xrange     <- range(c(data$CO2[id_use4cal],data$hpp_co2[id_use4cal]), na.rm=T)
               yrange     <- xrange
               xlabString <- paste("PIC CO2 [ppm]",sep="")
               ylabString <- paste(sensor_descriptor," IR [XX]",sep="")
@@ -2480,7 +2480,7 @@ for(ith_SensorUnit_ID_2_cal in 1:n_SensorUnit_ID_2_cal){
             str23      <- paste("N:   ", sprintf("%6.0f", n_id_use4cal))
             leg_vec    <- c(str21,str22,str23)
             
-            xrange     <- range(c(data$CO2[id_use4cal],CO2_predicted[id_use4cal]))
+            xrange     <- range(c(data$CO2[id_use4cal],CO2_predicted[id_use4cal]), na.rm=T)
             yrange     <- xrange
             xlabString <- paste("PIC CO2 [ppm]",sep="")
             ylabString <- paste(sensor_descriptor," CO2 [ppm] (CAL)",sep="")
@@ -2504,7 +2504,7 @@ for(ith_SensorUnit_ID_2_cal in 1:n_SensorUnit_ID_2_cal){
           str32 <- paste("COR: ", sprintf("%6.2f",COR_COEF_PRED))
           str33 <- paste("N:   ", sprintf("%6.0f",n_id_use4pred))
           
-          xrange     <- range(c(data$CO2[id_use4pred],CO2_predicted[id_use4pred]))
+          xrange     <- range(c(data$CO2[id_use4pred],CO2_predicted[id_use4pred]), na.rm=T)
           yrange     <- xrange
           xlabString <- paste("PIC CO2 [ppm]",sep="")
           ylabString <- paste(sensor_descriptor," CO2 predicted [ppm]",sep="")
@@ -2584,7 +2584,7 @@ for(ith_SensorUnit_ID_2_cal in 1:n_SensorUnit_ID_2_cal){
                 str23      <- paste("N:   ", sprintf("%6.0f", n_id_use4cal))
                 leg_vec    <- c(str21,str22,str23)
                 
-                xrange     <- range(c(data$CO2[id_use4cal],data$hpp_co2[id_use4cal]))
+                xrange     <- range(c(data$CO2[id_use4cal],data$hpp_co2[id_use4cal]), na.rm=T)
                 yrange     <- xrange
                 xlabString <- paste("PIC CO2 [ppm]",sep="")
                 ylabString <- paste(sensor_descriptor," CO2 [ppm]",sep="")
@@ -2598,7 +2598,7 @@ for(ith_SensorUnit_ID_2_cal in 1:n_SensorUnit_ID_2_cal){
                 str23      <- paste("N:   ", sprintf("%6.0f", n_id_use4cal))
                 leg_vec    <- c(str23)
                 
-                xrange     <- range(c(data$CO2[id_use4cal],data$hpp_co2[id_use4cal]))
+                xrange     <- range(c(data$CO2[id_use4cal],data$hpp_co2[id_use4cal]), na.rm=T)
                 yrange     <- xrange
                 xlabString <- paste("PIC CO2 [ppm]",sep="")
                 ylabString <- paste(sensor_descriptor," IR [XX]",sep="")
@@ -2614,7 +2614,7 @@ for(ith_SensorUnit_ID_2_cal in 1:n_SensorUnit_ID_2_cal){
               str23      <- paste("N:   ", sprintf("%6.0f", n_id_use4cal))
               leg_vec    <- c(str21,str22,str23)
               
-              xrange     <- range(c(data$CO2[id_use4cal],CO2_predicted[id_use4cal]))
+              xrange     <- range(c(data$CO2[id_use4cal],CO2_predicted[id_use4cal]), na.rm=T)
               yrange     <- xrange
               xlabString <- paste("PIC CO2 [ppm]",sep="")
               ylabString <- paste(sensor_descriptor," CO2 [ppm] (CAL)",sep="")
@@ -2638,7 +2638,7 @@ for(ith_SensorUnit_ID_2_cal in 1:n_SensorUnit_ID_2_cal){
             str32 <- paste("COR: ", sprintf("%6.2f",COR_COEF_PRED_BCP))
             str33 <- paste("N:   ", sprintf("%6.0f",n_id_use4pred))
             
-            xrange     <- range(c(data$CO2[id_use4pred],CO2_predicted_BCP[id_use4pred]))
+            xrange     <- range(c(data$CO2[id_use4pred],CO2_predicted_BCP[id_use4pred]), na.rm=T)
             yrange     <- xrange
             xlabString <- paste("PIC CO2 [ppm]",sep="")
             ylabString <- paste(sensor_descriptor," CO2 predicted [ppm]",sep="")
@@ -3038,7 +3038,7 @@ for(ith_SensorUnit_ID_2_cal in 1:n_SensorUnit_ID_2_cal){
                 
                 if(n_id_grp_01>0 & n_id_grp_02>0){
                   
-                  xrange <- range(data[id_grp_02,pos_factor])
+                  xrange <- range(data[id_grp_02,pos_factor], na.rm=T)
                   
                   if(res_mode == "abs"){
                     yrange <- c(-50,50)

@@ -47,7 +47,7 @@ logdirectory <- "/project/CarboSense/Software/LOGs"
 
 query_str       <- paste("SELECT * FROM Location;",sep="")
 drv             <- dbDriver("MySQL")
-con             <- dbConnect(drv,group=CarboSense_DB_group)
+con<-carboutil::get_conn(group=CarboSense_DB_group)
 res             <- dbSendQuery(con, query_str)
 tbl_location    <- fetch(res, n=-1)
 dbClearResult(res)
@@ -57,7 +57,7 @@ dbDisconnect(con)
 
 query_str       <- paste("SELECT * FROM MCHMeasExclusionPeriods;",sep="")
 drv             <- dbDriver("MySQL")
-con             <- dbConnect(drv,group=CarboSense_DB_group)
+con<-carboutil::get_conn(group=CarboSense_DB_group)
 res             <- dbSendQuery(con, query_str)
 tbl_MCH_EP      <- fetch(res, n=-1)
 dbClearResult(res)
@@ -246,7 +246,7 @@ if(n_id_files2import>0){
         
         query_str       <- paste("DELETE FROM METEOSWISS_Measurements WHERE LocationName = '",u_sites[ith_site],"' and timestamp>=",timestamp_from," and timestamp<=",timestamp_to,";",sep="")
         drv             <- dbDriver("MySQL")
-        con             <- dbConnect(drv,group=CarboSense_DB_group)
+        con<-carboutil::get_conn(group=CarboSense_DB_group)
         res             <- dbSendQuery(con, query_str)
         dbClearResult(res)
         dbDisconnect(con)
@@ -269,7 +269,7 @@ if(n_id_files2import>0){
                                            collapse = "),(",sep=""),")",sep=""))
         
         drv             <- dbDriver("MySQL")
-        con             <- dbConnect(drv,group=CarboSense_DB_group)
+        con<-carboutil::get_conn(group=CarboSense_DB_group)
         res             <- dbSendQuery(con, query_str)
         dbClearResult(res)
         dbDisconnect(con)
@@ -306,7 +306,7 @@ if(NABEL_METEO_IMPORT){
     
     query_str       <- paste("SELECT MAX(timestamp) as TS_LAST_ENTRY FROM METEOSWISS_Measurements WHERE LocationName = '",NABEL_SITE,"' and (Radiance != -999 or Windspeed != -999 or Winddirection != -999 or Pressure != -999 or Rain != -999 or Temperature != -999 or RH != -999);",sep="")
     drv             <- dbDriver("MySQL")
-    con             <- dbConnect(drv,group=CarboSense_DB_group)
+    con<-carboutil::get_conn(group=CarboSense_DB_group)
     res             <- dbSendQuery(con, query_str)
     TS_LAST_ENTRY   <- as.integer(fetch(res, n=-1))
     dbClearResult(res)
@@ -318,7 +318,7 @@ if(NABEL_METEO_IMPORT){
     
     query_str       <- paste("SELECT timed,PRESSURE,RELATIVEHUMIDITY,TEMPERATURE,WINDDIRECTION,WINDSPEED,GLOBALRADIATION,PRECIPITATION FROM ",NabelGSN_tbl_name," WHERE timed >= ",TS_LAST_ENTRY,";",sep="")
     drv             <- dbDriver("MySQL")
-    con             <- dbConnect(drv,group=NabelGsn_DB_group)
+    con<-carboutil::get_conn(group=NabelGsn_DB_group)
     res             <- dbSendQuery(con, query_str)
     NABEL_data      <- fetch(res, n=-1)
     dbClearResult(res)
@@ -413,7 +413,7 @@ if(NABEL_METEO_IMPORT){
                                          collapse = "),(",sep=""),")",sep=""))
       
       drv             <- dbDriver("MySQL")
-      con             <- dbConnect(drv,group=CarboSense_DB_group)
+      con<-carboutil::get_conn(group=CarboSense_DB_group)
       res             <- dbSendQuery(con, query_str)
       dbClearResult(res)
       dbDisconnect(con)

@@ -55,7 +55,7 @@ if(T){
     ## Compute H2O from NABEL/MCH measurements to be applied for computation of CO2_WET at PAY, RIG and HAE due to installation of dryer at the inlet of the Picarro instrument
     
     # abs humidity (sensor, reference) / H2O
-    # [W. Wagner and A. Pruß: The IAPWS Formulation 1995 for the Thermodynamic Properties of Ordinary Water Substance for General and Scientific Use, Journal of Physical and Chemical Reference Data, June 2002 ,Volume 31, Issue 2, pp. 387535]
+    # [W. Wagner and A. Pruï¿½: The IAPWS Formulation 1995 for the Thermodynamic Properties of Ordinary Water Substance for General and Scientific Use, Journal of Physical and Chemical Reference Data, June 2002 ,Volume 31, Issue 2, pp. 387535]
     
     coef_1 <-  -7.85951783
     coef_2 <-   1.84408259
@@ -69,7 +69,7 @@ if(T){
     query_str    <- paste(query_str, "WHERE timestamp >= ",timestamp_CO2_MEAS_WET2DRY," AND LocationName = '",meteoSiteName,"' ",sep="")
     query_str    <- paste(query_str, "AND Pressure != -999 AND RH != -999 AND Temperature != -999;",sep="")
     drv          <- dbDriver("MySQL")
-    con          <- dbConnect(drv, group="CarboSense_MySQL")
+    con<-carboutil::get_conn(group="CarboSense_MySQL")
     res          <- dbSendQuery(con, query_str)
     data_H2O     <- fetch(res, n=-1)
     dbClearResult(res)
@@ -101,7 +101,7 @@ if(T){
     query_str <- paste("SELECT timestamp,CO2_DRY_CAL FROM ",DBtable," ",sep="")
     query_str <- paste(query_str, "WHERE CO2_DRY_CAL != -999 AND timestamp >= ",timestamp_CO2_MEAS_WET2DRY,";",sep="")
     drv       <- dbDriver("MySQL")
-    con       <- dbConnect(drv, group="CarboSense_MySQL")
+    con<-carboutil::get_conn(group="CarboSense_MySQL")
     res       <- dbSendQuery(con, query_str)
     tmp       <- fetch(res, n=-1)
     dbClearResult(res)
@@ -130,7 +130,7 @@ if(T){
     
     query_str    <- paste("UPDATE ",DBtable," SET CO2_WET_COMP = -999;",sep="")
     drv          <- dbDriver("MySQL")
-    con          <- dbConnect(drv, group="CarboSense_MySQL")
+    con<-carboutil::get_conn(group="CarboSense_MySQL")
     res          <- dbSendQuery(con, query_str)
     dbClearResult(res)
     dbDisconnect(con)
@@ -140,7 +140,7 @@ if(T){
       query_str    <- paste(query_str, "WHERE timestamp < ",timestamp_CO2_MEAS_WET2DRY," ",sep="")
       query_str    <- paste(query_str, "AND CO2_DRY_CAL != -999 AND H2O != -999 and H2O_F = 1;",sep="")
       drv          <- dbDriver("MySQL")
-      con          <- dbConnect(drv, group="CarboSense_MySQL")
+      con<-carboutil::get_conn(group="CarboSense_MySQL")
       res          <- dbSendQuery(con, query_str)
       dbClearResult(res)
       dbDisconnect(con)
@@ -151,7 +151,7 @@ if(T){
       query_str    <- paste(query_str, "WHERE timestamp < ",timestamp_CO2_MEAS_WET2DRY," ",sep="")
       query_str    <- paste(query_str, "AND CO2_DRY_CAL != -999 AND H2O_CAL != -999 and H2O_F = 1;",sep="")
       drv          <- dbDriver("MySQL")
-      con          <- dbConnect(drv, group="CarboSense_MySQL")
+      con<-carboutil::get_conn(group="CarboSense_MySQL")
       res          <- dbSendQuery(con, query_str)
       dbClearResult(res)
       dbDisconnect(con)
@@ -161,7 +161,7 @@ if(T){
       query_str    <- paste("UPDATE ",DBtable," SET CO2_WET_COMP = CO2 ",sep="")
       query_str    <- paste(query_str, "WHERE CO2 != -999 AND timestamp < ",timestamp_CO2_MEAS_WET2DRY,";",sep="")
       drv          <- dbDriver("MySQL")
-      con          <- dbConnect(drv, group="CarboSense_MySQL")
+      con<-carboutil::get_conn(group="CarboSense_MySQL")
       res          <- dbSendQuery(con, query_str)
       dbClearResult(res)
       dbDisconnect(con)
@@ -178,7 +178,7 @@ if(T){
     
     query_str       <- paste(query_str,paste("CO2_WET_COMP=VALUES(CO2_WET_COMP);",    sep=""))
     drv          <- dbDriver("MySQL")
-    con          <- dbConnect(drv, group="CarboSense_MySQL")
+    con<-carboutil::get_conn(group="CarboSense_MySQL")
     res          <- dbSendQuery(con, query_str)
     dbClearResult(res)
     dbDisconnect(con)
@@ -197,7 +197,7 @@ if(T){
 query_str    <- paste("UPDATE NABEL_DUE SET CO2_WET_COMP = CO2_DRY_CAL*(1-H2O/100) ",sep="")
 query_str    <- paste(query_str, "WHERE CO2_DRY_CAL != -999 AND H2O != -999 and H2O_F = 1;",sep="")
 drv          <- dbDriver("MySQL")
-con          <- dbConnect(drv, group="CarboSense_MySQL")
+con<-carboutil::get_conn(group="CarboSense_MySQL")
 res          <- dbSendQuery(con, query_str)
 dbClearResult(res)
 dbDisconnect(con)

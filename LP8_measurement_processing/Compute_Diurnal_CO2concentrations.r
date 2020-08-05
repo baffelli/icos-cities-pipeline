@@ -91,7 +91,7 @@ if(!as.integer(args[1])%in%c(0,1,2,3,20,30)){
 
 query_str       <- paste("SELECT * FROM Deployment WHERE Date_UTC_from >= '2017-07-01 00:00:00';",sep="")
 drv             <- dbDriver("MySQL")
-con             <- dbConnect(drv, group="CarboSense_MySQL")
+con <-carboutil::get_conn()
 res             <- dbSendQuery(con, query_str)
 tbl_deployment  <- fetch(res, n=-1)
 dbClearResult(res)
@@ -116,7 +116,7 @@ tbl_deployment$duration_days <- as.numeric(difftime(time1=tbl_deployment$Date_UT
 
 query_str       <- paste("SELECT * FROM Location;",sep="")
 drv             <- dbDriver("MySQL")
-con             <- dbConnect(drv, group="CarboSense_MySQL")
+con <-carboutil::get_conn()
 res             <- dbSendQuery(con, query_str)
 tbl_location    <- fetch(res, n=-1)
 dbClearResult(res)
@@ -164,7 +164,7 @@ for(ith_depl in 1:dim(tbl_deployment)[1]){
   query_str <- paste("SELECT timestamp, CO2, CO2_A, FLAG, O_FLAG FROM ",ProcMeasDBTableName," ",sep="")
   query_str <- paste(query_str,"WHERE SensorUnit_ID = ",tbl_deployment$SensorUnit_ID[ith_depl]," and LocationName = '",tbl_deployment$LocationName[ith_depl],"';",sep="")
   drv       <- dbDriver("MySQL")
-  con       <- dbConnect(drv, group="CarboSense_MySQL")
+  con <-carboutil::get_conn()
   res       <- dbSendQuery(con, query_str)
   data      <- fetch(res, n=-1)
   dbClearResult(res)
@@ -362,7 +362,7 @@ for(ith_site in 1:n_sites){
           query_str <- paste("SELECT timestamp,CO2_DRY_CAL,CO2_DRY_F,H2O_CAL,H2O_F FROM ",table_names[ith_site],";",sep="")
         }
         drv       <- dbDriver("MySQL")
-        con       <- dbConnect(drv, group="CarboSense_MySQL")
+        con <-carboutil::get_conn()
         res       <- dbSendQuery(con, query_str)
         data_tmp  <- fetch(res, n=-1)
         dbClearResult(res)
@@ -398,7 +398,7 @@ for(ith_site in 1:n_sites){
       }else{
         query_str <- paste("SELECT timestamp,",species,",",paste(species,"_F",sep="")," FROM ",table_names[ith_site],";",sep="")
         drv       <- dbDriver("MySQL")
-        con       <- dbConnect(drv, group="CarboSense_MySQL")
+        con <-carboutil::get_conn()
         res       <- dbSendQuery(con, query_str)
         data      <- fetch(res, n=-1)
         dbClearResult(res)
@@ -408,7 +408,7 @@ for(ith_site in 1:n_sites){
     if(sites[ith_site]=="HAE"){
       query_str <- paste("SELECT timestamp,",species,",",paste(species,"_F",sep="")," FROM ",table_names[ith_site],";",sep="")
       drv       <- dbDriver("MySQL")
-      con       <- dbConnect(drv, group="CarboSense_MySQL")
+      con <-carboutil::get_conn()
       res       <- dbSendQuery(con, query_str)
       data      <- fetch(res, n=-1)
       dbClearResult(res)
@@ -417,7 +417,7 @@ for(ith_site in 1:n_sites){
     if(sites[ith_site]=="BRM"){
       query_str <- paste("SELECT timestamp,",species,",",paste(species,"_F",sep="")," FROM ",table_names[ith_site]," WHERE MEAS_HEIGHT=12;",sep="")
       drv       <- dbDriver("MySQL")
-      con       <- dbConnect(drv, group="CarboSense_MySQL")
+      con <-carboutil::get_conn()
       res       <- dbSendQuery(con, query_str)
       data      <- fetch(res, n=-1)
       dbClearResult(res)
@@ -426,7 +426,7 @@ for(ith_site in 1:n_sites){
     if(sites[ith_site]=="LAEG"){
       query_str <- paste("SELECT timestamp,",species,",",paste(species,"_F",sep="")," FROM ",table_names[ith_site]," WHERE VALVEPOS=0;",sep="")
       drv       <- dbDriver("MySQL")
-      con       <- dbConnect(drv, group="CarboSense_MySQL")
+      con <-carboutil::get_conn()
       res       <- dbSendQuery(con, query_str)
       data      <- fetch(res, n=-1)
       dbClearResult(res)
@@ -435,7 +435,7 @@ for(ith_site in 1:n_sites){
     if(sites[ith_site]=="GIMM"){
       query_str <- paste("SELECT timestamp,",species,",",paste(species,"_F",sep="")," FROM ",table_names[ith_site]," WHERE VALVEPOS=0;",sep="")
       drv       <- dbDriver("MySQL")
-      con       <- dbConnect(drv, group="CarboSense_MySQL")
+      con <-carboutil::get_conn()
       res       <- dbSendQuery(con, query_str)
       data      <- fetch(res, n=-1)
       dbClearResult(res)
@@ -558,7 +558,7 @@ for(ith_site in 1:n_sites){
 
 query_str <- paste("SELECT DISTINCT LocationName, SensorUnit_ID FROM CarboSense_HPP_CO2 WHERE LocationName NOT IN ('DUE1','DUE2','DUE3','DUE4','DUE5','MET1');",sep="")
 drv       <- dbDriver("MySQL")
-con       <- dbConnect(drv, group="CarboSense_MySQL")
+con <-carboutil::get_conn()
 res       <- dbSendQuery(con, query_str)
 HPP_LOC_SUID <- fetch(res, n=-1)
 dbClearResult(res)
@@ -585,7 +585,7 @@ for(ith_LOC_SUID in 1:dim(HPP_LOC_SUID)[1]){
   
   query_str <- paste("SELECT timestamp,CO2_CAL_ADJ FROM CarboSense_HPP_CO2 WHERE SensorUnit_ID = ",HPP_LOC_SUID$SensorUnit_ID[ith_LOC_SUID]," and LocationName='",HPP_LOC_SUID$LocationName[ith_LOC_SUID],"' and CO2_CAL_ADJ != -999 and Valve=0;",sep="")
   drv       <- dbDriver("MySQL")
-  con       <- dbConnect(drv, group="CarboSense_MySQL")
+  con <-carboutil::get_conn()
   res       <- dbSendQuery(con, query_str)
   data      <- fetch(res, n=-1)
   dbClearResult(res)
@@ -971,7 +971,7 @@ for(ith_site in 1:n_sites){
           query_str <- paste("SELECT timestamp,CO2_DRY_CAL,CO2_DRY_F,H2O_CAL,H2O_F FROM ",table_names[ith_site],";",sep="")
         }
         drv       <- dbDriver("MySQL")
-        con       <- dbConnect(drv, group="CarboSense_MySQL")
+        con <-carboutil::get_conn()
         res       <- dbSendQuery(con, query_str)
         data_tmp  <- fetch(res, n=-1)
         dbClearResult(res)
@@ -1006,7 +1006,7 @@ for(ith_site in 1:n_sites){
       }else{
         query_str <- paste("SELECT timestamp,",species,",",paste(species,"_F",sep="")," FROM ",table_names[ith_site],";",sep="")
         drv       <- dbDriver("MySQL")
-        con       <- dbConnect(drv, group="CarboSense_MySQL")
+        con <-carboutil::get_conn()
         res       <- dbSendQuery(con, query_str)
         data      <- fetch(res, n=-1)
         dbClearResult(res)
@@ -1016,7 +1016,7 @@ for(ith_site in 1:n_sites){
     if(sites[ith_site]=="HAE"){
       query_str <- paste("SELECT timestamp,",species,",",paste(species,"_F",sep="")," FROM ",table_names[ith_site],";",sep="")
       drv       <- dbDriver("MySQL")
-      con       <- dbConnect(drv, group="CarboSense_MySQL")
+      con <-carboutil::get_conn()
       res       <- dbSendQuery(con, query_str)
       data      <- fetch(res, n=-1)
       dbClearResult(res)
@@ -1025,7 +1025,7 @@ for(ith_site in 1:n_sites){
     if(sites[ith_site]=="BRM"){
       query_str <- paste("SELECT timestamp,",species,",",paste(species,"_F",sep="")," FROM ",table_names[ith_site]," WHERE MEAS_HEIGHT=12;",sep="")
       drv       <- dbDriver("MySQL")
-      con       <- dbConnect(drv, group="CarboSense_MySQL")
+      con <-carboutil::get_conn()
       res       <- dbSendQuery(con, query_str)
       data      <- fetch(res, n=-1)
       dbClearResult(res)
@@ -1034,7 +1034,7 @@ for(ith_site in 1:n_sites){
     if(sites[ith_site]=="LAEG"){
       query_str <- paste("SELECT timestamp,",species,",",paste(species,"_F",sep="")," FROM ",table_names[ith_site]," WHERE VALVEPOS=0;",sep="")
       drv       <- dbDriver("MySQL")
-      con       <- dbConnect(drv, group="CarboSense_MySQL")
+      con <-carboutil::get_conn()
       res       <- dbSendQuery(con, query_str)
       data      <- fetch(res, n=-1)
       dbClearResult(res)
@@ -1043,7 +1043,7 @@ for(ith_site in 1:n_sites){
     if(sites[ith_site]=="GIMM"){
       query_str <- paste("SELECT timestamp,",species,",",paste(species,"_F",sep="")," FROM ",table_names[ith_site]," WHERE VALVEPOS=5;",sep="")
       drv       <- dbDriver("MySQL")
-      con       <- dbConnect(drv, group="CarboSense_MySQL")
+      con <-carboutil::get_conn()
       res       <- dbSendQuery(con, query_str)
       data      <- fetch(res, n=-1)
       dbClearResult(res)

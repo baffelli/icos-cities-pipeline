@@ -97,7 +97,7 @@ if(T){
       query_str <- paste(query_str,paste("H2O_F=VALUES(H2O_F);",         sep=""))
       
       drv             <- dbDriver("MySQL")
-      con             <- dbConnect(drv, dbname=CS_DB_dbname, host="du-gsn1", port=3306, user=CS_DB_user, pass=CS_DB_pass)
+      con<-carboutil::get_conn( dbname=CS_DB_dbname, host="du-gsn1", port=3306, user=CS_DB_user, pass=CS_DB_pass)
       res             <- dbSendQuery(con, query_str)
       dbClearResult(res)
       dbDisconnect(con)
@@ -170,7 +170,7 @@ if(T){
     query_str <- paste(query_str,paste("pressure_F=VALUES(pressure_F);",         sep=""))
     
     drv             <- dbDriver("MySQL")
-    con             <- dbConnect(drv, dbname=CS_DB_dbname, host="du-gsn1", port=3306, user=CS_DB_user, pass=CS_DB_pass)
+    con<-carboutil::get_conn( dbname=CS_DB_dbname, host="du-gsn1", port=3306, user=CS_DB_user, pass=CS_DB_pass)
     res             <- dbSendQuery(con, query_str)
     dbClearResult(res)
     dbDisconnect(con)

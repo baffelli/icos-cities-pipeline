@@ -165,7 +165,7 @@ for(ith_db_table in 1:n_db_tables){
   if(processing_mode=="all"){
     query_str       <- paste("SELECT MIN(timestamp) AS MIN_TIMESTAMP FROM ",db_tables[ith_db_table],";");
     drv             <- dbDriver("MySQL")
-    con             <- dbConnect(drv,group=DB_group)
+    con<-carboutil::get_conn(group=DB_group)
     res             <- dbSendQuery(con, query_str)
     MIN_TIMESTAMP   <- fetch(res, n=-1)
     dbClearResult(res)
@@ -176,9 +176,12 @@ for(ith_db_table in 1:n_db_tables){
   
   if(processing_mode=="last_measurements"){
     
-    MIN_TIMESTAMP <- ((as.numeric(difftime(time1=strptime(strftime(Sys.time(),"%Y%m%d%H%M%S",tz="UTC"),"%Y%m%d%H%M%S",tz="UTC"),
-                                           time2=strptime("19700101000000","%Y%m%d%H%M%S",tz="UTC"),units="secs",tz="UTC")))%/%60)*60
-    
+    # MIN_TIMESTAMP <- ((as.numeric(difftime(time1=strptime(strftime(Sys.time(),"%Y%m%d%H%M%S",tz="UTC"),"%Y%m%d%H%M%S",tz="UTC"),
+    #                                        time2=strptime("19700101000000","%Y%m%d%H%M%S",tz="UTC"),units="secs",tz="UTC")))%/%60)*60
+    con <-carboutil::get_conn(group=DB_group)
+    query_res  <- carboutil::get_query_parametrized(con, "SELECT MAX(timestamp) AS MAX_TIMESTAMP FROM {`tb`}", tb=db_tables[ith_db_table]);
+    MIN_TIMESTAMP <- query_res$MAX_TIMESTAMP
+    #Process the last week of data
     MIN_TIMESTAMP <- MIN_TIMESTAMP - 7 * 86400
   }
   
@@ -199,7 +202,7 @@ for(ith_db_table in 1:n_db_tables){
   }
   
   # -----
-  
+
   # Loop over all data sets
   while(data_set_timestamp_from < timestamp_processing){
     
@@ -224,7 +227,7 @@ for(ith_db_table in 1:n_db_tables){
     }
     
     drv   <- dbDriver("MySQL")
-    con   <- dbConnect(drv,group=DB_group)
+    con<-carboutil::get_conn(group=DB_group)
     res   <- dbSendQuery(con, query_str)
     data  <- fetch(res, n=-1)
     dbClearResult(res)
@@ -232,6 +235,11 @@ for(ith_db_table in 1:n_db_tables){
     
     all_data_timestamps <- data$timestamp
     
+
+    str(data)
+    str(query_str, nchar.max = 1000)
+    str(data_set_timestamp_from_10min_av)
+    str(db_tables[ith_db_table])
     # -------
     
     all_timestamps   <- seq(data_set_timestamp_from_10min_av,data_set_timestamp_to,60)
@@ -604,7 +612,7 @@ for(ith_db_table in 1:n_db_tables){
         
         query_str <- paste("UPDATE ",db_tables[ith_db_table]," SET ",species2comp[ith_species]," = -999 WHERE timestamp >= ",data_set_timestamp_from," and timestamp < ",data_set_timestamp_to,";",sep="")
         drv       <- dbDriver("MySQL")
-        con       <- dbConnect(drv,group=DB_group)
+        con<-carboutil::get_conn(group=DB_group)
         res       <- dbSendQuery(con, query_str)
         dbClearResult(res)
         dbDisconnect(con)
@@ -637,7 +645,7 @@ for(ith_db_table in 1:n_db_tables){
         query_str <- paste(query_str,species2comp[ith_species],"=VALUES(",species2comp[ith_species],");",sep="")
         
         drv       <- dbDriver("MySQL")
-        con       <- dbConnect(drv,group=DB_group)
+        con<-carboutil::get_conn(group=DB_group)
         res       <- dbSendQuery(con, query_str)
         dbClearResult(res)
         dbDisconnect(con)
@@ -652,7 +660,7 @@ for(ith_db_table in 1:n_db_tables){
         
         query_str <- paste("UPDATE ",db_tables[ith_db_table]," SET CO2_DRY_CAL = -999 WHERE timestamp >= ",data_set_timestamp_from," and timestamp < ",data_set_timestamp_to,";",sep="")
         drv       <- dbDriver("MySQL")
-        con       <- dbConnect(drv,group=DB_group)
+        con<-carboutil::get_conn(group=DB_group)
         res       <- dbSendQuery(con, query_str)
         dbClearResult(res)
         dbDisconnect(con)
@@ -671,7 +679,7 @@ for(ith_db_table in 1:n_db_tables){
         query_str <- paste(query_str,"CO2_DRY_CAL=VALUES(CO2_DRY_CAL);",sep="")
         
         drv       <- dbDriver("MySQL")
-        con       <- dbConnect(drv,group=DB_group)
+        con<-carboutil::get_conn(group=DB_group)
         res       <- dbSendQuery(con, query_str)
         dbClearResult(res)
         dbDisconnect(con)
@@ -687,7 +695,7 @@ for(ith_db_table in 1:n_db_tables){
         
         query_str <- paste("UPDATE ",db_tables[ith_db_table]," SET H2O_CAL = -999 WHERE timestamp >= ",data_set_timestamp_from," and timestamp < ",data_set_timestamp_to,";",sep="")
         drv       <- dbDriver("MySQL")
-        con       <- dbConnect(drv,group=DB_group)
+        con<-carboutil::get_conn(group=DB_group)
         res       <- dbSendQuery(con, query_str)
         dbClearResult(res)
         dbDisconnect(con)
@@ -706,7 +714,7 @@ for(ith_db_table in 1:n_db_tables){
         query_str <- paste(query_str,"H2O_CAL=VALUES(H2O_CAL);",sep="")
         
         drv       <- dbDriver("MySQL")
-        con       <- dbConnect(drv,group=DB_group)
+        con<-carboutil::get_conn(group=DB_group)
         res       <- dbSendQuery(con, query_str)
         dbClearResult(res)
         dbDisconnect(con)

@@ -40,7 +40,7 @@ data_now         <- strptime(strftime(Sys.time(),"%Y-%m-%d %H:%M:%S",tz="UTC"),"
 
 query_str       <- paste("SELECT * FROM Deployment WHERE LocationName NOT IN ('DUE1','DUE2','DUE3','DUE4','DUE5','MET1') and Date_UTC_to > '2017-07-01 00:00:00' and SensorUnit_ID BETWEEN 1010 AND 1334;",sep="")
 drv             <- dbDriver("MySQL")
-con             <- dbConnect(drv, group="CarboSense_MySQL")
+con <-carboutil::get_conn()
 res             <- dbSendQuery(con, query_str)
 tbl_deployment  <- fetch(res, n=-1)
 dbClearResult(res)
@@ -56,7 +56,7 @@ tbl_deployment$timestamp_to   <- as.numeric(difftime(time1 = tbl_deployment$Date
 
 query_str       <- paste("SELECT * FROM Location;",sep="")
 drv             <- dbDriver("MySQL")
-con             <- dbConnect(drv, group="CarboSense_MySQL")
+con <-carboutil::get_conn()
 res             <- dbSendQuery(con, query_str)
 tbl_location    <- fetch(res, n=-1)
 dbClearResult(res)
@@ -137,7 +137,7 @@ for(ith_row in 1:dim(statistics)[1]){
   
   query_str       <- paste("DELETE FROM CarboSense_CO2_FINAL WHERE LocationName = '",statistics$LocationName[ith_row],"' and SensorUnit_ID = ",statistics$SensorUnit_ID[ith_row]," and timestamp >= ",statistics$timestamp_from[ith_row]," and timestamp <= ",statistics$timestamp_to[ith_row],";",sep="")
   drv             <- dbDriver("MySQL")
-  con             <- dbConnect(drv, group="CarboSense_MySQL")
+  con <-carboutil::get_conn()
   res             <- dbSendQuery(con, query_str)
   tbl_deployment  <- fetch(res, n=-1)
   dbClearResult(res)
@@ -149,7 +149,7 @@ for(ith_row in 1:dim(statistics)[1]){
   query_str       <- paste(query_str, "SELECT LocationName,SensorUnit_ID,timestamp,CO2,CO2_L,CO2_A,H2O,LP8_IR,LP8_IR_L,LP8_T,SHT21_T,SHT21_RH,FLAG,Q_FLAG,O_FLAG,L_FLAG,LRH_FLAG FROM ",statistics$PreferredCalModel[ith_row]," ",sep="")
   query_str       <- paste(query_str, "WHERE LocationName = '",statistics$LocationName[ith_row],"' and SensorUnit_ID = ",statistics$SensorUnit_ID[ith_row]," and timestamp >= ",statistics$timestamp_from[ith_row]," and timestamp <= ",statistics$timestamp_to[ith_row],";",sep="")
   drv             <- dbDriver("MySQL")
-  con             <- dbConnect(drv, group="CarboSense_MySQL")
+  con <-carboutil::get_conn()
   res             <- dbSendQuery(con, query_str)
   tbl_deployment  <- fetch(res, n=-1)
   dbClearResult(res)

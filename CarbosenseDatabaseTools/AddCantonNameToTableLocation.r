@@ -49,7 +49,7 @@ NamesOfCantons <- data.frame(NAME=c("Aargau","Appenzell Ausserrhoden","Appenzell
 
 query_str       <- paste("SELECT * FROM Location;",sep="")
 drv             <- dbDriver("MySQL")
-con             <- dbConnect(drv, group="CarboSense_MySQL")
+con<-carboutil::get_conn(group="CarboSense_MySQL")
 res             <- dbSendQuery(con, query_str)
 tbl_Location    <- fetch(res, n=-1)
 dbClearResult(res)
@@ -113,7 +113,7 @@ query_str <- paste(query_str,
 query_str <- paste(query_str,paste("Canton=VALUES(Canton);",sep=""))
 
 drv             <- dbDriver("MySQL")
-con             <- dbConnect(drv, group="CarboSense_MySQL")
+con<-carboutil::get_conn(group="CarboSense_MySQL")
 res             <- dbSendQuery(con, query_str)
 dbClearResult(res)
 dbDisconnect(con)

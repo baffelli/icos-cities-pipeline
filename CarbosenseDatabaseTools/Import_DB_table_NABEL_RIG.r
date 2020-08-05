@@ -29,7 +29,7 @@ DB_group <- "CarboSense_MySQL"
 ## Directories
 
 fdirectory <- "K:/Nabel/Daten/Stationen/RIG/"
-fdirectory <- "/newhome/muem/mnt/Win_K/Daten/Stationen/RIG/"
+fdirectory <- "/project/CarboSense/Win_K/Daten/Stationen/RIG/"
 
 ## ----------------------------------------------------------------------------------------------------------------------
 
@@ -142,7 +142,7 @@ if(T){
     
     query_str <- "SELECT MAX(timestamp) AS MAX_timestamp FROM NABEL_RIG WHERE CO2!=-999 or NO2!=-999 or O3!=-999;";
     drv             <- dbDriver("MySQL")
-    con             <- dbConnect(drv,group=DB_group)
+    con<-carboutil::get_conn(group=DB_group)
     res             <- dbSendQuery(con, query_str)
     MAX_timestamp   <- fetch(res, n=-1)
     dbClearResult(res)
@@ -198,7 +198,7 @@ if(T){
       
       
       drv             <- dbDriver("MySQL")
-      con             <- dbConnect(drv,group=DB_group)
+      con<-carboutil::get_conn(group=DB_group)
       res             <- dbSendQuery(con, query_str)
       dbClearResult(res)
       dbDisconnect(con)

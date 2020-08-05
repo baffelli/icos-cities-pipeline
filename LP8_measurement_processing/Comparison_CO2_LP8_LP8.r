@@ -141,7 +141,7 @@ SITE_PAIRS <- rbind(SITE_PAIRS,data.frame(LocationName_1="SION", LocationName_2=
 
 query_str         <- paste("SELECT * FROM Location;",sep="")
 drv               <- dbDriver("MySQL")
-con               <- dbConnect(drv, group="CarboSense_MySQL")
+con <-carboutil::get_conn()
 res               <- dbSendQuery(con, query_str)
 LOCATIONS         <- fetch(res, n=-1)
 dbClearResult(res)
@@ -158,7 +158,7 @@ for(ith_SITE_PAIR in 1:dim(SITE_PAIRS)[1]){
   
   query_str         <- paste("SELECT DISTINCT SensorUnit_ID, LocationName FROM ",ProcDataTblName," WHERE LocationName='",SITE_PAIRS$LocationName_1[ith_SITE_PAIR],"';",sep="")
   drv               <- dbDriver("MySQL")
-  con               <- dbConnect(drv, group="CarboSense_MySQL")
+ con <-carboutil::get_conn()
   res               <- dbSendQuery(con, query_str)
   SU_LOC_1          <- fetch(res, n=-1)
   dbClearResult(res)
@@ -167,7 +167,7 @@ for(ith_SITE_PAIR in 1:dim(SITE_PAIRS)[1]){
   
   query_str         <- paste("SELECT DISTINCT SensorUnit_ID, LocationName FROM ",ProcDataTblName," WHERE LocationName='",SITE_PAIRS$LocationName_2[ith_SITE_PAIR],"';",sep="")
   drv               <- dbDriver("MySQL")
-  con               <- dbConnect(drv, group="CarboSense_MySQL")
+ con <-carboutil::get_conn()
   res               <- dbSendQuery(con, query_str)
   SU_LOC_2          <- fetch(res, n=-1)
   dbClearResult(res)
@@ -191,7 +191,7 @@ for(ith_SITE_PAIR in 1:dim(SITE_PAIRS)[1]){
     
     query_str         <- paste("SELECT * FROM ",ProcDataTblName," WHERE SensorUnit_ID = ",SU_LOC$SensorUnit_ID[ii_SU_LOC]," and LocationName='",SU_LOC$LocationName[ii_SU_LOC],"';",sep="")
     drv               <- dbDriver("MySQL")
-    con               <- dbConnect(drv, group="CarboSense_MySQL")
+   con <-carboutil::get_conn()
     res               <- dbSendQuery(con, query_str)
     data_SU_1         <- fetch(res, n=-1)
     dbClearResult(res)
@@ -225,7 +225,7 @@ for(ith_SITE_PAIR in 1:dim(SITE_PAIRS)[1]){
       
       query_str    <- paste("SELECT * FROM ",ProcDataTblName," WHERE SensorUnit_ID = ",SU_LOC$SensorUnit_ID[jj_SU_LOC]," and LocationName='",SU_LOC$LocationName[jj_SU_LOC],"';",sep="")
       drv          <- dbDriver("MySQL")
-      con          <- dbConnect(drv, group="CarboSense_MySQL")
+      con <-carboutil::get_conn()
       res          <- dbSendQuery(con, query_str)
       data_SU_2    <- fetch(res, n=-1)
       dbClearResult(res)

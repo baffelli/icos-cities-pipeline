@@ -38,7 +38,7 @@ resultdir <- "/project/CarboSense/Carbosense_Network/METEOSWISS/"
 
 query_str       <- paste("SELECT DISTINCT LocationName FROM METEOSWISS_Measurements;",sep="")
 drv             <- dbDriver("MySQL")
-con             <- dbConnect(drv, group="CarboSense_MySQL")
+con <-carboutil::get_conn()
 res             <- dbSendQuery(con, query_str)
 tmp             <- fetch(res, n=-1)
 dbClearResult(res)
@@ -54,7 +54,7 @@ for(ith_location in 1:n_u_locations){
   
   query_str       <- paste("SELECT * FROM METEOSWISS_Measurements WHERE LocationName='",u_locations[ith_location],"';",sep="")
   drv             <- dbDriver("MySQL")
-  con             <- dbConnect(drv, group="CarboSense_MySQL")
+  con <-carboutil::get_conn()
   res             <- dbSendQuery(con, query_str)
   data            <- fetch(res, n=-1)
   dbClearResult(res)

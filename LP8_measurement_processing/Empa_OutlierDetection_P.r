@@ -192,7 +192,7 @@ outlierDetection <- function(serialnumber,DB_TABLE, tbl_depl,tbl_sensors,outlier
     
     query_str       <- paste("SELECT * FROM ",DB_TABLE," WHERE SensorUnit_ID = ",tbl_depl$SensorUnit_ID[id_depl[ith_depl]]," and LocationName = '",tbl_depl$LocationName[id_depl[ith_depl]],"' and timestamp >= ",tbl_depl$timestamp_from[id_depl[ith_depl]]," and timestamp <= ",tbl_depl$timestamp_to[id_depl[ith_depl]],";",sep="")
     drv             <- dbDriver("MySQL")
-    con             <- dbConnect(drv, group="CarboSense_MySQL")
+    con<-carboutil::get_conn(group="CarboSense_MySQL")
     res             <- dbSendQuery(con, query_str)
     data            <- fetch(res, n=-1)
     dbClearResult(res)
@@ -592,7 +592,7 @@ outlierDetection <- function(serialnumber,DB_TABLE, tbl_depl,tbl_sensors,outlier
     
     query_str       <- paste("UPDATE ",DB_TABLE," SET O_FLAG = 1 WHERE SensorUnit_ID = ",tbl_depl$SensorUnit_ID[id_depl[ith_depl]]," and LocationName = '",tbl_depl$LocationName[id_depl[ith_depl]],"' and timestamp >= ",tbl_depl$timestamp_from[id_depl[ith_depl]]," and timestamp <= ",tbl_depl$timestamp_to[id_depl[ith_depl]],";",sep="")
     drv             <- dbDriver("MySQL")
-    con             <- dbConnect(drv, group="CarboSense_MySQL")
+    con<-carboutil::get_conn(group="CarboSense_MySQL")
     res             <- dbSendQuery(con, query_str)
     dbClearResult(res)
     dbDisconnect(con)
@@ -603,7 +603,7 @@ outlierDetection <- function(serialnumber,DB_TABLE, tbl_depl,tbl_sensors,outlier
     if(length(id_flag)>0){
       # query_str       <- paste("UPDATE ",DB_TABLE," SET O_FLAG = 0 WHERE SensorUnit_ID = ",tbl_depl$SensorUnit_ID[id_depl[ith_depl]]," and LocationName = '",tbl_depl$LocationName[id_depl[ith_depl]],"' and timestamp IN (",paste(data$timestamp[id_flag],collapse = ","),");",sep="")
       # drv             <- dbDriver("MySQL")
-      # con             <- dbConnect(drv, group="CarboSense_MySQL")
+      # con<-carboutil::get_conn(group="CarboSense_MySQL")
       # res             <- dbSendQuery(con, query_str)
       # dbClearResult(res)
       # dbDisconnect(con)
@@ -621,7 +621,7 @@ outlierDetection <- function(serialnumber,DB_TABLE, tbl_depl,tbl_sensors,outlier
       query_str       <- paste(query_str,paste("O_FLAG=VALUES(O_FLAG);",    sep=""))
       
       drv             <- dbDriver("MySQL")
-      con             <- dbConnect(drv, group="CarboSense_MySQL")
+      con<-carboutil::get_conn(group="CarboSense_MySQL")
       res             <- dbSendQuery(con, query_str)
       dbClearResult(res)
       dbDisconnect(con)
@@ -670,7 +670,7 @@ outlierDetection <- function(serialnumber,DB_TABLE, tbl_depl,tbl_sensors,outlier
 query_str       <- paste("SELECT * FROM Sensors WHERE Type = 'LP8';",sep="")
 # query_str       <- paste("SELECT * FROM Sensors WHERE Type = 'LP8' and SensorUnit_ID = 1181;",sep="")
 drv             <- dbDriver("MySQL")
-con             <- dbConnect(drv, group="CarboSense_MySQL")
+con<-carboutil::get_conn(group="CarboSense_MySQL")
 res             <- dbSendQuery(con, query_str)
 tbl_sensors     <- fetch(res, n=-1)
 dbClearResult(res)
@@ -697,7 +697,7 @@ if(COMP=="DUE"){
 }
 
 drv             <- dbDriver("MySQL")
-con             <- dbConnect(drv, group="CarboSense_MySQL")
+con<-carboutil::get_conn(group="CarboSense_MySQL")
 res             <- dbSendQuery(con, query_str)
 tbl_depl        <- fetch(res, n=-1)
 dbClearResult(res)

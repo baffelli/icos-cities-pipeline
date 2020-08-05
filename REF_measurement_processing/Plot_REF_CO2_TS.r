@@ -69,7 +69,7 @@ all_dates_yyyy <- as.numeric(strftime(all_dates,"%Y",tz="UTC"))
 #
 
 if(INCLUDE_ANCHOR_EVENTS){
-  anchor_events <- read.table(file = "/project/muem/CarboSense/anchor_events.csv",header=T,as.is=T,sep=";")
+  anchor_events <- read.table(file = "/project/CarboSense/anchor_events.csv",header=T,as.is=T,sep=";")
   anchor_events$Date_UTC_start <- strptime(anchor_events$Date_UTC_start_str,"%Y-%m-%d %H:%M:%S",tz="UTC")
   anchor_events$Date_UTC_end   <- strptime(anchor_events$Date_UTC_end_str,  "%Y-%m-%d %H:%M:%S",tz="UTC")
 }
@@ -143,7 +143,7 @@ for(yyyy_plot in c(2020,2020)){
       if(tables[ith_table]%in%c("NABEL_PAY","NABEL_RIG","NABEL_HAE","NABEL_DUE")){
         query_str <- paste("SELECT timestamp, CO2_WET_COMP FROM ",tables[ith_table]," WHERE timestamp >= ",timestamp_from," and timestamp <= ",timestamp_to,";",sep="")
         drv       <- dbDriver("MySQL")
-        con       <- dbConnect(drv, group="CarboSense_MySQL")
+        con<-carboutil::get_conn(group="CarboSense_MySQL")
         res       <- dbSendQuery(con, query_str)
         data      <- fetch(res, n=-1)
         dbClearResult(res)
@@ -157,7 +157,7 @@ for(yyyy_plot in c(2020,2020)){
       if(tables[ith_table]=="UNIBE_BRM"){
         query_str <- paste("SELECT timestamp, CO2, CO2_F FROM ",tables[ith_table]," WHERE MEAS_HEIGHT = 12 and CO2_DRY_N > 5 and CO2 != -999 and timestamp >= ",timestamp_from," and timestamp <= ",timestamp_to,";",sep="")
         drv       <- dbDriver("MySQL")
-        con       <- dbConnect(drv, group="CarboSense_MySQL")
+        con<-carboutil::get_conn(group="CarboSense_MySQL")
         res       <- dbSendQuery(con, query_str)
         data      <- fetch(res, n=-1)
         dbClearResult(res)
@@ -167,7 +167,7 @@ for(yyyy_plot in c(2020,2020)){
       if(tables[ith_table]=="EMPA_LAEG"){
         query_str <- paste("SELECT timestamp, CO2, CO2_F FROM ",tables[ith_table]," WHERE VALVEPOS=0 and CO2_DRY_N > 1 and CO2 != -999 and timestamp >= ",timestamp_from," and timestamp <= ",timestamp_to,";",sep="")
         drv       <- dbDriver("MySQL")
-        con       <- dbConnect(drv, group="CarboSense_MySQL")
+        con<-carboutil::get_conn(group="CarboSense_MySQL")
         res       <- dbSendQuery(con, query_str)
         data      <- fetch(res, n=-1)
         dbClearResult(res)
@@ -177,7 +177,7 @@ for(yyyy_plot in c(2020,2020)){
       if(tables[ith_table]=="UNIBE_GIMM"){
         query_str <- paste("SELECT timestamp, CO2, CO2_F FROM ",tables[ith_table]," WHERE VALVEPOS=5 and CO2_DRY_N > 12 and CO2 != -999 and timestamp >= ",timestamp_from," and timestamp <= ",timestamp_to,";",sep="")
         drv       <- dbDriver("MySQL")
-        con       <- dbConnect(drv, group="CarboSense_MySQL")
+        con<-carboutil::get_conn(group="CarboSense_MySQL")
         res       <- dbSendQuery(con, query_str)
         data      <- fetch(res, n=-1)
         dbClearResult(res)
@@ -187,7 +187,7 @@ for(yyyy_plot in c(2020,2020)){
       if(tables[ith_table]=="nabelnrt_jun"){
         query_str <- paste("SELECT timed, CO2 FROM ",tables[ith_table]," WHERE CO2 IS NOT NULL and timed >= ",timestamp_from*1e3," and timed <= ",timestamp_to*1e3,";",sep="")
         drv       <- dbDriver("MySQL")
-        con       <- dbConnect(drv, group="NabelGsn")
+        con<-carboutil::get_conn(group="NabelGsn")
         res       <- dbSendQuery(con, query_str)
         data      <- fetch(res, n=-1)
         dbClearResult(res)
@@ -255,7 +255,7 @@ for(ith_table in 1:n_tables){
   if(tables[ith_table]%in%c("NABEL_PAY","NABEL_RIG","NABEL_HAE","NABEL_DUE")){
     query_str <- paste("SELECT timestamp, CO2_WET_COMP FROM ",tables[ith_table]," WHERE CO2_WET_COMP != -999;",sep="")
     drv       <- dbDriver("MySQL")
-    con       <- dbConnect(drv, group="CarboSense_MySQL")
+    con<-carboutil::get_conn(group="CarboSense_MySQL")
     res       <- dbSendQuery(con, query_str)
     data      <- fetch(res, n=-1)
     dbClearResult(res)
@@ -269,7 +269,7 @@ for(ith_table in 1:n_tables){
   if(tables[ith_table]=="UNIBE_BRM"){
     query_str <- paste("SELECT timestamp, CO2,CO2_F FROM ",tables[ith_table]," WHERE MEAS_HEIGHT = 12 and CO2_DRY_N > 5 and CO2 != -999;",sep="")
     drv       <- dbDriver("MySQL")
-    con       <- dbConnect(drv, group="CarboSense_MySQL")
+    con<-carboutil::get_conn(group="CarboSense_MySQL")
     res       <- dbSendQuery(con, query_str)
     data      <- fetch(res, n=-1)
     dbClearResult(res)
@@ -278,7 +278,7 @@ for(ith_table in 1:n_tables){
   if(tables[ith_table]=="EMPA_LAEG"){
     query_str <- paste("SELECT timestamp, CO2,CO2_F FROM ",tables[ith_table]," WHERE VALVEPOS=0 and CO2_DRY_N > 5 and CO2 != -999;",sep="")
     drv       <- dbDriver("MySQL")
-    con       <- dbConnect(drv, group="CarboSense_MySQL")
+    con<-carboutil::get_conn(group="CarboSense_MySQL")
     res       <- dbSendQuery(con, query_str)
     data      <- fetch(res, n=-1)
     dbClearResult(res)
@@ -287,7 +287,7 @@ for(ith_table in 1:n_tables){
   if(tables[ith_table]=="UNIBE_GIMM"){
     query_str <- paste("SELECT timestamp, CO2,CO2_F FROM ",tables[ith_table]," WHERE VALVEPOS=5 and CO2_DRY_N > 12 and CO2 != -999;",sep="")
     drv       <- dbDriver("MySQL")
-    con       <- dbConnect(drv, group="CarboSense_MySQL")
+    con<-carboutil::get_conn(group="CarboSense_MySQL")
     res       <- dbSendQuery(con, query_str)
     data      <- fetch(res, n=-1)
     dbClearResult(res)
@@ -297,7 +297,7 @@ for(ith_table in 1:n_tables){
   if(tables[ith_table]=="nabelnrt_jun"){
     query_str <- paste("SELECT timed, CO2 FROM ",tables[ith_table]," WHERE CO2 IS NOT NULL;",sep="")
     drv       <- dbDriver("MySQL")
-    con       <- dbConnect(drv, group="NabelGsn")
+    con<-carboutil::get_conn(group="NabelGsn")
     res       <- dbSendQuery(con, query_str)
     data      <- fetch(res, n=-1)
     dbClearResult(res)

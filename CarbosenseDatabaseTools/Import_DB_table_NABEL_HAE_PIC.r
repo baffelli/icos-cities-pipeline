@@ -30,13 +30,13 @@ DB_group <- "CarboSense_MySQL"
 ## Directories
 
 fdirectory <- "K:/Nabel/Daten/Stationen/HAE/"
-fdirectory <- "/newhome/muem/mnt/Win_K/Daten/Stationen/HAE/"
+fdirectory <- "/project/CarboSense/Win_K/Daten/Stationen/HAE/"
 
 ## ----------------------------------------------------------------------------------------------------------------------
 
 query_str               <- "SELECT * FROM RefMeasExclusionPeriods WHERE LocationName = 'HAE';";
 drv                     <- dbDriver("MySQL")
-con                     <- dbConnect(drv,group=DB_group)
+con                     <- carboutil::get_conn(group=DB_group)
 res                     <- dbSendQuery(con, query_str)
 RefMeasExclusionPeriods <- fetch(res, n=-1)
 dbClearResult(res)
@@ -71,6 +71,8 @@ if(T){
     file_date_mm <- as.numeric(substr(files[ith_file],nchar(files[ith_file])- 8+1,nchar(files[ith_file])-6))
     file_date_dd <- as.numeric(substr(files[ith_file],nchar(files[ith_file])- 6+1,nchar(files[ith_file])-4))
     
+    str(files[ith_file])
+
     if(is.na(file_date_yy) | is.na(file_date_mm) | is.na(file_date_dd)){
       stop("Check file selection.")
     }
@@ -194,7 +196,7 @@ if(T){
     
     query_str <- "SELECT MAX(timestamp) AS MAX_timestamp FROM NABEL_HAE WHERE CO2!=-999 or NO2!=-999 or O3!=-999;";
     drv             <- dbDriver("MySQL")
-    con             <- dbConnect(drv,group=DB_group)
+    con             <- carboutil::get_conn(group=DB_group)
     res             <- dbSendQuery(con, query_str)
     MAX_timestamp   <- fetch(res, n=-1)
     dbClearResult(res)
@@ -250,7 +252,7 @@ if(T){
       
       
       drv             <- dbDriver("MySQL")
-      con             <- dbConnect(drv,group=DB_group)
+      con             <- carboutil::get_conn(group=DB_group)
       res             <- dbSendQuery(con, query_str)
       dbClearResult(res)
       dbDisconnect(con)

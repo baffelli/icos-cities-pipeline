@@ -85,7 +85,7 @@ if(T){
   
   query_str  <- paste("SELECT SensorUnit_ID FROM Calibration WHERE LocationName='DUE1' AND Date_UTC_to='2100-01-01 00:00:00' AND SensorUnit_ID>1008;",sep="")
   drv        <- dbDriver("MySQL")
-  con        <- dbConnect(drv, group="CarboSense_MySQL")
+  con<-carboutil::get_conn(group="CarboSense_MySQL")
   res        <- dbSendQuery(con, query_str)
   tmp        <- fetch(res, n=-1)
   dbClearResult(res)
@@ -99,7 +99,7 @@ if(F){
   
   query_str  <- paste("SELECT SensorUnit_ID FROM Calibration where LocationName='DUE2' and Date_UTC_to = '2019-05-29 07:10:00' and SensorUnit_ID>=1010;",sep="")
   drv        <- dbDriver("MySQL")
-  con        <- dbConnect(drv, group="CarboSense_MySQL")
+  con<-carboutil::get_conn(group="CarboSense_MySQL")
   res        <- dbSendQuery(con, query_str)
   tmp        <- fetch(res, n=-1)
   dbClearResult(res)
@@ -229,7 +229,7 @@ for(ith_SensorUnit_ID_2_cal in 1:n_SensorUnit_ID_2_cal){
   
   query_str       <- paste("SELECT * FROM Calibration where SensorUnit_ID=",SensorUnit_ID_2_cal[ith_SensorUnit_ID_2_cal]," and CalMode IN (1,2,3);",sep="")
   drv             <- dbDriver("MySQL")
-  con             <- dbConnect(drv, group="CarboSense_MySQL")
+  con <-carboutil::get_conn( group="CarboSense_MySQL")
   res             <- dbSendQuery(con, query_str)
   tbl_calibration <- fetch(res, n=-1)
   dbClearResult(res)
@@ -297,7 +297,7 @@ for(ith_SensorUnit_ID_2_cal in 1:n_SensorUnit_ID_2_cal){
   
   query_str   <- paste("SELECT * FROM Sensors where SensorUnit_ID=",SensorUnit_ID_2_cal[ith_SensorUnit_ID_2_cal]," and Type='LP8';",sep="")
   drv         <- dbDriver("MySQL")
-  con         <- dbConnect(drv, group="CarboSense_MySQL")
+  con <-carboutil::get_conn( group="CarboSense_MySQL")
   res         <- dbSendQuery(con, query_str)
   tbl_sensors <- fetch(res, n=-1)
   dbClearResult(res)
@@ -392,7 +392,7 @@ for(ith_SensorUnit_ID_2_cal in 1:n_SensorUnit_ID_2_cal){
     
     query_str   <- paste("SELECT * FROM SensorExclusionPeriods where SensorUnit_ID=",SensorUnit_ID_2_cal[ith_SensorUnit_ID_2_cal]," and Serialnumber='",sensors2cal[ith_sensor2cal],"' and Type='LP8';",sep="")
     drv         <- dbDriver("MySQL")
-    con         <- dbConnect(drv, group="CarboSense_MySQL")
+    con <-carboutil::get_conn( group="CarboSense_MySQL")
     res         <- dbSendQuery(con, query_str)
     SEP         <- fetch(res, n=-1)
     dbClearResult(res)
@@ -638,7 +638,7 @@ for(ith_SensorUnit_ID_2_cal in 1:n_SensorUnit_ID_2_cal){
         query_str <- paste(query_str, "AND timestamp < ",sensor_calibration_info$timestamp_to[id_cal_periods[ith_id_cal_period]],";",sep="")
         
         drv       <- dbDriver("MySQL")
-        con       <- dbConnect(drv, group="CarboSense_MySQL")
+        con<-carboutil::get_conn(group="CarboSense_MySQL")
         res       <- dbSendQuery(con, query_str)
         tmp0      <- fetch(res, n=-1)
         dbClearResult(res)
@@ -693,7 +693,7 @@ for(ith_SensorUnit_ID_2_cal in 1:n_SensorUnit_ID_2_cal){
         query_str <- paste(query_str, "AND timestamp < ",sensor_calibration_info$timestamp_to[id_cal_periods[ith_id_cal_period]],";",sep="")
         
         drv       <- dbDriver("MySQL")
-        con       <- dbConnect(drv, group="CarboSense_MySQL")
+        con<-carboutil::get_conn(group="CarboSense_MySQL")
         res       <- dbSendQuery(con, query_str)
         tmp0      <- fetch(res, n=-1)
         dbClearResult(res)
@@ -748,7 +748,7 @@ for(ith_SensorUnit_ID_2_cal in 1:n_SensorUnit_ID_2_cal){
         query_str <- paste(query_str, "AND timestamp < ",sensor_calibration_info$timestamp_to[id_cal_periods[ith_id_cal_period]],";",sep="")
         
         drv       <- dbDriver("MySQL")
-        con       <- dbConnect(drv, group="CarboSense_MySQL")
+        con<-carboutil::get_conn(group="CarboSense_MySQL")
         res       <- dbSendQuery(con, query_str)
         tmp0      <- fetch(res, n=-1)
         dbClearResult(res)
@@ -784,7 +784,7 @@ for(ith_SensorUnit_ID_2_cal in 1:n_SensorUnit_ID_2_cal){
         query_str <- paste(query_str, "AND timestamp < ",sensor_calibration_info$timestamp_to[id_cal_periods[ith_id_cal_period]],";",sep="")
         
         drv       <- dbDriver("MySQL")
-        con       <- dbConnect(drv, group="CarboSense_MySQL")
+        con<-carboutil::get_conn(group="CarboSense_MySQL")
         res       <- dbSendQuery(con, query_str)
         tmp0      <- fetch(res, n=-1)
         dbClearResult(res)
@@ -820,7 +820,7 @@ for(ith_SensorUnit_ID_2_cal in 1:n_SensorUnit_ID_2_cal){
         query_str <- paste(query_str, "AND timestamp < ",sensor_calibration_info$timestamp_to[id_cal_periods[ith_id_cal_period]],";",sep="")
         
         drv       <- dbDriver("MySQL")
-        con       <- dbConnect(drv, group="CarboSense_MySQL")
+        con<-carboutil::get_conn(group="CarboSense_MySQL")
         res       <- dbSendQuery(con, query_str)
         tmp0      <- fetch(res, n=-1)
         dbClearResult(res)
@@ -944,7 +944,7 @@ for(ith_SensorUnit_ID_2_cal in 1:n_SensorUnit_ID_2_cal){
     
     
     # Humidity measures
-    # [W. Wagner and A. Pruß: The IAPWS Formulation 1995 for the Thermodynamic Properties of Ordinary Water Substance for General and Scientific Use, Journal of Physical and Chemical Reference Data, June 2002 ,Volume 31, Issue 2, pp. 387535]
+    # [W. Wagner and A. Pruï¿½: The IAPWS Formulation 1995 for the Thermodynamic Properties of Ordinary Water Substance for General and Scientific Use, Journal of Physical and Chemical Reference Data, June 2002 ,Volume 31, Issue 2, pp. 387535]
     
     # abs humidity (reference, SHT21)
     
@@ -2184,7 +2184,7 @@ for(ith_SensorUnit_ID_2_cal in 1:n_SensorUnit_ID_2_cal){
             query_str       <- paste("DELETE FROM `CalibrationParameters` WHERE Type = 'LP8' and Serialnumber = '",sensors2cal[ith_sensor2cal],"' and Mode = ",CV_mode," and CalibrationModelName = '",CMN,"';",sep="");
             
             drv             <- dbDriver("MySQL")
-            con             <- dbConnect(drv, group="CarboSense_MySQL")
+            con <-carboutil::get_conn( group="CarboSense_MySQL")
             res             <- dbSendQuery(con, query_str)
             tbl_calibration <- fetch(res, n=-1)
             dbClearResult(res)
@@ -2232,7 +2232,7 @@ for(ith_SensorUnit_ID_2_cal in 1:n_SensorUnit_ID_2_cal){
             
             
             drv             <- dbDriver("MySQL")
-            con             <- dbConnect(drv, group="CarboSense_MySQL")
+            con <-carboutil::get_conn( group="CarboSense_MySQL")
             res             <- dbSendQuery(con, query_str)
             tbl_calibration <- fetch(res, n=-1)
             dbClearResult(res)

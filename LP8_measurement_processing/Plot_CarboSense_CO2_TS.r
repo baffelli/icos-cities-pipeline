@@ -98,7 +98,7 @@ if(!dir.exists(resultdir)){
 
 query_str       <- paste("SELECT SensorUnit_ID FROM ",ProcMeasDBTableName,";",sep="")
 drv             <- dbDriver("MySQL")
-con             <- dbConnect(drv, group="CarboSense_MySQL")
+con <-carboutil::get_conn()
 res             <- dbSendQuery(con, query_str)
 tbl_CO2_SU      <- fetch(res, n=-1)
 dbClearResult(res)
@@ -108,7 +108,7 @@ dbDisconnect(con)
 
 query_str       <- paste("SELECT * FROM Location;",sep="")
 drv             <- dbDriver("MySQL")
-con             <- dbConnect(drv, group="CarboSense_MySQL")
+con <-carboutil::get_conn()
 res             <- dbSendQuery(con, query_str)
 tbl_location    <- fetch(res, n=-1)
 dbClearResult(res)
@@ -120,7 +120,7 @@ query_str       <- paste("SELECT * FROM Deployment ",sep="")
 query_str       <- paste(query_str, "WHERE LocationName NOT IN ('DUE1','DUE2','DUE3','DUE4','DUE5','MET1') ",sep="")
 query_str       <- paste(query_str, "AND SensorUnit_ID BETWEEN 1010 AND 1334;",sep="")
 drv             <- dbDriver("MySQL")
-con             <- dbConnect(drv, group="CarboSense_MySQL")
+con <-carboutil::get_conn()
 res             <- dbSendQuery(con, query_str)
 tbl_depl        <- fetch(res, n=-1)
 dbClearResult(res)
@@ -243,7 +243,7 @@ if(F){
       query_str       <- paste(query_str,"AND SensorUnit_ID IN ",paste("(",paste(unique(tbl_depl_year_loc$SensorUnit_ID),collapse = ","),")",sep="")," ",sep="")
       query_str       <- paste(query_str,"AND LocationName IN ",paste("('",paste(SiteSet,collapse = "','"),"')",sep=""),";",sep="")
       drv             <- dbDriver("MySQL")
-      con             <- dbConnect(drv, group="CarboSense_MySQL")
+      con <-carboutil::get_conn()
       res             <- dbSendQuery(con, query_str)
       tbl_CO2         <- fetch(res, n=-1)
       dbClearResult(res)
@@ -371,7 +371,7 @@ if(T){
     query_str       <- paste("SELECT  timestamp, SensorUnit_ID, LocationName, CO2, CO2_A, SHT21_T, SHT21_RH, FLAG, O_FLAG FROM ",ProcMeasDBTableName," ",sep="")
     query_str       <- paste(query_str, "WHERE SensorUnit_ID=",u_SensorUnit_ID[ith_SUID],";",sep="")
     drv             <- dbDriver("MySQL")
-    con             <- dbConnect(drv, group="CarboSense_MySQL")
+    con <-carboutil::get_conn()
     res             <- dbSendQuery(con, query_str)
     tbl_CO2         <- fetch(res, n=-1)
     dbClearResult(res)
@@ -463,7 +463,7 @@ if(T & args[1] %in% c(2,3)){
   
   query_str       <- paste("SELECT timestamp,CO2_DRY_CAL,H2O FROM NABEL_DUE WHERE timestamp>=1498867200 AND CO2_DRY_CAL!=-999 and H2O_F=1;",sep="")
   drv             <- dbDriver("MySQL")
-  con             <- dbConnect(drv, group="CarboSense_MySQL")
+  con <-carboutil::get_conn()
   res             <- dbSendQuery(con, query_str)
   data_DUE        <- fetch(res, n=-1)
   dbClearResult(res)
@@ -483,7 +483,7 @@ if(T & args[1] %in% c(2,3)){
   
   query_str       <- paste("SELECT timestamp,CO2_DRY_CAL,H2O FROM NABEL_RIG WHERE timestamp>=1498867200 AND CO2_DRY_CAL!=-999 and H2O_F=1;",sep="")
   drv             <- dbDriver("MySQL")
-  con             <- dbConnect(drv, group="CarboSense_MySQL")
+  con <-carboutil::get_conn()
   res             <- dbSendQuery(con, query_str)
   data_RIG        <- fetch(res, n=-1)
   dbClearResult(res)
@@ -503,7 +503,7 @@ if(T & args[1] %in% c(2,3)){
   
   query_str       <- paste("SELECT timestamp,CO2_DRY_CAL,H2O FROM NABEL_PAY WHERE timestamp>=1498867200 AND CO2_DRY_CAL!=-999 and H2O_F=1;",sep="")
   drv             <- dbDriver("MySQL")
-  con             <- dbConnect(drv, group="CarboSense_MySQL")
+  con <-carboutil::get_conn()
   res             <- dbSendQuery(con, query_str)
   data_PAY        <- fetch(res, n=-1)
   dbClearResult(res)
@@ -523,7 +523,7 @@ if(T & args[1] %in% c(2,3)){
   
   query_str       <- paste("SELECT timestamp,CO2 FROM NABEL_HAE WHERE timestamp>=1498867200 AND CO2!=-999;",sep="")
   drv             <- dbDriver("MySQL")
-  con             <- dbConnect(drv, group="CarboSense_MySQL")
+  con <-carboutil::get_conn()
   res             <- dbSendQuery(con, query_str)
   data_HAE        <- fetch(res, n=-1)
   dbClearResult(res)
@@ -541,7 +541,7 @@ if(T & args[1] %in% c(2,3)){
   
   query_str       <- paste("SELECT timestamp,CO2 FROM EMPA_LAEG WHERE timestamp>=1498867200 AND CO2!=-999;",sep="")
   drv             <- dbDriver("MySQL")
-  con             <- dbConnect(drv, group="CarboSense_MySQL")
+  con <-carboutil::get_conn()
   res             <- dbSendQuery(con, query_str)
   data_LAEG       <- fetch(res, n=-1)
   dbClearResult(res)
@@ -559,7 +559,7 @@ if(T & args[1] %in% c(2,3)){
   
   query_str       <- paste("SELECT timestamp,CO2 FROM UNIBE_GIMM WHERE timestamp>=1498867200 AND CO2!=-999;",sep="")
   drv             <- dbDriver("MySQL")
-  con             <- dbConnect(drv, group="CarboSense_MySQL")
+  con <-carboutil::get_conn()
   res             <- dbSendQuery(con, query_str)
   data_GIMM       <- fetch(res, n=-1)
   dbClearResult(res)
@@ -577,7 +577,7 @@ if(T & args[1] %in% c(2,3)){
   
   query_str       <- paste("SELECT timestamp,CO2_CAL_ADJ FROM CarboSense_HPP_CO2 WHERE LocationName='ZUE' and SensorUnit_ID = 426 and timestamp>=1498867200 AND CO2_CAL_ADJ!=-999 and Valve=0;",sep="")
   drv             <- dbDriver("MySQL")
-  con             <- dbConnect(drv, group="CarboSense_MySQL")
+  con <-carboutil::get_conn()
   res             <- dbSendQuery(con, query_str)
   data_ZUE        <- fetch(res, n=-1)
   dbClearResult(res)
@@ -595,7 +595,7 @@ if(T & args[1] %in% c(2,3)){
   
   query_str       <- paste("SELECT timestamp,CO2_CAL_ADJ FROM CarboSense_HPP_CO2 WHERE LocationName='MAGN' and SensorUnit_ID = 438 and timestamp>=1498867200 AND CO2_CAL_ADJ!=-999 and Valve=0;",sep="")
   drv             <- dbDriver("MySQL")
-  con             <- dbConnect(drv, group="CarboSense_MySQL")
+  con <-carboutil::get_conn()
   res             <- dbSendQuery(con, query_str)
   data_MAGN       <- fetch(res, n=-1)
   dbClearResult(res)
@@ -613,7 +613,7 @@ if(T & args[1] %in% c(2,3)){
   
   query_str       <- paste("SELECT timestamp,CO2_CAL_ADJ FROM CarboSense_HPP_CO2 WHERE LocationName='SSAL' and SensorUnit_ID = 432 and timestamp>=1498867200 AND CO2_CAL_ADJ!=-999 and Valve=0;",sep="")
   drv             <- dbDriver("MySQL")
-  con             <- dbConnect(drv, group="CarboSense_MySQL")
+  con <-carboutil::get_conn()
   res             <- dbSendQuery(con, query_str)
   data_SSAL       <- fetch(res, n=-1)
   dbClearResult(res)
@@ -646,7 +646,7 @@ if(T & args[1] %in% c(2,3)){
   
   query_str       <- paste("SELECT DISTINCT LocationName, SensorUnit_ID FROM CarboSense_CO2 WHERE LocationName != 'DUE1';",sep="")
   drv             <- dbDriver("MySQL")
-  con             <- dbConnect(drv, group="CarboSense_MySQL")
+  con <-carboutil::get_conn()
   res             <- dbSendQuery(con, query_str)
   SU_LOC          <- fetch(res, n=-1)
   dbClearResult(res)
@@ -684,7 +684,7 @@ if(T & args[1] %in% c(2,3)){
     query_str       <- paste("SELECT timestamp, CO2, CO2_A, SHT21_T, SHT21_RH, FLAG, O_FLAG FROM ",ProcMeasDBTableName," ",sep="")
     query_str       <- paste(query_str, " WHERE LocationName = '",SU_LOC$LocationName[ith_SU_LOC],"' AND SensorUnit_ID = ",SU_LOC$SensorUnit_ID[ith_SU_LOC],";",sep="")
     drv             <- dbDriver("MySQL")
-    con             <- dbConnect(drv, group="CarboSense_MySQL")
+    con <-carboutil::get_conn()
     res             <- dbSendQuery(con, query_str)
     data_SU_LOC     <- fetch(res, n=-1)
     dbClearResult(res)
@@ -695,7 +695,7 @@ if(T & args[1] %in% c(2,3)){
     data_SU_LOC$timestamp <- (data_SU_LOC$timestamp%/%600) * 600
     
     
-    colnames(data_01) <- c("timestamp","CO2")
+    # colnames(data_01) <- c("timestamp","CO2")
     
     ts_sync <- (data_SU_LOC$timestamp%/%600)*600
     id_1    <- which((data_SU_LOC$timestamp-ts_sync)<=300)

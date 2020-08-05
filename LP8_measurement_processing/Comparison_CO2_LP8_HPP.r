@@ -102,7 +102,7 @@ if(!as.integer(args[1])%in%c(0,1,2,3,20,30)){
 query_str         <- paste("SELECT * FROM Deployment WHERE SensorUnit_ID BETWEEN 426 AND 445 and LocationName NOT IN ('DUE1','DUE2','DUE3','DUE4','MET1','DUE5');",sep="")
 
 drv               <- dbDriver("MySQL")
-con               <- dbConnect(drv, group="CarboSense_MySQL")
+con <-carboutil::get_conn()
 res               <- dbSendQuery(con, query_str)
 tbl_depl          <- fetch(res, n=-1)
 dbClearResult(res)
@@ -135,7 +135,7 @@ for(ith_depl in 1:dim(tbl_depl)[1]){
   
   query_str         <- paste("SELECT timestamp, Pressure FROM ",HPP_ProcDataTblName," WHERE LocationName = '",tbl_depl$LocationName[ith_depl],"' and SensorUnit_ID = ",tbl_depl$SensorUnit_ID[ith_depl]," and timestamp >= ",tbl_depl$timestamp_from[ith_depl]," and timestamp <= ",tbl_depl$timestamp_to[ith_depl],";",sep="")
   drv               <- dbDriver("MySQL")
-  con               <- dbConnect(drv, group="CarboSense_MySQL")
+  con <-carboutil::get_conn()
   res               <- dbSendQuery(con, query_str)
   tbl_HPP           <- fetch(res, n=-1)
   dbClearResult(res)
@@ -150,7 +150,7 @@ for(ith_depl in 1:dim(tbl_depl)[1]){
   
   query_str         <- paste("SELECT timestamp, pressure FROM PressureInterpolation WHERE LocationName='",tbl_depl$LocationName[ith_depl],"' and timestamp >= ",minTimestamp," and timestamp <= ",maxTimestamp,";",sep="")
   drv               <- dbDriver("MySQL")
-  con               <- dbConnect(drv, group="CarboSense_MySQL")
+  con <-carboutil::get_conn()
   res               <- dbSendQuery(con, query_str)
   tbl_pressure      <- fetch(res, n=-1)
   dbClearResult(res)
@@ -158,7 +158,7 @@ for(ith_depl in 1:dim(tbl_depl)[1]){
   
   query_str         <- paste("SELECT timestamp, height FROM PressureParameter WHERE timestamp >= ",minTimestamp," and timestamp <= ",maxTimestamp,";",sep="")
   drv               <- dbDriver("MySQL")
-  con               <- dbConnect(drv, group="CarboSense_MySQL")
+  con <-carboutil::get_conn()
   res               <- dbSendQuery(con, query_str)
   tbl_pressure_par  <- fetch(res, n=-1)
   dbClearResult(res)
@@ -294,7 +294,7 @@ for(ith_depl in 1:dim(tbl_depl)[1]){
   query_str         <- paste("SELECT SensorUnit_ID FROM ",LP8_ProcDataTblName," WHERE LocationName='",Corresponding_LP8_LocationName,"' ",sep="")
   query_str         <- paste(query_str,"AND timestamp >= ",tbl_depl$timestamp_from[ith_depl]," AND timestamp <= ",tbl_depl$timestamp_to[ith_depl],";",sep="")
   drv               <- dbDriver("MySQL")
-  con               <- dbConnect(drv, group="CarboSense_MySQL")
+  con <-carboutil::get_conn()
   res               <- dbSendQuery(con, query_str)
   tbl_CO2_SU        <- fetch(res, n=-1)
   dbClearResult(res)
@@ -318,7 +318,7 @@ for(ith_depl in 1:dim(tbl_depl)[1]){
     query_str         <- paste("SELECT * FROM ",LP8_ProcDataTblName," WHERE LocationName='",Corresponding_LP8_LocationName,"' and SensorUnit_ID=",u_SensorUnit_ID[ith_SU]," ",sep="")
     query_str         <- paste(query_str,"AND timestamp >= ",tbl_depl$timestamp_from[ith_depl]," AND timestamp <= ",tbl_depl$timestamp_to[ith_depl],";",sep="")
     drv               <- dbDriver("MySQL")
-    con               <- dbConnect(drv, group="CarboSense_MySQL")
+    con <-carboutil::get_conn()
     res               <- dbSendQuery(con, query_str)
     tbl_CO2           <- fetch(res, n=-1)
     dbClearResult(res)
@@ -336,7 +336,7 @@ for(ith_depl in 1:dim(tbl_depl)[1]){
     
     query_str         <- paste("SELECT timestamp, CO2_CAL_ADJ FROM ",HPP_ProcDataTblName," WHERE LocationName = '",tbl_depl$LocationName[ith_depl],"' and SensorUnit_ID = ",tbl_depl$SensorUnit_ID[ith_depl]," and CO2_CAL_ADJ != -999 and Valve = 0 and timestamp >= ",minTimestamp," and timestamp <= ",maxTimestamp,";",sep="")
     drv               <- dbDriver("MySQL")
-    con               <- dbConnect(drv, group="CarboSense_MySQL")
+    con <-carboutil::get_conn()
     res               <- dbSendQuery(con, query_str)
     tbl_HPP           <- fetch(res, n=-1)
     dbClearResult(res)

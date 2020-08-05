@@ -41,7 +41,7 @@ for(ith_measurement_height in 1:length(measurement_heights)){
   table           <- paste("beromuenster_",sprintf("%.0f",measurement_heights[ith_measurement_height]),"m_1min_cal",sep="")
   query_str       <- paste("SELECT * from ",table," WHERE timed >= 1483228800000;",sep="")
   drv             <- dbDriver("MySQL")
-  con             <- dbConnect(drv,group=DB_group_in)
+  con             <- carboutil::get_conn(group=DB_group_in)
   res             <- dbSendQuery(con, query_str)
   tmp             <- fetch(res, n=-1)
   dbClearResult(res)
@@ -167,7 +167,7 @@ data <- data[order(data$timestamp),]
 #
 query_str       <- paste("DELETE from UNIBE_BRM;",sep="")
 drv             <- dbDriver("MySQL")
-con             <- dbConnect(drv,group=DB_group_out)
+con             <- carboutil::get_conn(group=DB_group_out)
 res             <- dbSendQuery(con, query_str)
 dbClearResult(res)
 dbDisconnect(con)
@@ -205,7 +205,7 @@ for(row_A in seq(1,dim(data)[1],N_dataPackets2insert)){
   
   
   drv             <- dbDriver("MySQL")
-  con             <- dbConnect(drv,group=DB_group_out)
+  con             <- carboutil::get_conn(,group=DB_group_out)
   res             <- dbSendQuery(con, query_str)
   dbClearResult(res)
   dbDisconnect(con)

@@ -119,7 +119,7 @@ n_SensorUnit_ID_2_proc <- length(SensorUnit_ID_2_proc)
 
 query_str       <- paste("SELECT * FROM CalibrationParameters;",sep="")
 drv             <- dbDriver("MySQL")
-con             <- dbConnect(drv, group="CarboSense_MySQL")
+con <-carboutil::get_conn()
 res             <- dbSendQuery(con, query_str)
 tbl_calPar      <- fetch(res, n=-1)
 dbClearResult(res)
@@ -136,7 +136,7 @@ if(is.null(SelectedLocationName)){
 }
 
 drv             <- dbDriver("MySQL")
-con             <- dbConnect(drv, group="CarboSense_MySQL")
+con <-carboutil::get_conn()
 res             <- dbSendQuery(con, query_str)
 tbl_deployment  <- fetch(res, n=-1)
 dbClearResult(res)
@@ -167,7 +167,7 @@ tbl_deployment$timestamp_to   <- as.numeric(difftime(time1=strptime(tbl_deployme
 
 query_str       <- paste("SELECT * FROM Sensors WHERE SensorUnit_ID BETWEEN 426 AND 445;",sep="")
 drv             <- dbDriver("MySQL")
-con             <- dbConnect(drv, group="CarboSense_MySQL")
+con <-carboutil::get_conn()
 res             <- dbSendQuery(con, query_str)
 tbl_sensors     <- fetch(res, n=-1)
 dbClearResult(res)
@@ -180,7 +180,7 @@ tbl_sensors$Date_UTC_to   <- strptime(tbl_sensors$Date_UTC_to,  "%Y-%m-%d %H:%M:
 
 query_str       <- paste("SELECT * FROM Location;",sep="")
 drv             <- dbDriver("MySQL")
-con             <- dbConnect(drv, group="CarboSense_MySQL")
+con <-carboutil::get_conn()
 res             <- dbSendQuery(con, query_str)
 tbl_location    <- fetch(res, n=-1)
 dbClearResult(res)
@@ -190,7 +190,7 @@ dbDisconnect(con)
 
 query_str       <- paste("SELECT * FROM SensorExclusionPeriods;",sep="")
 drv             <- dbDriver("MySQL")
-con             <- dbConnect(drv, group="CarboSense_MySQL")
+con <-carboutil::get_conn()
 res             <- dbSendQuery(con, query_str)
 tbl_SEP         <- fetch(res, n=-1)
 dbClearResult(res)
@@ -218,7 +218,7 @@ for(ith_SensorUnit_ID_2_proc in 1:n_SensorUnit_ID_2_proc){
   
   query_str         <- paste("SELECT * FROM RefGasCylinder_Deployment where SensorUnit_ID=",SensorUnit_ID_2_proc[ith_SensorUnit_ID_2_proc],";",sep="")
   drv               <- dbDriver("MySQL")
-  con               <- dbConnect(drv, group="CarboSense_MySQL")
+  con <-carboutil::get_conn()
   res               <- dbSendQuery(con, query_str)
   tbl_refGasCylDepl <- fetch(res, n=-1)
   dbClearResult(res)
@@ -237,7 +237,7 @@ for(ith_SensorUnit_ID_2_proc in 1:n_SensorUnit_ID_2_proc){
       
       query_str       <- paste("SELECT * FROM RefGasCylinder where CylinderID='",tbl_refGasCylDepl$CylinderID[ith_refGasCylDepl],"' and Date_UTC_from <= '",strftime(tbl_refGasCylDepl$Date_UTC_from[ith_refGasCylDepl],"%Y-%m-%d %H:%M:%S",tz="UTC"),"' and Date_UTC_to >= '",strftime(tbl_refGasCylDepl$Date_UTC_to[ith_refGasCylDepl],"%Y-%m-%d %H:%M:%S",tz="UTC"),"';",sep="")
       drv             <- dbDriver("MySQL")
-      con             <- dbConnect(drv, group="CarboSense_MySQL")
+      con <-carboutil::get_conn()
       res             <- dbSendQuery(con, query_str)
       tbl             <- fetch(res, n=-1)
       dbClearResult(res)
@@ -739,7 +739,7 @@ for(ith_SensorUnit_ID_2_proc in 1:n_SensorUnit_ID_2_proc){
       
       
       drv             <- dbDriver("MySQL")
-      con             <- dbConnect(drv, group="CarboSense_MySQL")
+      con <-carboutil::get_conn()
       res             <- dbSendQuery(con, query_str)
       dbClearResult(res)
       dbDisconnect(con)
@@ -807,7 +807,7 @@ for(ith_SensorUnit_ID_2_proc in 1:n_SensorUnit_ID_2_proc){
           )
           
           drv             <- dbDriver("MySQL")
-          con             <- dbConnect(drv, group="CarboSense_MySQL")
+          con <-carboutil::get_conn()
           res             <- dbSendQuery(con, query_str)
           dbClearResult(res)
           dbDisconnect(con)
@@ -1161,7 +1161,7 @@ for(SU_ID in u_SU_ID){
   
   query_str         <- paste("SELECT * FROM RefGasCylinder_Deployment where SensorUnit_ID=",SU_ID,";",sep="")
   drv               <- dbDriver("MySQL")
-  con               <- dbConnect(drv, group="CarboSense_MySQL")
+  con <-carboutil::get_conn()
   res               <- dbSendQuery(con, query_str)
   tbl_refGasCylDepl <- fetch(res, n=-1)
   dbClearResult(res)
@@ -1181,7 +1181,7 @@ for(SU_ID in u_SU_ID){
     
     query_str       <- paste("SELECT * FROM RefGasCylinder where CylinderID='",tbl_refGasCylDepl$CylinderID[ith_refGasCylDepl],"' and Date_UTC_from <= '",strftime(tbl_refGasCylDepl$Date_UTC_from[ith_refGasCylDepl],"%Y-%m-%d %H:%M:%S",tz="UTC"),"' and Date_UTC_to >= '",strftime(tbl_refGasCylDepl$Date_UTC_to[ith_refGasCylDepl],"%Y-%m-%d %H:%M:%S",tz="UTC"),"';",sep="")
     drv             <- dbDriver("MySQL")
-    con             <- dbConnect(drv, group="CarboSense_MySQL")
+    con <-carboutil::get_conn()
     res             <- dbSendQuery(con, query_str)
     tbl             <- fetch(res, n=-1)
     dbClearResult(res)

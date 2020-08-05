@@ -87,7 +87,7 @@ if(!COMPLETE_UPLOAD){
   query_str       <- paste(query_str, "AND Date_UTC_from > '2017-07-01 00:00:00';",sep="")
 }
 drv             <- dbDriver("MySQL")
-con             <- dbConnect(drv, group="CarboSense_MySQL")
+con <-carboutil::get_conn()
 res             <- dbSendQuery(con, query_str)
 tbl_deployment  <- fetch(res, n=-1)
 dbClearResult(res)
@@ -110,7 +110,7 @@ if(!COMPLETE_UPLOAD){
   query_str       <- paste(query_str, "AND Date_UTC_from > '2018-08-01 00:00:00';",sep="")
 }
 drv             <- dbDriver("MySQL")
-con             <- dbConnect(drv, group="CarboSense_MySQL")
+con <-carboutil::get_conn()
 res             <- dbSendQuery(con, query_str)
 tbl_SEP         <- fetch(res, n=-1)
 dbClearResult(res)
@@ -148,7 +148,7 @@ if(dim(tbl_deployment)[1]>0){
       query_str       <- paste(query_str, "AND timestamp <= ",tbl_deployment$timestamp_to[ith_depl],";",sep="")
     }
     drv             <- dbDriver("MySQL")
-    con             <- dbConnect(drv, group="CarboSense_MySQL")
+    con <-carboutil::get_conn()
     res             <- dbSendQuery(con, query_str)
     tbl_HPP_data    <- fetch(res, n=-1)
     dbClearResult(res)

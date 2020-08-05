@@ -432,7 +432,21 @@ for(ith_SensorUnit_ID_2_proc in 1:n_SensorUnit_ID_2_proc){
       
       timeFilter <- paste("time >= ",timestamp_depl_from,"s AND time < ",timestamp_depl_to,"s",sep="")
       device     <- paste("/",SensorUnit_ID_2_proc[ith_SensorUnit_ID_2_proc],"/",sep="")
-      
+      print(paste("Getting data for SU", SensorUnit_ID_2_proc[ith_SensorUnit_ID_2_proc]))
+
+      #Define the cols to query from decentlab
+      cols2query <- c("senseair-lp8-temperature-last",
+                      "senseair-lp8-temperature",
+                      "sensirion-sht21-temperature-last",
+                      "sensirion-sht21-temperature",
+                      "sensirion-sht21-humidity",
+                      "senseair-lp8-co2-filtered",
+                      "senseair-lp8-co2",
+                      "senseair-lp8-ir-filtered",
+                      "senseair-lp8-ir-last",
+                      "senseair-lp8-ir",
+                      "senseair-lp8-status")
+      cols_query_str <- paste("/^(",glue::glue_collapse(cols2query,sep = '|'), ")$/",sep="")
       if(SensorUnit_ID_2_proc[ith_SensorUnit_ID_2_proc]%in%c(1007,1008)){
         
         tmp0 <- tryCatch({
@@ -441,7 +455,7 @@ for(ith_SensorUnit_ID_2_proc in 1:n_SensorUnit_ID_2_proc){
                 timeFilter=timeFilter,
                 device = device,
                 location = "//",
-                sensor = "//",
+                sensor = cols_query_str,
                 channel = "//",
                 aggFunc = "",
                 aggInterval = "",
@@ -461,7 +475,7 @@ for(ith_SensorUnit_ID_2_proc in 1:n_SensorUnit_ID_2_proc){
                 timeFilter=timeFilter,
                 device = device,
                 location = "//",
-                sensor = "//",
+                sensor = cols_query_str,
                 channel = "//",
                 aggFunc = "",
                 aggInterval = "",
@@ -474,14 +488,14 @@ for(ith_SensorUnit_ID_2_proc in 1:n_SensorUnit_ID_2_proc){
         )
         
       }
-      
+      str(tmp0)
       if(is.null(tmp0)){
         next
       }
       if(dim(tmp0)[1]==0){
         next
       }
-      
+      print(paste("Data for SU", SensorUnit_ID_2_proc[ith_SensorUnit_ID_2_proc], "is returned from influxDB"))
       tmp0      <- as.data.table(tmp0)
       tmp0$time <- round(as.numeric(difftime(time1=tmp0$time,time2=strptime("19700101000000","%Y%m%d%H%M%S",tz="UTC"),units="secs",tz="UTC"))*1e3)
       tmp0      <- dcast.data.table(tmp0, time ~ series, fun.aggregate = mean,value.var = "value")
@@ -551,7 +565,8 @@ for(ith_SensorUnit_ID_2_proc in 1:n_SensorUnit_ID_2_proc){
       tmp           <- tmp[!duplicated(tmp$secs),]
       tmp           <- tmp[order(tmp$secs),]
       tmp           <- tmp[c(T,abs(diff(tmp$secs))>300),]
-      
+
+      print(paste("Data for SU", SensorUnit_ID_2_proc[ith_SensorUnit_ID_2_proc], "is ready"))
       # Statistics on data transmission
       
       ts_now <- strptime(strftime(Sys.time(),"%Y%m%d%H%M%S",tz="UTC"),"%Y%m%d%H%M%S",tz="UTC")
@@ -943,30 +958,59 @@ for(ith_SensorUnit_ID_2_proc in 1:n_SensorUnit_ID_2_proc){
       n_id <- length(id)
       
       
-      query_str <- paste("INSERT INTO ",InsertDBTableName," (`LocationName`, `SensorUnit_ID`, `timestamp`, `CO2`,`CO2_L`,`H2O`,`LP8_IR`,`LP8_IR_L`,`LP8_T`,`SHT21_T`,`SHT21_RH`,`FLAG`) VALUES ",sep="")
-      query_str <- paste(query_str,
-                         paste("(",paste("'",sensor_data$LocationName[id_insert[id]],"',",
-                                         rep(SensorUnit_ID_2_proc[ith_SensorUnit_ID_2_proc],n_id),",",
-                                         sensor_data$timestamp_DB[id_insert[id]],",",
-                                         sensor_data$CO2_CAL[id_insert[id]],",",
-                                         sensor_data$CO2_CAL_L[id_insert[id]],",",
-                                         sensor_data$H2O[id_insert[id]],",",
-                                         sensor_data$lp8_ir[id_insert[id]],",",
-                                         sensor_data$lp8_ir_l[id_insert[id]],",",
-                                         sensor_data$lp8_T[id_insert[id]],",",
-                                         sensor_data$sht21_T[id_insert[id]],",",
-                                         sensor_data$sht21_RH[id_insert[id]],",",
-                                         FLAG[id_insert[id]],
-                                         collapse = "),(",sep=""),");",sep="")
+      # query_str <- paste("INSERT INTO ",InsertDBTableName," (`LocationName`, `SensorUnit_ID`, `timestamp`, `CO2`,`CO2_L`,`H2O`,`LP8_IR`,`LP8_IR_L`,`LP8_T`,`SHT21_T`,`SHT21_RH`,`FLAG`) VALUES ",sep="")
+      # query_str <- paste(query_str,
+      #                    paste("(",paste("'",sensor_data$LocationName[id_insert[id]],"',",
+      #                                    rep(SensorUnit_ID_2_proc[ith_SensorUnit_ID_2_proc],n_id),",",
+      #                                    sensor_data$timestamp_DB[id_insert[id]],",",
+      #                                    sensor_data$CO2_CAL[id_insert[id]],",",
+      #                                    sensor_data$CO2_CAL_L[id_insert[id]],",",
+      #                                    sensor_data$H2O[id_insert[id]],",",
+      #                                    sensor_data$lp8_ir[id_insert[id]],",",
+      #                                    sensor_data$lp8_ir_l[id_insert[id]],",",
+      #                                    sensor_data$lp8_T[id_insert[id]],",",
+      #                                    sensor_data$sht21_T[id_insert[id]],",",
+      #                                    sensor_data$sht21_RH[id_insert[id]],",",
+      #                                    FLAG[id_insert[id]],
+      #                                    collapse = "),(",sep=""),");",sep="")
+      # )
+
+      #Create tibbles to insert
+      data2_insert <- dplyr::mutate(tibble::tibble(sensor_data[id_insert[id],]),
+      SensorUnit_ID=SensorUnit_ID_2_proc[ith_SensorUnit_ID_2_proc],
+      FLAG=FLAG[id_insert[id]])
+
+      cols2_to_insert <- dplyr::select(data2_insert,
+      'LocationName'=LocationName,
+      'SensorUnit_ID'=SensorUnit_ID,
+      'timestamp'=timestamp_DB,
+      'CO2'=CO2_CAL,
+      'CO2_L'=CO2_CAL_L,
+      H2O,
+      'LP8_IR'=lp8_ir,
+      'LP8_IR_L'=lp8_ir_l,
+      'LP8_T'=lp8_T,
+      'SHT21_T'=sht21_T,
+      'SHT21_RH'=sht21_RH,
+      FLAG
       )
-      
-      drv             <- dbDriver("MySQL")
+
+      drv  <- dbDriver("MySQL")
       con<-carboutil::get_conn()
-      res             <- dbSendQuery(con, query_str)
-      dbClearResult(res)
+      DBI::dbWriteTable(
+      conn=con, 
+      name=InsertDBTableName, 
+      value=as.data.frame(cols2_to_insert),
+      overwrite = 0,
+      append = 1,
+      temporary = FALSE,
+      row.names = 0)
+
+      #res             <- dbSendQuery(con, query_str)
+      #dbClearResult(res)
       dbDisconnect(con)
-      
-      rm(id_insert_from,id_insert_to,id,n_id)
+      print(paste("Done inserting data for SU",SensorUnit_ID_2_proc[ith_SensorUnit_ID_2_proc]))
+      rm(id_insert_from,id_insert_to,id,n_id,cols2_to_insert,data2_insert )
       rm()
     }
   }
