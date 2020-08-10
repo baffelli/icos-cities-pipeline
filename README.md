@@ -1,6 +1,10 @@
 # CarboSenseUtilities
 - CarboSenseFunctions.r
   - Collection of plot functions, etc.
+- api-v1.3.r
+  - Decentlab API for data retrieval used in various scripts
+- api-v1.3_2019-09-03.r
+  - Decentlab API for data retrieval/data upload used in various scripts
 
 # LP8_measurement_processing
 
@@ -65,9 +69,12 @@ Second part: analysis+visualisation of results
 Miscellaneous:
 - SpatialSiteClassification.r
   - Required input variables: par1 [DEPLOYMENT/GRID]
-  - Output of script [option "DEPLOYMENT"] is used for script "LP8_ConsistencyCheck.r"
+  - Output of script [option "DEPLOYMENT"] is used for script "LP8_ConsistencyCheck.r" (run after each change in the LP8/HPP sensor deployment)
   - Tasks:
     - Computes spatial characteristics for sensor locations / grid
+- TemperatureAroundZurich.r
+  - Creation of maps with SHT21 / MeteoSwiss temperatures around the city of Zurich  
+
 
 # HPP_measurement_processing
 - Compute_CarboSense_HPP_CO2_values.r **CronJob**
@@ -215,4 +222,10 @@ Contacts related to "swiss.co2.live": Khash-Erdene Jalsan (khash.jalsan@decentla
   - Selects all data (first of month) / data of last 21 days (daily) from CarboSense_HPP_CO2 and uploads it to swiss.co2.live
 
 - Upload_Carbosense_MetaDBtables_to_DecentlabSFTP.pl
-  - Uploads Carbosense meta-database table dump to Decentlab's FTP server  
+  - Uploads Carbosense meta-database table dump to Decentlab's FTP server
+
+# ICOS_Carbosense_T_RH_Data_Release_October_2019
+- Compute_CarboSense_T_RH_values_Version_October_2019.r
+  - Download LP8 measurements from the Decentlab database, measurement processing (e.g. adjusting of timestamp, removal of duplicates, status), export in Carbosense database
+- Carbosense_data_release_2019-10.r
+  - Script that created the files for the ICOS data release in October 2019  
