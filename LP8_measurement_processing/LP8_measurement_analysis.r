@@ -181,7 +181,7 @@ par(mai=c(1,1,0.5,0.5),mfrow=c(2,1))
 
 for(ith_depl in (1-n_ref_sites):dim(tbl_deployment)[1]){
   
-  
+  print(paste("Processing data for SU",tbl_deployment$SensorUnit_ID[ith_depl]))
   # import LP8 measurements
   
   if(ith_depl>0){
@@ -333,6 +333,7 @@ for(ith_depl in (1-n_ref_sites):dim(tbl_deployment)[1]){
   hoursOfDay <- c(13,14,15,16)
   
   for(dayNow_00 in min_day_00:max_day_00){
+    print(paste("Processing day",dayNow_00))
     
     cc <- cc + 1
     
@@ -402,7 +403,7 @@ for(ith_depl in (1-n_ref_sites):dim(tbl_deployment)[1]){
     }
     
     # computation of CO2 measures
-    
+    print("Computing quantiles")
     df$QQ_CO2_p007[cc]      <- as.numeric(quantile(data$CO2[id_p007],      probs=QQ))
     df$QQ_CO2_n007[cc]      <- as.numeric(quantile(data$CO2[id_n007],      probs=QQ))
     df$QQ_CO2_p015[cc]      <- as.numeric(quantile(data$CO2[id_p015],      probs=QQ))
@@ -411,6 +412,7 @@ for(ith_depl in (1-n_ref_sites):dim(tbl_deployment)[1]){
     df$QQ_CO2_yesterday[cc] <- as.numeric(quantile(data$CO2[id_yesterday], probs=QQ))
     df$QQ_CO2_tommorow[cc]  <- as.numeric(quantile(data$CO2[id_tomorrow],  probs=QQ))
     df$QQ_CO2_eq_tp015[cc]  <- as.numeric(quantile(data$CO2[id_eq_tp015],  probs=QQ))
+    print("Done Computing quantiles")
   }
   
   #
