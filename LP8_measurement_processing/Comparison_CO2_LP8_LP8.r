@@ -143,7 +143,7 @@ query_str         <- paste("SELECT * FROM Location;",sep="")
 drv               <- dbDriver("MySQL")
 con <-carboutil::get_conn()
 res               <- dbSendQuery(con, query_str)
-LOCATIONS         <- fetch(res, n=-1)
+LOCATIONS         <- dbFetch(res, n=-1)
 dbClearResult(res)
 dbDisconnect(con)
 
@@ -160,7 +160,7 @@ for(ith_SITE_PAIR in 1:dim(SITE_PAIRS)[1]){
   drv               <- dbDriver("MySQL")
  con <-carboutil::get_conn()
   res               <- dbSendQuery(con, query_str)
-  SU_LOC_1          <- fetch(res, n=-1)
+  SU_LOC_1          <- dbFetch(res, n=-1)
   dbClearResult(res)
   dbDisconnect(con)
   
@@ -169,7 +169,7 @@ for(ith_SITE_PAIR in 1:dim(SITE_PAIRS)[1]){
   drv               <- dbDriver("MySQL")
  con <-carboutil::get_conn()
   res               <- dbSendQuery(con, query_str)
-  SU_LOC_2          <- fetch(res, n=-1)
+  SU_LOC_2          <- dbFetch(res, n=-1)
   dbClearResult(res)
   dbDisconnect(con)
   
@@ -193,7 +193,7 @@ for(ith_SITE_PAIR in 1:dim(SITE_PAIRS)[1]){
     drv               <- dbDriver("MySQL")
    con <-carboutil::get_conn()
     res               <- dbSendQuery(con, query_str)
-    data_SU_1         <- fetch(res, n=-1)
+    data_SU_1         <- dbFetch(res, n=-1)
     dbClearResult(res)
     dbDisconnect(con)
 
@@ -227,7 +227,7 @@ for(ith_SITE_PAIR in 1:dim(SITE_PAIRS)[1]){
       drv          <- dbDriver("MySQL")
       con <-carboutil::get_conn()
       res          <- dbSendQuery(con, query_str)
-      data_SU_2    <- fetch(res, n=-1)
+      data_SU_2    <- dbFetch(res, n=-1)
       dbClearResult(res)
       dbDisconnect(con)
       

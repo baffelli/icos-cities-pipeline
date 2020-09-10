@@ -51,7 +51,7 @@ query_str       <- paste("SELECT * FROM Location;",sep="")
 drv             <- dbDriver("MySQL")
 con<-carboutil::get_conn(group="CarboSense_MySQL")
 res             <- dbSendQuery(con, query_str)
-tbl_Location    <- fetch(res, n=-1)
+tbl_Location    <- dbFetch(res, n=-1)
 dbClearResult(res)
 dbDisconnect(con)
 

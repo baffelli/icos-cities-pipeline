@@ -38,7 +38,7 @@ query_str               <- "SELECT * FROM RefMeasExclusionPeriods WHERE Location
 drv                     <- dbDriver("MySQL")
 con                     <- carboutil::get_conn(group=DB_group)
 res                     <- dbSendQuery(con, query_str)
-RefMeasExclusionPeriods <- fetch(res, n=-1)
+RefMeasExclusionPeriods <- dbFetch(res, n=-1)
 dbClearResult(res)
 dbDisconnect(con)
 
@@ -198,7 +198,7 @@ if(T){
     drv             <- dbDriver("MySQL")
     con             <- carboutil::get_conn(group=DB_group)
     res             <- dbSendQuery(con, query_str)
-    MAX_timestamp   <- fetch(res, n=-1)
+    MAX_timestamp   <- dbFetch(res, n=-1)
     dbClearResult(res)
     dbDisconnect(con)
     

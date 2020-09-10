@@ -87,7 +87,7 @@ if(T){
   drv        <- dbDriver("MySQL")
   con<-carboutil::get_conn(group="CarboSense_MySQL")
   res        <- dbSendQuery(con, query_str)
-  tmp        <- fetch(res, n=-1)
+  tmp        <- dbFetch(res, n=-1)
   dbClearResult(res)
   dbDisconnect(con)
   
@@ -101,7 +101,7 @@ if(F){
   drv        <- dbDriver("MySQL")
   con<-carboutil::get_conn(group="CarboSense_MySQL")
   res        <- dbSendQuery(con, query_str)
-  tmp        <- fetch(res, n=-1)
+  tmp        <- dbFetch(res, n=-1)
   dbClearResult(res)
   dbDisconnect(con)
   
@@ -231,7 +231,7 @@ for(ith_SensorUnit_ID_2_cal in 1:n_SensorUnit_ID_2_cal){
   drv             <- dbDriver("MySQL")
   con <-carboutil::get_conn( group="CarboSense_MySQL")
   res             <- dbSendQuery(con, query_str)
-  tbl_calibration <- fetch(res, n=-1)
+  tbl_calibration <- dbFetch(res, n=-1)
   dbClearResult(res)
   dbDisconnect(con)
   
@@ -299,7 +299,7 @@ for(ith_SensorUnit_ID_2_cal in 1:n_SensorUnit_ID_2_cal){
   drv         <- dbDriver("MySQL")
   con <-carboutil::get_conn( group="CarboSense_MySQL")
   res         <- dbSendQuery(con, query_str)
-  tbl_sensors <- fetch(res, n=-1)
+  tbl_sensors <- dbFetch(res, n=-1)
   dbClearResult(res)
   dbDisconnect(con)
   
@@ -394,7 +394,7 @@ for(ith_SensorUnit_ID_2_cal in 1:n_SensorUnit_ID_2_cal){
     drv         <- dbDriver("MySQL")
     con <-carboutil::get_conn( group="CarboSense_MySQL")
     res         <- dbSendQuery(con, query_str)
-    SEP         <- fetch(res, n=-1)
+    SEP         <- dbFetch(res, n=-1)
     dbClearResult(res)
     dbDisconnect(con)
     
@@ -640,7 +640,7 @@ for(ith_SensorUnit_ID_2_cal in 1:n_SensorUnit_ID_2_cal){
         drv       <- dbDriver("MySQL")
         con<-carboutil::get_conn(group="CarboSense_MySQL")
         res       <- dbSendQuery(con, query_str)
-        tmp0      <- fetch(res, n=-1)
+        tmp0      <- dbFetch(res, n=-1)
         dbClearResult(res)
         dbDisconnect(con)
         
@@ -695,7 +695,7 @@ for(ith_SensorUnit_ID_2_cal in 1:n_SensorUnit_ID_2_cal){
         drv       <- dbDriver("MySQL")
         con<-carboutil::get_conn(group="CarboSense_MySQL")
         res       <- dbSendQuery(con, query_str)
-        tmp0      <- fetch(res, n=-1)
+        tmp0      <- dbFetch(res, n=-1)
         dbClearResult(res)
         dbDisconnect(con)
         
@@ -750,7 +750,7 @@ for(ith_SensorUnit_ID_2_cal in 1:n_SensorUnit_ID_2_cal){
         drv       <- dbDriver("MySQL")
         con<-carboutil::get_conn(group="CarboSense_MySQL")
         res       <- dbSendQuery(con, query_str)
-        tmp0      <- fetch(res, n=-1)
+        tmp0      <- dbFetch(res, n=-1)
         dbClearResult(res)
         dbDisconnect(con)
         
@@ -786,7 +786,7 @@ for(ith_SensorUnit_ID_2_cal in 1:n_SensorUnit_ID_2_cal){
         drv       <- dbDriver("MySQL")
         con<-carboutil::get_conn(group="CarboSense_MySQL")
         res       <- dbSendQuery(con, query_str)
-        tmp0      <- fetch(res, n=-1)
+        tmp0      <- dbFetch(res, n=-1)
         dbClearResult(res)
         dbDisconnect(con)
         
@@ -822,7 +822,7 @@ for(ith_SensorUnit_ID_2_cal in 1:n_SensorUnit_ID_2_cal){
         drv       <- dbDriver("MySQL")
         con<-carboutil::get_conn(group="CarboSense_MySQL")
         res       <- dbSendQuery(con, query_str)
-        tmp0      <- fetch(res, n=-1)
+        tmp0      <- dbFetch(res, n=-1)
         dbClearResult(res)
         dbDisconnect(con)
         
@@ -2186,7 +2186,7 @@ for(ith_SensorUnit_ID_2_cal in 1:n_SensorUnit_ID_2_cal){
             drv             <- dbDriver("MySQL")
             con <-carboutil::get_conn( group="CarboSense_MySQL")
             res             <- dbSendQuery(con, query_str)
-            tbl_calibration <- fetch(res, n=-1)
+            tbl_calibration <- dbFetch(res, n=-1)
             dbClearResult(res)
             dbDisconnect(con)
             
@@ -2234,7 +2234,7 @@ for(ith_SensorUnit_ID_2_cal in 1:n_SensorUnit_ID_2_cal){
             drv             <- dbDriver("MySQL")
             con <-carboutil::get_conn( group="CarboSense_MySQL")
             res             <- dbSendQuery(con, query_str)
-            tbl_calibration <- fetch(res, n=-1)
+            tbl_calibration <- dbFetch(res, n=-1)
             dbClearResult(res)
             dbDisconnect(con)
             

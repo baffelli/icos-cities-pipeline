@@ -33,7 +33,7 @@ query_str       <- paste("SELECT DISTINCT LocationName FROM METEOSWISS_Measureme
 drv             <- dbDriver("MySQL")
 con <-carboutil::get_conn(group="CarboSense_MySQL")
 res             <- dbSendQuery(con, query_str)
-tbl_MCH_sites   <- fetch(res, n=-1)
+tbl_MCH_sites   <- dbFetch(res, n=-1)
 dbClearResult(res)
 dbDisconnect(con)
 
@@ -45,7 +45,7 @@ query_str       <- paste("SELECT * FROM Location WHERE LocationName IN ",tmp_IN,
 drv             <- dbDriver("MySQL")
 con <-carboutil::get_conn(group="CarboSense_MySQL")
 res             <- dbSendQuery(con, query_str)
-tbl_MCH_sites   <- fetch(res, n=-1)
+tbl_MCH_sites   <- dbFetch(res, n=-1)
 dbClearResult(res)
 dbDisconnect(con)
 
@@ -68,7 +68,7 @@ for(ith_MCH_site in 1:n_MCH_sites){
   drv             <- dbDriver("MySQL")
   con <-carboutil::get_conn(group="CarboSense_MySQL")
   res             <- dbSendQuery(con, query_str)
-  tmp             <- fetch(res, n=-1)
+  tmp             <- dbFetch(res, n=-1)
   dbClearResult(res)
   dbDisconnect(con)
   
@@ -81,7 +81,7 @@ for(ith_MCH_site in 1:n_MCH_sites){
   drv             <- dbDriver("MySQL")
   con <-carboutil::get_conn(group="CarboSense_MySQL")
   res             <- dbSendQuery(con, query_str)
-  tmp             <- fetch(res, n=-1)
+  tmp             <- dbFetch(res, n=-1)
   dbClearResult(res)
   dbDisconnect(con)
   
@@ -94,7 +94,7 @@ for(ith_MCH_site in 1:n_MCH_sites){
   drv             <- dbDriver("MySQL")
   con <-carboutil::get_conn(group="CarboSense_MySQL")
   res             <- dbSendQuery(con, query_str)
-  tmp             <- fetch(res, n=-1)
+  tmp             <- dbFetch(res, n=-1)
   dbClearResult(res)
   dbDisconnect(con)
   

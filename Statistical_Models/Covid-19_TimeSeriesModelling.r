@@ -45,7 +45,7 @@ if(!dir.exists(resultdir)){
 
 query_str       <- paste("SELECT * FROM Location;",sep="")
 drv             <- dbDriver("MySQL")
-con             <- dbConnect(drv, group="CarboSense_MySQL")
+con             <- carboutil::get_conn()
 res             <- dbSendQuery(con, query_str)
 tbl_loc         <- fetch(res, n=-1)
 dbClearResult(res)
@@ -62,7 +62,7 @@ for(ZH_SITE in c("ZSCH","ZHBR","ZUE","RECK","ALBS","ESMO")){
   query_str       <- paste("SELECT timestamp, CO2_CAL_ADJ FROM CarboSense_HPP_CO2 ",sep="")
   query_str       <- paste(query_str, "WHERE LocationName = '",ZH_SITE,"' and Valve = 0 and CO2_CAL_ADJ != -999;",sep="")
   drv             <- dbDriver("MySQL")
-  con             <- dbConnect(drv, group="CarboSense_MySQL")
+  con             <- carboutil::get_conn()
   res             <- dbSendQuery(con, query_str)
   tmp             <- fetch(res, n=-1)
   dbClearResult(res)
@@ -95,7 +95,7 @@ for(ZH_SITE in c("ZMAN","ZSBS","ZBLG","ZUE","ZDLT","ZSCH","ZBAD","ZGLA","LUG","L
   query_str       <- paste("SELECT SensorUnit_ID, LocationName, Date_UTC_from, Date_UTC_to FROM Deployment ",sep="")
   query_str       <- paste(query_str, "WHERE LocationName = '",ZH_SITE,"' AND SensorUnit_ID >= 1010 and SensorUnit_ID <= 1334;",sep="")
   drv             <- dbDriver("MySQL")
-  con             <- dbConnect(drv, group="CarboSense_MySQL")
+  con             <- carboutil::get_conn()
   res             <- dbSendQuery(con, query_str)
   tbl_depl        <- fetch(res, n=-1)
   dbClearResult(res)
@@ -120,7 +120,7 @@ for(ZH_SITE in c("ZMAN","ZSBS","ZBLG","ZUE","ZDLT","ZSCH","ZBAD","ZGLA","LUG","L
   query_str       <- paste(query_str, "AND timestamp>=",tbl_depl$timestamp_from," AND timestamp<",tbl_depl$timestamp_to,";",sep="")
   
   drv             <- dbDriver("MySQL")
-  con             <- dbConnect(drv, group="CarboSense_MySQL")
+  con             <- carboutil::get_conn()
   res             <- dbSendQuery(con, query_str)
   tmp             <- fetch(res, n=-1)
   dbClearResult(res)
@@ -177,7 +177,7 @@ for(SITE in c("PAY","HAE","RIG","DUE","LAEG")){
   
   
   drv             <- dbDriver("MySQL")
-  con             <- dbConnect(drv, group="CarboSense_MySQL")
+  con             <- carboutil::get_conn()
   res             <- dbSendQuery(con, query_str)
   tmp             <- fetch(res, n=-1)
   dbClearResult(res)
@@ -239,7 +239,7 @@ for(SITE in c("HAE","DUE","PAY")){
   }
   
   drv             <- dbDriver("MySQL")
-  con             <- dbConnect(drv, group="CarboSense_MySQL")
+  con             <- carboutil::get_conn()
   res             <- dbSendQuery(con, query_str)
   tmp             <- fetch(res, n=-1)
   dbClearResult(res)
@@ -291,7 +291,7 @@ for(METEO_SITE in METEO_SITES){
     query_str <- paste(query_str,"AND Windspeed != -999 AND Winddirection != 0 AND Winddirection != -999 AND Pressure != -999 AND RH != -999;",sep="")
   }
   drv       <- dbDriver("MySQL")
-  con       <- dbConnect(drv, group="CarboSense_MySQL")
+  con       <- carboutil::get_conn()
   res       <- dbSendQuery(con, query_str)
   tmp       <- fetch(res, n=-1)
   dbClearResult(res)
@@ -358,7 +358,7 @@ query_str <- paste("SELECT timestamp, Temperature, Radiance FROM METEOSWISS_Meas
 query_str <- paste(query_str, "WHERE LocationName = 'KLO' and timestamp >= 1483228800 ",sep="")
 query_str <- paste(query_str, "AND Radiance != -999 AND Temperature != -999;",sep="")
 drv       <- dbDriver("MySQL")
-con       <- dbConnect(drv, group="CarboSense_MySQL")
+con       <- carboutil::get_conn()
 res       <- dbSendQuery(con, query_str)
 METEO_DAY <- fetch(res, n=-1)
 dbClearResult(res)
@@ -434,7 +434,7 @@ query_str <- paste("SELECT timestamp, Temperature, Radiance FROM METEOSWISS_Meas
 query_str <- paste(query_str, "WHERE LocationName = 'LUG' and timestamp >= 1483228800 ",sep="")
 query_str <- paste(query_str, "AND Radiance != -999 AND Temperature != -999;",sep="")
 drv       <- dbDriver("MySQL")
-con       <- dbConnect(drv, group="CarboSense_MySQL")
+con       <- carboutil::get_conn()
 res       <- dbSendQuery(con, query_str)
 METEO_DAY_TI <- fetch(res, n=-1)
 dbClearResult(res)
@@ -885,7 +885,7 @@ rm(id_dst_17,id_dst_18,id_dst_19,id_dst_20)
 rm()
 
 
-### Public holidays as Sundays; Set non-typical days to NA: "Sächseläuten", "24./31.12.",...
+### Public holidays as Sundays; Set non-typical days to NA: "Sï¿½chselï¿½uten", "24./31.12.",...
 
 public_holidays <- NULL
 

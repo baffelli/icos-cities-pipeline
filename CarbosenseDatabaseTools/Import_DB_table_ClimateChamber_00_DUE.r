@@ -370,7 +370,7 @@ if(T){
       drv             <- dbDriver("MySQL")
       con<-carboutil::get_conn( dbname=CS_DB_dbname, host="du-gsn1", port=3306, user=CS_DB_user, pass=CS_DB_pass)
       res             <- dbSendQuery(con, query_str)
-      data            <- fetch(res, n=-1)
+      data            <- dbFetch(res, n=-1)
       dbClearResult(res)
       dbDisconnect(con)
       

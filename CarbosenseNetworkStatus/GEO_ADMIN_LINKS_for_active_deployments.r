@@ -32,7 +32,7 @@ query_str  <- paste("SELECT * FROM Deployment WHERE Date_UTC_to = '2100-01-01 00
 drv        <- dbDriver("MySQL")
 #con<-carboutil::get_conn(group="CarboSense_MySQL")
 res        <- dbSendQuery(con, query_str)
-tbl_depl   <- fetch(res, n=-1)
+tbl_depl   <- dbFetch(res, n=-1)
 dbClearResult(res)
 #dbDisconnect(con)
 
@@ -41,7 +41,7 @@ query_str  <- paste("SELECT * FROM Location;",sep="")
 drv        <- dbDriver("MySQL")
 #con<-carboutil::get_conn(group="CarboSense_MySQL")
 res        <- dbSendQuery(con, query_str)
-tbl_loc    <- fetch(res, n=-1)
+tbl_loc    <- dbFetch(res, n=-1)
 dbClearResult(res)
 #bDisconnect(con)
 

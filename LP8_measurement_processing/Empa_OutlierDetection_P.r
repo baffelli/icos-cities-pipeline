@@ -194,7 +194,7 @@ outlierDetection <- function(serialnumber,DB_TABLE, tbl_depl,tbl_sensors,outlier
     drv             <- dbDriver("MySQL")
     con<-carboutil::get_conn(group="CarboSense_MySQL")
     res             <- dbSendQuery(con, query_str)
-    data            <- fetch(res, n=-1)
+    data            <- dbFetch(res, n=-1)
     dbClearResult(res)
     dbDisconnect(con)
 
@@ -672,7 +672,7 @@ query_str       <- paste("SELECT * FROM Sensors WHERE Type = 'LP8';",sep="")
 drv             <- dbDriver("MySQL")
 con<-carboutil::get_conn(group="CarboSense_MySQL")
 res             <- dbSendQuery(con, query_str)
-tbl_sensors     <- fetch(res, n=-1)
+tbl_sensors     <- dbFetch(res, n=-1)
 dbClearResult(res)
 dbDisconnect(con)
 
@@ -699,7 +699,7 @@ if(COMP=="DUE"){
 drv             <- dbDriver("MySQL")
 con<-carboutil::get_conn(group="CarboSense_MySQL")
 res             <- dbSendQuery(con, query_str)
-tbl_depl        <- fetch(res, n=-1)
+tbl_depl        <- dbFetch(res, n=-1)
 dbClearResult(res)
 dbDisconnect(con)
 

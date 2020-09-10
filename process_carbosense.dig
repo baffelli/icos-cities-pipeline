@@ -18,7 +18,7 @@ _export:
         +NABEL_RIG:
             sh>: Rscript ${base_folder}/CarbosenseDatabaseTools/Import_DB_table_NABEL_RIG.r
         +EMPA_LAEG:
-            sh>: Rscript ${base_folder}/CarbosenseDatabaseTools/Import_DB_table_EMPA_LAEG.r
+            sh>: Rscript ${base_folder}/CarbosenseDatabaseTools/Import_DB_table_EMPA_LAEG.r T
         +UNIBE_GIMM:
             sh>: Rscript ${base_folder}/CarbosenseDatabaseTools/Import_DB_table_UNIBE_GIMM.r 
         +UNIBE_BRM:
@@ -77,16 +77,16 @@ _export:
             +outlier_detection:
                 sh>: Rscript ${base_folder}/LP8_measurement_processing/Empa_OutlierDetection_P.r ${config[0]} ${config[1]}
         
-            +measurement_analysis:
+            #+measurement_analysis:
                 #Only run on Sunday (it takes a long time)
-                if>: ${moment(session_date).format('dddd')== 'Sunday'}
-                _do:
+                # if>: ${moment(session_date).format('dddd')== 'Sunday'}
+                # _do:
                     
-                    if>: ${config[1] == 'DUE'}
-                    _do:
-                        sh>: Rscript ${base_folder}/LP8_measurement_processing/LP8_measurement_analysis.r ${config[0]} ${config[1]}  
-                    _else_do:
-                        sh>: Rscript ${base_folder}/LP8_measurement_processing/LP8_measurement_analysis.r ${config[0]}  
+                #     if>: ${config[1] == 'DUE'}
+                #     _do:
+                #         sh>: Rscript ${base_folder}/LP8_measurement_processing/LP8_measurement_analysis.r ${config[0]} ${config[1]}  
+                #     _else_do:
+                #         sh>: Rscript ${base_folder}/LP8_measurement_processing/LP8_measurement_analysis.r ${config[0]}  
 
             +drift_correction:
                 sh>: Rscript ${base_folder}/LP8_measurement_processing/LP8_DriftCorrection.r  ${config[0]} F

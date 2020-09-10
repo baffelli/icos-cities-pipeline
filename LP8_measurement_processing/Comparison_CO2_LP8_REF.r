@@ -179,7 +179,7 @@ for(SITE in ALL_SITES){
     drv               <- dbDriver("MySQL")
     con <-carboutil::get_conn()
     res               <- dbSendQuery(con, query_str)
-    tbl_pressure      <- fetch(res, n=-1)
+    tbl_pressure      <- dbFetch(res, n=-1)
     dbClearResult(res)
     dbDisconnect(con)
     
@@ -192,7 +192,7 @@ for(SITE in ALL_SITES){
     drv               <- dbDriver("MySQL")
     con <-carboutil::get_conn()
     res               <- dbSendQuery(con, query_str)
-    tbl_REF           <- fetch(res, n=-1)
+    tbl_REF           <- dbFetch(res, n=-1)
     dbClearResult(res)
     dbDisconnect(con)
     
@@ -307,7 +307,7 @@ for(SITE in ALL_SITES){
     drv               <- dbDriver("MySQL")
    con <-carboutil::get_conn()
     res               <- dbSendQuery(con, query_str)
-    tbl_CO2_SU        <- fetch(res, n=-1)
+    tbl_CO2_SU        <- dbFetch(res, n=-1)
     dbClearResult(res)
     dbDisconnect(con)
     # AMT PAPER
@@ -340,7 +340,7 @@ for(SITE in ALL_SITES){
       drv               <- dbDriver("MySQL")
       con <-carboutil::get_conn()
       res               <- dbSendQuery(con, query_str)
-      tbl_CO2           <- fetch(res, n=-1)
+      tbl_CO2           <- dbFetch(res, n=-1)
       dbClearResult(res)
       dbDisconnect(con)
       
@@ -385,7 +385,7 @@ for(SITE in ALL_SITES){
         drv               <- dbDriver("MySQL")
        con <-carboutil::get_conn()
         res               <- dbSendQuery(con, query_str)
-        tbl_REF           <- fetch(res, n=-1)
+        tbl_REF           <- dbFetch(res, n=-1)
         dbClearResult(res)
         dbDisconnect(con)
         
@@ -450,7 +450,7 @@ for(SITE in ALL_SITES){
         drv               <- dbDriver("MySQL")
        con <-carboutil::get_conn()
         res               <- dbSendQuery(con, query_str)
-        tbl_REF           <- fetch(res, n=-1)
+        tbl_REF           <- dbFetch(res, n=-1)
         dbClearResult(res)
         dbDisconnect(con)
         
@@ -491,7 +491,7 @@ for(SITE in ALL_SITES){
         drv               <- dbDriver("MySQL")
        con <-carboutil::get_conn()
         res               <- dbSendQuery(con, query_str)
-        tbl_REF           <- fetch(res, n=-1)
+        tbl_REF           <- dbFetch(res, n=-1)
         dbClearResult(res)
         dbDisconnect(con)
         
@@ -1233,7 +1233,7 @@ for(SITE in ALL_SITES){
     drv               <- dbDriver("MySQL")
    con <-carboutil::get_conn()
     res               <- dbSendQuery(con, query_str)
-    tbl_CO2_SU        <- fetch(res, n=-1)
+    tbl_CO2_SU        <- dbFetch(res, n=-1)
     dbClearResult(res)
     dbDisconnect(con)
     
@@ -1276,7 +1276,7 @@ for(SITE in ALL_SITES){
       drv               <- dbDriver("MySQL")
      con <-carboutil::get_conn()
       res               <- dbSendQuery(con, query_str)
-      data              <- fetch(res, n=-1)
+      data              <- dbFetch(res, n=-1)
       dbClearResult(res)
       dbDisconnect(con)
       
@@ -1337,7 +1337,7 @@ for(SITE in ALL_SITES){
       drv               <- dbDriver("MySQL")
      con <-carboutil::get_conn()
       res               <- dbSendQuery(con, query_str)
-      tmp1              <- fetch(res, n=-1)
+      tmp1              <- dbFetch(res, n=-1)
       dbClearResult(res)
       dbDisconnect(con)
       
@@ -1378,7 +1378,7 @@ for(SITE in ALL_SITES){
       drv               <- dbDriver("MySQL")
      con <-carboutil::get_conn()
       res               <- dbSendQuery(con, query_str)
-      tmp1              <- fetch(res, n=-1)
+      tmp1              <- dbFetch(res, n=-1)
       dbClearResult(res)
       dbDisconnect(con)
       
@@ -1432,7 +1432,7 @@ for(SITE in ALL_SITES){
       drv               <- dbDriver("MySQL")
      con <-carboutil::get_conn()
       res               <- dbSendQuery(con, query_str)
-      tbl_CO2_SU        <- fetch(res, n=-1)
+      tbl_CO2_SU        <- dbFetch(res, n=-1)
       dbClearResult(res)
       dbDisconnect(con)
       

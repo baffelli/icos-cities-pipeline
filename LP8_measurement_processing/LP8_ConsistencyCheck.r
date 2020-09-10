@@ -113,7 +113,7 @@ query_str         <- paste("SELECT * from Location;",sep="")
 drv               <- dbDriver("MySQL")
 con<-carboutil::get_conn(group="CarboSense_MySQL")
 res               <- dbSendQuery(con, query_str)
-tbl_location      <- fetch(res, n=-1)
+tbl_location      <- dbFetch(res, n=-1)
 dbClearResult(res)
 dbDisconnect(con)
 
@@ -124,7 +124,7 @@ query_str         <- paste("SELECT * from Deployment;",sep="")
 drv               <- dbDriver("MySQL")
 con<-carboutil::get_conn(group="CarboSense_MySQL")
 res               <- dbSendQuery(con, query_str)
-tbl_deployment    <- fetch(res, n=-1)
+tbl_deployment    <- dbFetch(res, n=-1)
 dbClearResult(res)
 dbDisconnect(con)
 
@@ -141,7 +141,7 @@ query_str         <- paste("SELECT DISTINCT SensorUnit_ID, LocationName from Car
 drv               <- dbDriver("MySQL")
 con<-carboutil::get_conn(group="CarboSense_MySQL")
 res               <- dbSendQuery(con, query_str)
-HPP_SU_SITES      <- fetch(res, n=-1)
+HPP_SU_SITES      <- dbFetch(res, n=-1)
 dbClearResult(res)
 dbDisconnect(con)
 
@@ -170,7 +170,7 @@ for(ref_site in c(REF_sites,HPP_SU_SITES$desc)){
     drv          <- dbDriver("MySQL")
     con<-carboutil::get_conn(group="CarboSense_MySQL")
     res          <- dbSendQuery(con, query_str)
-    tbl_REF      <- fetch(res, n=-1)
+    tbl_REF      <- dbFetch(res, n=-1)
     dbClearResult(res)
     dbDisconnect(con)
     
@@ -186,7 +186,7 @@ for(ref_site in c(REF_sites,HPP_SU_SITES$desc)){
     drv         <- dbDriver("MySQL")
     con<-carboutil::get_conn(group="CarboSense_MySQL")
     res         <- dbSendQuery(con, query_str)
-    tbl_REF     <- fetch(res, n=-1)
+    tbl_REF     <- dbFetch(res, n=-1)
     dbClearResult(res)
     dbDisconnect(con)
     
@@ -203,7 +203,7 @@ for(ref_site in c(REF_sites,HPP_SU_SITES$desc)){
     drv         <- dbDriver("MySQL")
     con<-carboutil::get_conn(group="CarboSense_MySQL")
     res         <- dbSendQuery(con, query_str)
-    tbl_REF     <- fetch(res, n=-1)
+    tbl_REF     <- dbFetch(res, n=-1)
     dbClearResult(res)
     dbDisconnect(con)
     
@@ -218,7 +218,7 @@ for(ref_site in c(REF_sites,HPP_SU_SITES$desc)){
   #   drv         <- dbDriver("MySQL")
   #   con<-carboutil::get_conn(group="CarboSense_MySQL")
   #   res         <- dbSendQuery(con, query_str)
-  #   tbl_REF     <- fetch(res, n=-1)
+  #   tbl_REF     <- dbFetch(res, n=-1)
   #   dbClearResult(res)
   #   dbDisconnect(con)
   #   
@@ -236,7 +236,7 @@ for(ref_site in c(REF_sites,HPP_SU_SITES$desc)){
   #   drv         <- dbDriver("MySQL")
   #   con<-carboutil::get_conn(group="CarboSense_MySQL")
   #   res         <- dbSendQuery(con, query_str)
-  #   tbl_REF     <- fetch(res, n=-1)
+  #   tbl_REF     <- dbFetch(res, n=-1)
   #   dbClearResult(res)
   #   dbDisconnect(con)
   #   
@@ -249,7 +249,7 @@ for(ref_site in c(REF_sites,HPP_SU_SITES$desc)){
     drv          <- dbDriver("MySQL")
     con<-carboutil::get_conn(group="CarboSense_MySQL")
     res          <- dbSendQuery(con, query_str)
-    tbl_REF      <- fetch(res, n=-1)
+    tbl_REF      <- dbFetch(res, n=-1)
     dbClearResult(res)
     dbDisconnect(con)
     
@@ -262,7 +262,7 @@ for(ref_site in c(REF_sites,HPP_SU_SITES$desc)){
     drv          <- dbDriver("MySQL")
     con<-carboutil::get_conn(group="CarboSense_MySQL")
     res          <- dbSendQuery(con, query_str)
-    tbl_REF      <- fetch(res, n=-1)
+    tbl_REF      <- dbFetch(res, n=-1)
     dbClearResult(res)
     dbDisconnect(con)
     
@@ -275,7 +275,7 @@ for(ref_site in c(REF_sites,HPP_SU_SITES$desc)){
     drv           <- dbDriver("MySQL")
     con<-carboutil::get_conn(group="CarboSense_MySQL")
     res           <- dbSendQuery(con, query_str)
-    tbl_REF       <- fetch(res, n=-1)
+    tbl_REF       <- dbFetch(res, n=-1)
     dbClearResult(res)
     dbDisconnect(con)
     
@@ -578,7 +578,7 @@ for(ith_depl in 1:n_depl){
   drv               <- dbDriver("MySQL")
   con<-carboutil::get_conn(group="CarboSense_MySQL")
   res               <- dbSendQuery(con, query_str)
-  data              <- fetch(res, n=-1)
+  data              <- dbFetch(res, n=-1)
   dbClearResult(res)
   dbDisconnect(con)
   

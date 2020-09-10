@@ -33,7 +33,7 @@ query_str               <- "SELECT * FROM RefMeasExclusionPeriods WHERE Location
 drv                     <- dbDriver("MySQL")
 con                     <- carboutil::get_conn(group=DB_group_out)
 res                     <- dbSendQuery(con, query_str)
-RefMeasExclusionPeriods <- fetch(res, n=-1)
+RefMeasExclusionPeriods <- dbFetch(res, n=-1)
 dbClearResult(res)
 dbDisconnect(con)
 
@@ -53,7 +53,7 @@ query_str       <- paste("SELECT * from gimmiz_1min_cal WHERE timed >= 148322880
 drv             <- dbDriver("MySQL")
 con             <- carboutil::get_conn(group=DB_group_in)
 res             <- dbSendQuery(con, query_str)
-data            <- fetch(res, n=-1)
+data            <- dbFetch(res, n=-1)
 dbClearResult(res)
 dbDisconnect(con)
 

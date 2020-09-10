@@ -93,7 +93,7 @@ query_str       <- paste("SELECT * FROM Deployment WHERE Date_UTC_from >= '2017-
 drv             <- dbDriver("MySQL")
 con <-carboutil::get_conn()
 res             <- dbSendQuery(con, query_str)
-tbl_deployment  <- fetch(res, n=-1)
+tbl_deployment  <- dbFetch(res, n=-1)
 dbClearResult(res)
 dbDisconnect(con)
 
@@ -118,7 +118,7 @@ query_str       <- paste("SELECT * FROM Location;",sep="")
 drv             <- dbDriver("MySQL")
 con <-carboutil::get_conn()
 res             <- dbSendQuery(con, query_str)
-tbl_location    <- fetch(res, n=-1)
+tbl_location    <- dbFetch(res, n=-1)
 dbClearResult(res)
 dbDisconnect(con)
 
@@ -166,7 +166,7 @@ for(ith_depl in 1:dim(tbl_deployment)[1]){
   drv       <- dbDriver("MySQL")
   con <-carboutil::get_conn()
   res       <- dbSendQuery(con, query_str)
-  data      <- fetch(res, n=-1)
+  data      <- dbFetch(res, n=-1)
   dbClearResult(res)
   dbDisconnect(con)
   
@@ -364,7 +364,7 @@ for(ith_site in 1:n_sites){
         drv       <- dbDriver("MySQL")
         con <-carboutil::get_conn()
         res       <- dbSendQuery(con, query_str)
-        data_tmp  <- fetch(res, n=-1)
+        data_tmp  <- dbFetch(res, n=-1)
         dbClearResult(res)
         dbDisconnect(con)
         
@@ -400,7 +400,7 @@ for(ith_site in 1:n_sites){
         drv       <- dbDriver("MySQL")
         con <-carboutil::get_conn()
         res       <- dbSendQuery(con, query_str)
-        data      <- fetch(res, n=-1)
+        data      <- dbFetch(res, n=-1)
         dbClearResult(res)
         dbDisconnect(con)
       }
@@ -410,7 +410,7 @@ for(ith_site in 1:n_sites){
       drv       <- dbDriver("MySQL")
       con <-carboutil::get_conn()
       res       <- dbSendQuery(con, query_str)
-      data      <- fetch(res, n=-1)
+      data      <- dbFetch(res, n=-1)
       dbClearResult(res)
       dbDisconnect(con)
     }
@@ -419,7 +419,7 @@ for(ith_site in 1:n_sites){
       drv       <- dbDriver("MySQL")
       con <-carboutil::get_conn()
       res       <- dbSendQuery(con, query_str)
-      data      <- fetch(res, n=-1)
+      data      <- dbFetch(res, n=-1)
       dbClearResult(res)
       dbDisconnect(con)
     }
@@ -428,7 +428,7 @@ for(ith_site in 1:n_sites){
       drv       <- dbDriver("MySQL")
       con <-carboutil::get_conn()
       res       <- dbSendQuery(con, query_str)
-      data      <- fetch(res, n=-1)
+      data      <- dbFetch(res, n=-1)
       dbClearResult(res)
       dbDisconnect(con)
     }
@@ -437,7 +437,7 @@ for(ith_site in 1:n_sites){
       drv       <- dbDriver("MySQL")
       con <-carboutil::get_conn()
       res       <- dbSendQuery(con, query_str)
-      data      <- fetch(res, n=-1)
+      data      <- dbFetch(res, n=-1)
       dbClearResult(res)
       dbDisconnect(con)
     }
@@ -560,7 +560,7 @@ query_str <- paste("SELECT DISTINCT LocationName, SensorUnit_ID FROM CarboSense_
 drv       <- dbDriver("MySQL")
 con <-carboutil::get_conn()
 res       <- dbSendQuery(con, query_str)
-HPP_LOC_SUID <- fetch(res, n=-1)
+HPP_LOC_SUID <- dbFetch(res, n=-1)
 dbClearResult(res)
 dbDisconnect(con)
 
@@ -587,7 +587,7 @@ for(ith_LOC_SUID in 1:dim(HPP_LOC_SUID)[1]){
   drv       <- dbDriver("MySQL")
   con <-carboutil::get_conn()
   res       <- dbSendQuery(con, query_str)
-  data      <- fetch(res, n=-1)
+  data      <- dbFetch(res, n=-1)
   dbClearResult(res)
   dbDisconnect(con)
   
@@ -973,7 +973,7 @@ for(ith_site in 1:n_sites){
         drv       <- dbDriver("MySQL")
         con <-carboutil::get_conn()
         res       <- dbSendQuery(con, query_str)
-        data_tmp  <- fetch(res, n=-1)
+        data_tmp  <- dbFetch(res, n=-1)
         dbClearResult(res)
         dbDisconnect(con)
         
@@ -1008,7 +1008,7 @@ for(ith_site in 1:n_sites){
         drv       <- dbDriver("MySQL")
         con <-carboutil::get_conn()
         res       <- dbSendQuery(con, query_str)
-        data      <- fetch(res, n=-1)
+        data      <- dbFetch(res, n=-1)
         dbClearResult(res)
         dbDisconnect(con)
       }
@@ -1018,7 +1018,7 @@ for(ith_site in 1:n_sites){
       drv       <- dbDriver("MySQL")
       con <-carboutil::get_conn()
       res       <- dbSendQuery(con, query_str)
-      data      <- fetch(res, n=-1)
+      data      <- dbFetch(res, n=-1)
       dbClearResult(res)
       dbDisconnect(con)
     }
@@ -1027,7 +1027,7 @@ for(ith_site in 1:n_sites){
       drv       <- dbDriver("MySQL")
       con <-carboutil::get_conn()
       res       <- dbSendQuery(con, query_str)
-      data      <- fetch(res, n=-1)
+      data      <- dbFetch(res, n=-1)
       dbClearResult(res)
       dbDisconnect(con)
     }
@@ -1036,7 +1036,7 @@ for(ith_site in 1:n_sites){
       drv       <- dbDriver("MySQL")
       con <-carboutil::get_conn()
       res       <- dbSendQuery(con, query_str)
-      data      <- fetch(res, n=-1)
+      data      <- dbFetch(res, n=-1)
       dbClearResult(res)
       dbDisconnect(con)
     }
@@ -1045,7 +1045,7 @@ for(ith_site in 1:n_sites){
       drv       <- dbDriver("MySQL")
       con <-carboutil::get_conn()
       res       <- dbSendQuery(con, query_str)
-      data      <- fetch(res, n=-1)
+      data      <- dbFetch(res, n=-1)
       dbClearResult(res)
       dbDisconnect(con)
     }

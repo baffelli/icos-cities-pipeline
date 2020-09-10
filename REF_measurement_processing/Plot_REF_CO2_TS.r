@@ -145,7 +145,7 @@ for(yyyy_plot in c(2020,2020)){
         drv       <- dbDriver("MySQL")
         con<-carboutil::get_conn(group="CarboSense_MySQL")
         res       <- dbSendQuery(con, query_str)
-        data      <- fetch(res, n=-1)
+        data      <- dbFetch(res, n=-1)
         dbClearResult(res)
         dbDisconnect(con)
         
@@ -159,7 +159,7 @@ for(yyyy_plot in c(2020,2020)){
         drv       <- dbDriver("MySQL")
         con<-carboutil::get_conn(group="CarboSense_MySQL")
         res       <- dbSendQuery(con, query_str)
-        data      <- fetch(res, n=-1)
+        data      <- dbFetch(res, n=-1)
         dbClearResult(res)
         dbDisconnect(con)
       }
@@ -169,7 +169,7 @@ for(yyyy_plot in c(2020,2020)){
         drv       <- dbDriver("MySQL")
         con<-carboutil::get_conn(group="CarboSense_MySQL")
         res       <- dbSendQuery(con, query_str)
-        data      <- fetch(res, n=-1)
+        data      <- dbFetch(res, n=-1)
         dbClearResult(res)
         dbDisconnect(con)
       }
@@ -179,7 +179,7 @@ for(yyyy_plot in c(2020,2020)){
         drv       <- dbDriver("MySQL")
         con<-carboutil::get_conn(group="CarboSense_MySQL")
         res       <- dbSendQuery(con, query_str)
-        data      <- fetch(res, n=-1)
+        data      <- dbFetch(res, n=-1)
         dbClearResult(res)
         dbDisconnect(con)
       }
@@ -189,7 +189,7 @@ for(yyyy_plot in c(2020,2020)){
         drv       <- dbDriver("MySQL")
         con<-carboutil::get_conn(group="NabelGsn")
         res       <- dbSendQuery(con, query_str)
-        data      <- fetch(res, n=-1)
+        data      <- dbFetch(res, n=-1)
         dbClearResult(res)
         dbDisconnect(con)
         
@@ -257,7 +257,7 @@ for(ith_table in 1:n_tables){
     drv       <- dbDriver("MySQL")
     con<-carboutil::get_conn(group="CarboSense_MySQL")
     res       <- dbSendQuery(con, query_str)
-    data      <- fetch(res, n=-1)
+    data      <- dbFetch(res, n=-1)
     dbClearResult(res)
     dbDisconnect(con)
     
@@ -271,7 +271,7 @@ for(ith_table in 1:n_tables){
     drv       <- dbDriver("MySQL")
     con<-carboutil::get_conn(group="CarboSense_MySQL")
     res       <- dbSendQuery(con, query_str)
-    data      <- fetch(res, n=-1)
+    data      <- dbFetch(res, n=-1)
     dbClearResult(res)
     dbDisconnect(con)
   }
@@ -280,7 +280,7 @@ for(ith_table in 1:n_tables){
     drv       <- dbDriver("MySQL")
     con<-carboutil::get_conn(group="CarboSense_MySQL")
     res       <- dbSendQuery(con, query_str)
-    data      <- fetch(res, n=-1)
+    data      <- dbFetch(res, n=-1)
     dbClearResult(res)
     dbDisconnect(con)
   }
@@ -289,7 +289,7 @@ for(ith_table in 1:n_tables){
     drv       <- dbDriver("MySQL")
     con<-carboutil::get_conn(group="CarboSense_MySQL")
     res       <- dbSendQuery(con, query_str)
-    data      <- fetch(res, n=-1)
+    data      <- dbFetch(res, n=-1)
     dbClearResult(res)
     dbDisconnect(con)
   }
@@ -299,7 +299,7 @@ for(ith_table in 1:n_tables){
     drv       <- dbDriver("MySQL")
     con<-carboutil::get_conn(group="NabelGsn")
     res       <- dbSendQuery(con, query_str)
-    data      <- fetch(res, n=-1)
+    data      <- dbFetch(res, n=-1)
     dbClearResult(res)
     dbDisconnect(con)
     

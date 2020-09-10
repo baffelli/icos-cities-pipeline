@@ -42,7 +42,7 @@ query_str       <- paste("SELECT * FROM Deployment WHERE LocationName NOT IN ('D
 drv             <- dbDriver("MySQL")
 con <-carboutil::get_conn()
 res             <- dbSendQuery(con, query_str)
-tbl_deployment  <- fetch(res, n=-1)
+tbl_deployment  <- dbFetch(res, n=-1)
 dbClearResult(res)
 dbDisconnect(con)
 
@@ -58,7 +58,7 @@ query_str       <- paste("SELECT * FROM Location;",sep="")
 drv             <- dbDriver("MySQL")
 con <-carboutil::get_conn()
 res             <- dbSendQuery(con, query_str)
-tbl_location    <- fetch(res, n=-1)
+tbl_location    <- dbFetch(res, n=-1)
 dbClearResult(res)
 dbDisconnect(con)
 
@@ -139,7 +139,7 @@ for(ith_row in 1:dim(statistics)[1]){
   drv             <- dbDriver("MySQL")
   con <-carboutil::get_conn()
   res             <- dbSendQuery(con, query_str)
-  tbl_deployment  <- fetch(res, n=-1)
+  tbl_deployment  <- dbFetch(res, n=-1)
   dbClearResult(res)
   dbDisconnect(con)
   
@@ -151,7 +151,7 @@ for(ith_row in 1:dim(statistics)[1]){
   drv             <- dbDriver("MySQL")
   con <-carboutil::get_conn()
   res             <- dbSendQuery(con, query_str)
-  tbl_deployment  <- fetch(res, n=-1)
+  tbl_deployment  <- dbFetch(res, n=-1)
   dbClearResult(res)
   dbDisconnect(con)
 }

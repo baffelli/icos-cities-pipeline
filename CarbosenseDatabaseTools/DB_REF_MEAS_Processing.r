@@ -167,7 +167,7 @@ for(ith_db_table in 1:n_db_tables){
     drv             <- dbDriver("MySQL")
     con<-carboutil::get_conn(group=DB_group)
     res             <- dbSendQuery(con, query_str)
-    MIN_TIMESTAMP   <- fetch(res, n=-1)
+    MIN_TIMESTAMP   <- dbFetch(res, n=-1)
     dbClearResult(res)
     dbDisconnect(con)
     
@@ -229,7 +229,7 @@ for(ith_db_table in 1:n_db_tables){
     drv   <- dbDriver("MySQL")
     con<-carboutil::get_conn(group=DB_group)
     res   <- dbSendQuery(con, query_str)
-    data  <- fetch(res, n=-1)
+    data  <- dbFetch(res, n=-1)
     dbClearResult(res)
     dbDisconnect(con)
     

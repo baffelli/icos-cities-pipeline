@@ -100,7 +100,7 @@ query_str       <- paste("SELECT SensorUnit_ID FROM ",ProcMeasDBTableName,";",se
 drv             <- dbDriver("MySQL")
 con <-carboutil::get_conn()
 res             <- dbSendQuery(con, query_str)
-tbl_CO2_SU      <- fetch(res, n=-1)
+tbl_CO2_SU      <- dbFetch(res, n=-1)
 dbClearResult(res)
 dbDisconnect(con)
 
@@ -110,7 +110,7 @@ query_str       <- paste("SELECT * FROM Location;",sep="")
 drv             <- dbDriver("MySQL")
 con <-carboutil::get_conn()
 res             <- dbSendQuery(con, query_str)
-tbl_location    <- fetch(res, n=-1)
+tbl_location    <- dbFetch(res, n=-1)
 dbClearResult(res)
 dbDisconnect(con)
 
@@ -122,7 +122,7 @@ query_str       <- paste(query_str, "AND SensorUnit_ID BETWEEN 1010 AND 1334;",s
 drv             <- dbDriver("MySQL")
 con <-carboutil::get_conn()
 res             <- dbSendQuery(con, query_str)
-tbl_depl        <- fetch(res, n=-1)
+tbl_depl        <- dbFetch(res, n=-1)
 dbClearResult(res)
 dbDisconnect(con)
 
@@ -245,7 +245,7 @@ if(F){
       drv             <- dbDriver("MySQL")
       con <-carboutil::get_conn()
       res             <- dbSendQuery(con, query_str)
-      tbl_CO2         <- fetch(res, n=-1)
+      tbl_CO2         <- dbFetch(res, n=-1)
       dbClearResult(res)
       dbDisconnect(con)
       
@@ -373,7 +373,7 @@ if(T){
     drv             <- dbDriver("MySQL")
     con <-carboutil::get_conn()
     res             <- dbSendQuery(con, query_str)
-    tbl_CO2         <- fetch(res, n=-1)
+    tbl_CO2         <- dbFetch(res, n=-1)
     dbClearResult(res)
     dbDisconnect(con)
     
@@ -465,7 +465,7 @@ if(T & args[1] %in% c(2,3)){
   drv             <- dbDriver("MySQL")
   con <-carboutil::get_conn()
   res             <- dbSendQuery(con, query_str)
-  data_DUE        <- fetch(res, n=-1)
+  data_DUE        <- dbFetch(res, n=-1)
   dbClearResult(res)
   dbDisconnect(con)
   
@@ -485,7 +485,7 @@ if(T & args[1] %in% c(2,3)){
   drv             <- dbDriver("MySQL")
   con <-carboutil::get_conn()
   res             <- dbSendQuery(con, query_str)
-  data_RIG        <- fetch(res, n=-1)
+  data_RIG        <- dbFetch(res, n=-1)
   dbClearResult(res)
   dbDisconnect(con)
   
@@ -505,7 +505,7 @@ if(T & args[1] %in% c(2,3)){
   drv             <- dbDriver("MySQL")
   con <-carboutil::get_conn()
   res             <- dbSendQuery(con, query_str)
-  data_PAY        <- fetch(res, n=-1)
+  data_PAY        <- dbFetch(res, n=-1)
   dbClearResult(res)
   dbDisconnect(con)
   
@@ -525,7 +525,7 @@ if(T & args[1] %in% c(2,3)){
   drv             <- dbDriver("MySQL")
   con <-carboutil::get_conn()
   res             <- dbSendQuery(con, query_str)
-  data_HAE        <- fetch(res, n=-1)
+  data_HAE        <- dbFetch(res, n=-1)
   dbClearResult(res)
   dbDisconnect(con)
   
@@ -543,7 +543,7 @@ if(T & args[1] %in% c(2,3)){
   drv             <- dbDriver("MySQL")
   con <-carboutil::get_conn()
   res             <- dbSendQuery(con, query_str)
-  data_LAEG       <- fetch(res, n=-1)
+  data_LAEG       <- dbFetch(res, n=-1)
   dbClearResult(res)
   dbDisconnect(con)
   
@@ -561,7 +561,7 @@ if(T & args[1] %in% c(2,3)){
   drv             <- dbDriver("MySQL")
   con <-carboutil::get_conn()
   res             <- dbSendQuery(con, query_str)
-  data_GIMM       <- fetch(res, n=-1)
+  data_GIMM       <- dbFetch(res, n=-1)
   dbClearResult(res)
   dbDisconnect(con)
   
@@ -579,7 +579,7 @@ if(T & args[1] %in% c(2,3)){
   drv             <- dbDriver("MySQL")
   con <-carboutil::get_conn()
   res             <- dbSendQuery(con, query_str)
-  data_ZUE        <- fetch(res, n=-1)
+  data_ZUE        <- dbFetch(res, n=-1)
   dbClearResult(res)
   dbDisconnect(con)
   
@@ -597,7 +597,7 @@ if(T & args[1] %in% c(2,3)){
   drv             <- dbDriver("MySQL")
   con <-carboutil::get_conn()
   res             <- dbSendQuery(con, query_str)
-  data_MAGN       <- fetch(res, n=-1)
+  data_MAGN       <- dbFetch(res, n=-1)
   dbClearResult(res)
   dbDisconnect(con)
   
@@ -615,7 +615,7 @@ if(T & args[1] %in% c(2,3)){
   drv             <- dbDriver("MySQL")
   con <-carboutil::get_conn()
   res             <- dbSendQuery(con, query_str)
-  data_SSAL       <- fetch(res, n=-1)
+  data_SSAL       <- dbFetch(res, n=-1)
   dbClearResult(res)
   dbDisconnect(con)
   
@@ -648,7 +648,7 @@ if(T & args[1] %in% c(2,3)){
   drv             <- dbDriver("MySQL")
   con <-carboutil::get_conn()
   res             <- dbSendQuery(con, query_str)
-  SU_LOC          <- fetch(res, n=-1)
+  SU_LOC          <- dbFetch(res, n=-1)
   dbClearResult(res)
   dbDisconnect(con)
   
@@ -686,7 +686,7 @@ if(T & args[1] %in% c(2,3)){
     drv             <- dbDriver("MySQL")
     con <-carboutil::get_conn()
     res             <- dbSendQuery(con, query_str)
-    data_SU_LOC     <- fetch(res, n=-1)
+    data_SU_LOC     <- dbFetch(res, n=-1)
     dbClearResult(res)
     dbDisconnect(con)
     

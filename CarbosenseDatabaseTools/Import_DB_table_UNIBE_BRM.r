@@ -43,7 +43,7 @@ for(ith_measurement_height in 1:length(measurement_heights)){
   drv             <- dbDriver("MySQL")
   con             <- carboutil::get_conn(group=DB_group_in)
   res             <- dbSendQuery(con, query_str)
-  tmp             <- fetch(res, n=-1)
+  tmp             <- dbFetch(res, n=-1)
   dbClearResult(res)
   dbDisconnect(con)
   

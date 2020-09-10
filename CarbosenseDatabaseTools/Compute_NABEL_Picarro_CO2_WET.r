@@ -71,7 +71,7 @@ if(T){
     drv          <- dbDriver("MySQL")
     con<-carboutil::get_conn(group="CarboSense_MySQL")
     res          <- dbSendQuery(con, query_str)
-    data_H2O     <- fetch(res, n=-1)
+    data_H2O     <- dbFetch(res, n=-1)
     dbClearResult(res)
     dbDisconnect(con)
     
@@ -103,7 +103,7 @@ if(T){
     drv       <- dbDriver("MySQL")
     con<-carboutil::get_conn(group="CarboSense_MySQL")
     res       <- dbSendQuery(con, query_str)
-    tmp       <- fetch(res, n=-1)
+    tmp       <- dbFetch(res, n=-1)
     dbClearResult(res)
     dbDisconnect(con)
     

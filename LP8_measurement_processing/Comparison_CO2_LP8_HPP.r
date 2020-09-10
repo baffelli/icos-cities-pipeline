@@ -104,7 +104,7 @@ query_str         <- paste("SELECT * FROM Deployment WHERE SensorUnit_ID BETWEEN
 drv               <- dbDriver("MySQL")
 con <-carboutil::get_conn()
 res               <- dbSendQuery(con, query_str)
-tbl_depl          <- fetch(res, n=-1)
+tbl_depl          <- dbFetch(res, n=-1)
 dbClearResult(res)
 dbDisconnect(con)
 
@@ -137,7 +137,7 @@ for(ith_depl in 1:dim(tbl_depl)[1]){
   drv               <- dbDriver("MySQL")
   con <-carboutil::get_conn()
   res               <- dbSendQuery(con, query_str)
-  tbl_HPP           <- fetch(res, n=-1)
+  tbl_HPP           <- dbFetch(res, n=-1)
   dbClearResult(res)
   dbDisconnect(con)
   
@@ -152,7 +152,7 @@ for(ith_depl in 1:dim(tbl_depl)[1]){
   drv               <- dbDriver("MySQL")
   con <-carboutil::get_conn()
   res               <- dbSendQuery(con, query_str)
-  tbl_pressure      <- fetch(res, n=-1)
+  tbl_pressure      <- dbFetch(res, n=-1)
   dbClearResult(res)
   dbDisconnect(con)
   
@@ -160,7 +160,7 @@ for(ith_depl in 1:dim(tbl_depl)[1]){
   drv               <- dbDriver("MySQL")
   con <-carboutil::get_conn()
   res               <- dbSendQuery(con, query_str)
-  tbl_pressure_par  <- fetch(res, n=-1)
+  tbl_pressure_par  <- dbFetch(res, n=-1)
   dbClearResult(res)
   dbDisconnect(con)
   
@@ -296,7 +296,7 @@ for(ith_depl in 1:dim(tbl_depl)[1]){
   drv               <- dbDriver("MySQL")
   con <-carboutil::get_conn()
   res               <- dbSendQuery(con, query_str)
-  tbl_CO2_SU        <- fetch(res, n=-1)
+  tbl_CO2_SU        <- dbFetch(res, n=-1)
   dbClearResult(res)
   dbDisconnect(con)
   
@@ -320,7 +320,7 @@ for(ith_depl in 1:dim(tbl_depl)[1]){
     drv               <- dbDriver("MySQL")
     con <-carboutil::get_conn()
     res               <- dbSendQuery(con, query_str)
-    tbl_CO2           <- fetch(res, n=-1)
+    tbl_CO2           <- dbFetch(res, n=-1)
     dbClearResult(res)
     dbDisconnect(con)
     
@@ -338,7 +338,7 @@ for(ith_depl in 1:dim(tbl_depl)[1]){
     drv               <- dbDriver("MySQL")
     con <-carboutil::get_conn()
     res               <- dbSendQuery(con, query_str)
-    tbl_HPP           <- fetch(res, n=-1)
+    tbl_HPP           <- dbFetch(res, n=-1)
     dbClearResult(res)
     dbDisconnect(con)
     

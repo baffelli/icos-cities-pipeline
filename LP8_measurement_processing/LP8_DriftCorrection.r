@@ -205,7 +205,7 @@ if(COMP_DUE){
 drv             <- dbDriver("MySQL")
 con<-carboutil::get_conn(group="CarboSense_MySQL")
 res             <- dbSendQuery(con, query_str)
-tbl_deployment  <- fetch(res, n=-1)
+tbl_deployment  <- dbFetch(res, n=-1)
 dbClearResult(res)
 dbDisconnect(con)
 
@@ -241,7 +241,7 @@ query_str        <- paste("SELECT * FROM Location WHERE LocationName IN (",tmp,"
 drv              <- dbDriver("MySQL")
 con<-carboutil::get_conn(group="CarboSense_MySQL")
 res              <- dbSendQuery(con, query_str)
-tbl_location     <- fetch(res, n=-1)
+tbl_location     <- dbFetch(res, n=-1)
 dbClearResult(res)
 dbDisconnect(con)
 
@@ -251,7 +251,7 @@ query_str        <- paste("SELECT * FROM Location WHERE Network = 'METEOSWISS';"
 drv              <- dbDriver("MySQL")
 con<-carboutil::get_conn(group="CarboSense_MySQL")
 res              <- dbSendQuery(con, query_str)
-tbl_location_MCH <- fetch(res, n=-1)
+tbl_location_MCH <- dbFetch(res, n=-1)
 dbClearResult(res)
 dbDisconnect(con)
 
@@ -270,7 +270,7 @@ query_str <- paste("SELECT DISTINCT LocationName FROM METEOSWISS_Measurements WH
 drv       <- dbDriver("MySQL")
 con<-carboutil::get_conn(group="CarboSense_MySQL")
 res       <- dbSendQuery(con, query_str)
-MCH_SITES <- fetch(res, n=-1)
+MCH_SITES <- dbFetch(res, n=-1)
 dbClearResult(res)
 dbDisconnect(con)
 
@@ -284,7 +284,7 @@ for(MCH_SITE in MCH_SITES){
   drv       <- dbDriver("MySQL")
   con<-carboutil::get_conn(group="CarboSense_MySQL")
   res       <- dbSendQuery(con, query_str)
-  tmp       <- fetch(res, n=-1)
+  tmp       <- dbFetch(res, n=-1)
   dbClearResult(res)
   dbDisconnect(con)
   
@@ -391,7 +391,7 @@ query_str <- paste("SELECT timestamp,CO2_DRY_CAL,CO2_DRY_F,H2O,H2O_F FROM NABEL_
 drv       <- dbDriver("MySQL")
 con<-carboutil::get_conn(group="CarboSense_MySQL")
 res       <- dbSendQuery(con, query_str)
-data      <- fetch(res, n=-1)
+data      <- dbFetch(res, n=-1)
 dbClearResult(res)
 dbDisconnect(con)
 
@@ -413,7 +413,7 @@ query_str <- paste("SELECT timestamp,CO2_WET_COMP FROM NABEL_PAY WHERE CO2_WET_C
 drv       <- dbDriver("MySQL")
 con<-carboutil::get_conn(group="CarboSense_MySQL")
 res       <- dbSendQuery(con, query_str)
-tmp       <- fetch(res, n=-1)
+tmp       <- dbFetch(res, n=-1)
 dbClearResult(res)
 dbDisconnect(con)
 
@@ -430,7 +430,7 @@ query_str <- paste("SELECT timestamp,CO2_WET_COMP FROM NABEL_RIG WHERE CO2_WET_C
 drv       <- dbDriver("MySQL")
 con<-carboutil::get_conn(group="CarboSense_MySQL")
 res       <- dbSendQuery(con, query_str)
-tmp       <- fetch(res, n=-1)
+tmp       <- dbFetch(res, n=-1)
 dbClearResult(res)
 dbDisconnect(con)
 
@@ -447,7 +447,7 @@ query_str <- paste("SELECT timestamp,CO2_WET_COMP FROM NABEL_HAE WHERE CO2_WET_C
 drv       <- dbDriver("MySQL")
 con<-carboutil::get_conn(group="CarboSense_MySQL")
 res       <- dbSendQuery(con, query_str)
-tmp       <- fetch(res, n=-1)
+tmp       <- dbFetch(res, n=-1)
 dbClearResult(res)
 dbDisconnect(con)
 
@@ -464,7 +464,7 @@ query_str <- paste("SELECT timestamp,CO2,CO2_F FROM EMPA_LAEG WHERE CO2 != -999 
 drv       <- dbDriver("MySQL")
 con<-carboutil::get_conn(group="CarboSense_MySQL")
 res       <- dbSendQuery(con, query_str)
-tmp       <- fetch(res, n=-1)
+tmp       <- dbFetch(res, n=-1)
 dbClearResult(res)
 dbDisconnect(con)
 
@@ -478,7 +478,7 @@ query_str <- paste("SELECT timestamp,CO2,CO2_F FROM UNIBE_GIMM WHERE CO2 != -999
 drv       <- dbDriver("MySQL")
 con<-carboutil::get_conn(group="CarboSense_MySQL")
 res       <- dbSendQuery(con, query_str)
-tmp       <- fetch(res, n=-1)
+tmp       <- dbFetch(res, n=-1)
 dbClearResult(res)
 dbDisconnect(con)
 
@@ -492,7 +492,7 @@ query_str <- paste("SELECT timestamp,CO2,CO2_F FROM UNIBE_BRM WHERE CO2 != -999 
 drv       <- dbDriver("MySQL")
 con<-carboutil::get_conn(group="CarboSense_MySQL")
 res       <- dbSendQuery(con, query_str)
-tmp       <- fetch(res, n=-1)
+tmp       <- dbFetch(res, n=-1)
 dbClearResult(res)
 dbDisconnect(con)
 
@@ -582,7 +582,7 @@ query_str <- paste("SELECT SensorUnit_ID, LocationName FROM Deployment WHERE Sen
 drv       <- dbDriver("MySQL")
 con<-carboutil::get_conn(group="CarboSense_MySQL")
 res       <- dbSendQuery(con, query_str)
-HPP_SU_LOC<- fetch(res, n=-1)
+HPP_SU_LOC<- dbFetch(res, n=-1)
 dbClearResult(res)
 dbDisconnect(con)
 
@@ -597,7 +597,7 @@ for(ith_HPP_SU_LOC in 1:dim(HPP_SU_LOC)[1]){
   drv       <- dbDriver("MySQL")
   con<-carboutil::get_conn(group="CarboSense_MySQL")
   res       <- dbSendQuery(con, query_str)
-  tmp       <- fetch(res, n=-1)
+  tmp       <- dbFetch(res, n=-1)
   dbClearResult(res)
   dbDisconnect(con)
   
@@ -1148,7 +1148,7 @@ if(T){
         drv       <- dbDriver("MySQL")
         con<-carboutil::get_conn(group="CarboSense_MySQL")
         res       <- dbSendQuery(con, query_str)
-        data_SU   <- fetch(res, n=-1)
+        data_SU   <- dbFetch(res, n=-1)
         dbClearResult(res)
         dbDisconnect(con)
         

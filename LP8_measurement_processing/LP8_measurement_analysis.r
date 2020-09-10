@@ -117,7 +117,7 @@ if(!COMP_DUE){
 drv             <- dbDriver("MySQL")
 con<-carboutil::get_conn(group="CarboSense_MySQL")
 res             <- dbSendQuery(con, query_str)
-tbl_deployment  <- fetch(res, n=-1)
+tbl_deployment  <- dbFetch(res, n=-1)
 dbClearResult(res)
 dbDisconnect(con)
 
@@ -189,7 +189,7 @@ for(ith_depl in (1-n_ref_sites):dim(tbl_deployment)[1]){
     drv       <- dbDriver("MySQL")
     con<-carboutil::get_conn(group="CarboSense_MySQL")
     res       <- dbSendQuery(con, query_str)
-    data      <- fetch(res, n=-1)
+    data      <- dbFetch(res, n=-1)
     dbClearResult(res)
     dbDisconnect(con)
     
@@ -220,7 +220,7 @@ for(ith_depl in (1-n_ref_sites):dim(tbl_deployment)[1]){
       drv       <- dbDriver("MySQL")
       con<-carboutil::get_conn(group="CarboSense_MySQL")
       res       <- dbSendQuery(con, query_str)
-      data      <- fetch(res, n=-1)
+      data      <- dbFetch(res, n=-1)
       dbClearResult(res)
       dbDisconnect(con)
       
@@ -237,7 +237,7 @@ for(ith_depl in (1-n_ref_sites):dim(tbl_deployment)[1]){
       drv       <- dbDriver("MySQL")
       con<-carboutil::get_conn(group="CarboSense_MySQL")
       res       <- dbSendQuery(con, query_str)
-      data      <- fetch(res, n=-1)
+      data      <- dbFetch(res, n=-1)
       dbClearResult(res)
       dbDisconnect(con)
 
@@ -251,7 +251,7 @@ for(ith_depl in (1-n_ref_sites):dim(tbl_deployment)[1]){
     #   drv       <- dbDriver("MySQL")
     #   con<-carboutil::get_conn(group="CarboSense_MySQL")
     #   res       <- dbSendQuery(con, query_str)
-    #   data      <- fetch(res, n=-1)
+    #   data      <- dbFetch(res, n=-1)
     #   dbClearResult(res)
     #   dbDisconnect(con)
     #   
@@ -268,7 +268,7 @@ for(ith_depl in (1-n_ref_sites):dim(tbl_deployment)[1]){
     #   drv       <- dbDriver("MySQL")
     #   con<-carboutil::get_conn(group="CarboSense_MySQL")
     #   res       <- dbSendQuery(con, query_str)
-    #   data      <- fetch(res, n=-1)
+    #   data      <- dbFetch(res, n=-1)
     #   dbClearResult(res)
     #   dbDisconnect(con)
     # }

@@ -54,7 +54,7 @@ query_str       <- paste("SELECT DISTINCT SensorUnit_ID FROM ",ProcMeasDBTableNa
 drv             <- dbDriver("MySQL")
 con <-carboutil::get_conn()
 res             <- dbSendQuery(con, query_str)
-tbl_CO2_SU      <- fetch(res, n=-1)
+tbl_CO2_SU      <- dbFetch(res, n=-1)
 dbClearResult(res)
 dbDisconnect(con)
 
@@ -64,7 +64,7 @@ query_str       <- paste("SELECT * FROM Location;",sep="")
 drv             <- dbDriver("MySQL")
 con <-carboutil::get_conn()
 res             <- dbSendQuery(con, query_str)
-tbl_location    <- fetch(res, n=-1)
+tbl_location    <- dbFetch(res, n=-1)
 dbClearResult(res)
 dbDisconnect(con)
 
@@ -74,7 +74,7 @@ query_str       <- paste("SELECT * FROM Deployment WHERE SensorUnit_ID BETWEEN 4
 drv             <- dbDriver("MySQL")
 con <-carboutil::get_conn()
 res             <- dbSendQuery(con, query_str)
-tbl_deployment  <- fetch(res, n=-1)
+tbl_deployment  <- dbFetch(res, n=-1)
 dbClearResult(res)
 dbDisconnect(con)
 
@@ -132,7 +132,7 @@ if(T){
     drv             <- dbDriver("MySQL")
     con <-carboutil::get_conn()
     res             <- dbSendQuery(con, query_str)
-    tbl_CO2         <- fetch(res, n=-1)
+    tbl_CO2         <- dbFetch(res, n=-1)
     dbClearResult(res)
     dbDisconnect(con)
     
@@ -277,7 +277,7 @@ for(ith_depl in 1:dim(tbl_deployment)[1]){
   drv             <- dbDriver("MySQL")
   con <-carboutil::get_conn()
   res             <- dbSendQuery(con, query_str)
-  data            <- fetch(res, n=-1)
+  data            <- dbFetch(res, n=-1)
   dbClearResult(res)
   dbDisconnect(con)
   
@@ -294,7 +294,7 @@ for(ith_depl in 1:dim(tbl_deployment)[1]){
   drv             <- dbDriver("MySQL")
   con <-carboutil::get_conn()
   res             <- dbSendQuery(con, query_str)
-  tbl_pressure    <- fetch(res, n=-1)
+  tbl_pressure    <- dbFetch(res, n=-1)
   dbClearResult(res)
   dbDisconnect(con)
   
@@ -302,7 +302,7 @@ for(ith_depl in 1:dim(tbl_deployment)[1]){
   drv              <- dbDriver("MySQL")
 con <-carboutil::get_conn()
   res              <- dbSendQuery(con, query_str)
-  tbl_pressure_INT <- fetch(res, n=-1)
+  tbl_pressure_INT <- dbFetch(res, n=-1)
   dbClearResult(res)
   dbDisconnect(con)
   

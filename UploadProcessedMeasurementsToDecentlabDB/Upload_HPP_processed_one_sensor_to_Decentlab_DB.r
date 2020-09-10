@@ -89,7 +89,7 @@ if(!COMPLETE_UPLOAD){
 drv             <- dbDriver("MySQL")
 con <-carboutil::get_conn()
 res             <- dbSendQuery(con, query_str)
-tbl_deployment  <- fetch(res, n=-1)
+tbl_deployment  <- dbFetch(res, n=-1)
 dbClearResult(res)
 dbDisconnect(con)
 
@@ -112,7 +112,7 @@ if(!COMPLETE_UPLOAD){
 drv             <- dbDriver("MySQL")
 con <-carboutil::get_conn()
 res             <- dbSendQuery(con, query_str)
-tbl_SEP         <- fetch(res, n=-1)
+tbl_SEP         <- dbFetch(res, n=-1)
 dbClearResult(res)
 dbDisconnect(con)
 
@@ -150,7 +150,7 @@ if(dim(tbl_deployment)[1]>0){
     drv             <- dbDriver("MySQL")
     con <-carboutil::get_conn()
     res             <- dbSendQuery(con, query_str)
-    tbl_HPP_data    <- fetch(res, n=-1)
+    tbl_HPP_data    <- dbFetch(res, n=-1)
     dbClearResult(res)
     dbDisconnect(con)
     

@@ -36,7 +36,7 @@ query_str         <- paste("SELECT * FROM Deployment WHERE SensorUnit_ID BETWEEN
 drv               <- dbDriver("MySQL")
 con <-carboutil::get_conn()
 res               <- dbSendQuery(con, query_str)
-tbl_depl          <- fetch(res, n=-1)
+tbl_depl          <- dbFetch(res, n=-1)
 dbClearResult(res)
 dbDisconnect(con)
 
@@ -73,7 +73,7 @@ for(ith_depl in 1:dim(tbl_depl)[1]){
   drv               <- dbDriver("MySQL")
   con <-carboutil::get_conn()
   res               <- dbSendQuery(con, query_str)
-  tbl_HPP           <- fetch(res, n=-1)
+  tbl_HPP           <- dbFetch(res, n=-1)
   dbClearResult(res)
   dbDisconnect(con)
   
@@ -94,7 +94,7 @@ for(ith_depl in 1:dim(tbl_depl)[1]){
       drv               <- dbDriver("MySQL")
       con <-carboutil::get_conn()
       res               <- dbSendQuery(con, query_str)
-      tbl_REF           <- fetch(res, n=-1)
+      tbl_REF           <- dbFetch(res, n=-1)
       dbClearResult(res)
       dbDisconnect(con)
       
@@ -108,7 +108,7 @@ for(ith_depl in 1:dim(tbl_depl)[1]){
       drv               <- dbDriver("MySQL")
       con <-carboutil::get_conn()
       res               <- dbSendQuery(con, query_str)
-      tbl_REF           <- fetch(res, n=-1)
+      tbl_REF           <- dbFetch(res, n=-1)
       dbClearResult(res)
       dbDisconnect(con)
       
@@ -120,7 +120,7 @@ for(ith_depl in 1:dim(tbl_depl)[1]){
       drv               <- dbDriver("MySQL")
       con <-carboutil::get_conn()
       res               <- dbSendQuery(con, query_str)
-      tbl_REF           <- fetch(res, n=-1)
+      tbl_REF           <- dbFetch(res, n=-1)
       dbClearResult(res)
       dbDisconnect(con)
       

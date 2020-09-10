@@ -67,7 +67,7 @@ query_str       <- paste("SELECT * FROM Location;",sep="")
 drv             <- dbDriver("MySQL")
 con <-carboutil::get_conn()
 res             <- dbSendQuery(con, query_str)
-tbl_Location    <- fetch(res, n=-1)
+tbl_Location    <- dbFetch(res, n=-1)
 dbClearResult(res)
 dbDisconnect(con)
 
@@ -77,7 +77,7 @@ query_str       <- paste("SELECT * FROM Deployment WHERE SensorUnit_ID > 1000 OR
 drv             <- dbDriver("MySQL")
 con <-carboutil::get_conn()
 res             <- dbSendQuery(con, query_str)
-tbl_Deployment  <- fetch(res, n=-1)
+tbl_Deployment  <- dbFetch(res, n=-1)
 dbClearResult(res)
 dbDisconnect(con)
 
@@ -145,7 +145,7 @@ while(timestamp_now<timestamp_end){
     drv             <- dbDriver("MySQL")
     con <-carboutil::get_conn()
     res             <- dbSendQuery(con, query_str)
-    tbl_MCH_P       <- fetch(res, n=-1)
+    tbl_MCH_P       <- dbFetch(res, n=-1)
     dbClearResult(res)
     dbDisconnect(con)
     

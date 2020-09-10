@@ -37,7 +37,7 @@ query_str       <- paste("SELECT * FROM Deployment WHERE Date_UTC_from >= '",map
 drv             <- dbDriver("MySQL")
 con<-carboutil::get_conn(group="CarboSense_MySQL", host='du-gsn1')
 res             <- dbSendQuery(con, query_str)
-tbl_deployment  <- fetch(res, n=-1)
+tbl_deployment  <- dbFetch(res, n=-1)
 dbClearResult(res)
 dbDisconnect(con)
 
@@ -62,7 +62,7 @@ query_str       <- paste("SELECT * FROM Location WHERE LocationName IN (",tmp,")
 drv             <- dbDriver("MySQL")
 con<-carboutil::get_conn(group="CarboSense_MySQL",  host='du-gsn1')
 res             <- dbSendQuery(con, query_str)
-tbl_location    <- fetch(res, n=-1)
+tbl_location    <- dbFetch(res, n=-1)
 dbClearResult(res)
 dbDisconnect(con)
 
