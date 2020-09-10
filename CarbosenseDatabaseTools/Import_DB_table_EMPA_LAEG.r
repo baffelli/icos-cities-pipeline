@@ -11,15 +11,29 @@
 rm(list=ls(all=TRUE))
 gc()
 
-## ----------------------------------------------------------------------------------------------------------------------
+### ----------------------------------------------------------------------------------------------------------------------
 
 ## libraries
 library(openair)
 library(DBI)
 require(RMySQL)
 require(chron)
+library(dplyr)
 
 ## ----------------------------------------------------------------------------------------------------------------------
+
+## Command line args
+args <- commandArgs(trailingOnly=TRUE)
+if(is.na(args[1]) | ! args[1] %in% c('T','F')){
+  stop('First command line argument must be either F or T')
+} else{
+  partial <- args[1]
+}
+
+
+## Parameters
+
+backfill_time <- lubridate::days(90)
 
 ## DB information
 
@@ -32,7 +46,7 @@ query_str               <- "SELECT * FROM RefMeasExclusionPeriods WHERE Location
 drv                     <- dbDriver("MySQL")
 con                     <- carboutil::get_conn(group=DB_group_out)
 res                     <- dbSendQuery(con, query_str)
-RefMeasExclusionPeriods <- fetch(res, n=-1)
+RefMeasExclusionPeriods <- dbFetch(res, n=-1)
 dbClearResult(res)
 dbDisconnect(con)
 
@@ -45,16 +59,28 @@ RefMeasExclusionPeriods$timestamp_to   <- as.numeric(difftime(time1=RefMeasExclu
 
 ## ----------------------------------------------------------------------------------------------------------------------
 
+## Get last entry
+con   <- carboutil::get_conn(group=DB_group_out) 
+ld <- collect(tbl(con, sql("SELECT MAX(timestamp) AS last_date FROM EMPA_LAEG")))
+
+
+## Compute backfill timestamp
+bft <- lubridate::as_datetime(ld$last_date) - backfill_time
+bft_s <- ifelse(partial, as.numeric(bft)*1E3, 1483228800000) 
+
+
+
+print(paste("Partial load of data until", bft))
+
+
 ## Read data from Database "empaGSN"
 
-
-query_str       <- paste("SELECT * from laegern_1min_cal WHERE timed >= 1483228800000;",sep="")
-drv             <- dbDriver("MySQL")
 con             <- carboutil::get_conn(group=DB_group_in)
-res             <- dbSendQuery(con, query_str)
-data            <- fetch(res, n=-1)
-dbClearResult(res)
+laeg_q <-     sql(glue::glue_sql("SELECT * from laegern_1min_cal WHERE timed > {bft_s};", .con=con))
+data       <- dbGetQuery(con, laeg_q)
+
 dbDisconnect(con)
+
 
 cn_required     <- c("timed","VALVEPOS","CO2_DRY","CO2_DRY_N","CO2_DRY_SE","CO2_DRY_UNCERT","CO2_DRY_TOT_UNC","CO2_DRY_ERR","CO2_DRY_FLAG","H2O","H2O_N","H2O_SE","H2O_FLAG")
 data            <- data[,which(colnames(data)%in%cn_required)]
@@ -184,51 +210,53 @@ if(n_id_excl>0){
 
 
 ## Write data into Database "CarboSense_MySQL"
-
-query_str       <- paste("DELETE from EMPA_LAEG;",sep="")
-drv             <- dbDriver("MySQL")
+bft_delete <- bft_s / 1e3
+query_str       <- glue::glue_sql("DELETE from EMPA_LAEG WHERE timestamp >= {bft_delete};", .con=con)
 con             <- carboutil::get_conn(group=DB_group_out)
 res             <- dbSendQuery(con, query_str)
 dbClearResult(res)
 dbDisconnect(con)
 
 #
+con <- carboutil::get_conn(group=DB_group_out)
+DBI::dbBegin(con)
+carboutil::write_chuncks(con, data[1:15],  "EMPA_LAEG")
+DBI::dbCommit(con)
+# N_dataPackets2insert <- 1e4
 
-N_dataPackets2insert <- 1e4
-
-for(row_A in seq(1,dim(data)[1],N_dataPackets2insert)){
+# for(row_A in seq(1,dim(data)[1],N_dataPackets2insert)){
   
-  row_B     <- min(c(row_A+N_dataPackets2insert-1,dim(data)[1])) 
+#   row_B     <- min(c(row_A+N_dataPackets2insert-1,dim(data)[1])) 
   
-  id_insert <- (row_A:row_B)
+#   id_insert <- (row_A:row_B)
   
-  query_str <- paste("INSERT INTO EMPA_LAEG (",paste(colnames(data)[1:15],collapse = ","),") ",sep="")
-  query_str <- paste(query_str,"VALUES" )
-  query_str <- paste(query_str,
-                     paste("(",paste(data[id_insert,01],",",
-                                     data[id_insert,02],",",
-                                     data[id_insert,03],",",
-                                     data[id_insert,04],",",
-                                     data[id_insert,05],",",
-                                     data[id_insert,06],",",
-                                     data[id_insert,07],",",
-                                     data[id_insert,08],",",
-                                     data[id_insert,09],",",
-                                     data[id_insert,10],",",
-                                     data[id_insert,11],",",
-                                     data[id_insert,12],",",
-                                     data[id_insert,13],",",
-                                     data[id_insert,14],",",
-                                     data[id_insert,15],
-                                     collapse = "),(",sep=""),")",sep=""),";")
+#   query_str <- paste("INSERT INTO EMPA_LAEG (",paste(colnames(data)[1:15],collapse = ","),") ",sep="")
+#   query_str <- paste(query_str,"VALUES" )
+#   query_str <- paste(query_str,
+#                      paste("(",paste(data[id_insert,01],",",
+#                                      data[id_insert,02],",",
+#                                      data[id_insert,03],",",
+#                                      data[id_insert,04],",",
+#                                      data[id_insert,05],",",
+#                                      data[id_insert,06],",",
+#                                      data[id_insert,07],",",
+#                                      data[id_insert,08],",",
+#                                      data[id_insert,09],",",
+#                                      data[id_insert,10],",",
+#                                      data[id_insert,11],",",
+#                                      data[id_insert,12],",",
+#                                      data[id_insert,13],",",
+#                                      data[id_insert,14],",",
+#                                      data[id_insert,15],
+#                                      collapse = "),(",sep=""),")",sep=""),";")
   
   
-  drv             <- dbDriver("MySQL")
-  con             <- carboutil::get_conn(group=DB_group_out)
-  res             <- dbSendQuery(con, query_str)
-  dbClearResult(res)
-  dbDisconnect(con)
-}
+#   drv             <- dbDriver("MySQL")
+#   con             <- carboutil::get_conn(group=DB_group_out)
+#   res             <- dbSendQuery(con, query_str)
+#   dbClearResult(res)
+#   dbDisconnect(con)
+# }
 
 
 
