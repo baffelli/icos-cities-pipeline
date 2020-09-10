@@ -2,7 +2,7 @@ library(carboutil)
 library(tidyverse)
 library(sf)
 library(RMySQL)
-con <- carboutil::get_conn()
+con <- carboutil::get_conn(group="CarboSense_MySQL")
 
 col2hex <- function(col){
   do.call(rgb, t(as.list((grDevices::col2rgb(col)/255))))

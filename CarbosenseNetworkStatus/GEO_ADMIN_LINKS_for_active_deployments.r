@@ -27,7 +27,7 @@ library(carboutil)
 URL_str_base <- "https://map.geo.admin.ch/?lang=de&topic=ech&bgLayer=ch.swisstopo.pixelkarte-farbe&layers=ch.swisstopo.zeitreihen,ch.bfs.gebaeude_wohnungs_register,ch.bav.haltestellen-oev,ch.swisstopo.swisstlm3d-wanderwege&layers_visibility=false,false,false,false&layers_timestamp=18641231,,,&E=Y_COORD&N=X_COORD&zoom=10&crosshair=marker"
 
 ### ----------------------------------------------------------------------------------------------------------------------------
-con <- carboutil::get_conn()
+con <- carboutil::get_conn(group="CarboSense_MySQL")
 query_str  <- paste("SELECT * FROM Deployment WHERE Date_UTC_to = '2100-01-01 00:00:00' and LocationName NOT IN ('DUE1','DUE2','DUE3','DUE4','MET1');",sep="")
 drv        <- dbDriver("MySQL")
 #con<-carboutil::get_conn(group="CarboSense_MySQL")

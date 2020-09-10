@@ -63,7 +63,7 @@ DL_DB_apiKey_EMPA <- "eyJrIjoiWkJaZjFDTEhUYm5sNmdWUG14a3NpdVcwTmZCaHloZVEiLCJuIj
 ### ----------------------------------------------------------------------------------------------------------------------------
 
 
-con <- carboutil::get_conn()
+con <- carboutil::get_conn(group="CarboSense_MySQL")
 query_str       <- paste("SELECT * FROM Deployment;",sep="")
 drv             <- dbDriver("MySQL")
 #con<-carboutil::get_conn(group="CarboSense_MySQL")
