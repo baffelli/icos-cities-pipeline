@@ -7,7 +7,7 @@ library(lubridate)
 ca <- commandArgs()
 complete_import <- ifelse(is.na(ca[[1]]),ca[[1]],F)
 #Get database connection
-con <- con<-carboutil::get_conn()
+con <- con<-carboutil::get_conn(group="CarboSense_MySQL")
 
 
 data_sources <- "/project/CarboSense/Data/METEO/MCH_DAILY_DATA_DUMP"
@@ -122,10 +122,10 @@ create_temp_table <- function(conn, dst_table='meteoswiss_temp'){
     Sunshine DOUBLE
   );
 "
-  nm <- DBI::dbQuoteIdentifier(con, dst_table)
+  nm <- DBI::dbQuoteIdentifier(conn, dst_table)
   #Copy the Meteoswiss data into the temporary table
-  DBI::dbExecute(conn = con, glue::glue_sql('DROP TABLE IF EXISTS CarboSense.{nm}'))
-  DBI::dbGetQuery(conn = con, glue::glue_sql(temp_q))
+  DBI::dbExecute(conn = conn, glue::glue_sql('DROP TABLE IF EXISTS CarboSense.{nm}'))
+  DBI::dbGetQuery(conn = conn, glue::glue_sql(temp_q))
 }
 
 
