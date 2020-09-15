@@ -7,7 +7,7 @@ library(lubridate)
 ca <- commandArgs()
 complete_import <- ifelse(is.na(ca[[1]]),ca[[1]],F)
 #Get database connection
-con <- con<-carboutil::get_conn(group="CarboSense_MySQL")
+conn<-carboutil::get_conn(group="CarboSense_MySQL")
 
 
 data_sources <- "/project/CarboSense/Data/METEO/MCH_DAILY_DATA_DUMP"
@@ -91,17 +91,25 @@ load_and_copy_meteoswiss <- function(path, format, dst_table, conn){
     mutate_if(
     read_ms_csv(path, old_format = format),
     function(x) is.numeric(x) & !lubridate::is.Date(x),
-    function(x) ifelse(is.na(x), carboutil::carbosense_na, x))
+    function(x) ifelse(is.na(x), carboutil::carbosense_na, x)) %>%
+    mutate(
+      #Align dates
+      Date=Date  - lubridate::seconds(600),
+      timestamp=as.numeric(Date))
   str(data)
-  DBI::dbWriteTable(
-    conn = con,
-    name = dst_table,
-    value = as.data.frame(data),
-    overwrite = 0,
-    append = 1,
-    temporary = FALSE,
-    row.names = 0
-  )
+  carboutil::write_chuncks(
+    conn,
+    as.data.frame(data),
+    dst_table)
+  # carboutil::write_chuncks(
+  #   conn = conn,
+  #   name = dst_table,
+  #   value = as.data.frame(data),
+  #   overwrite = FALSE,
+  #   append = TRUE,
+  #   temporary = FALSE,
+  #   row.names = FALSE
+  # )
 }
 
 
@@ -110,7 +118,8 @@ create_temp_table <- function(conn, dst_table='meteoswiss_temp'){
   temp_q <-
     "
   CREATE TABLE CarboSense.{nm}(
-    LocationName VARCHAR(8),
+    LocationName VARCHAR(6),
+    timestamp INT(10),
     Date DATETIME,
     Radiance DOUBLE,
     Windspeed DOUBLE,
@@ -119,22 +128,21 @@ create_temp_table <- function(conn, dst_table='meteoswiss_temp'){
     Rain DOUBLE,
     Temperature DOUBLE,
     RH DOUBLE,
-    Sunshine DOUBLE
-  );
+    Sunshine DOUBLE,
+    CONSTRAINT PK_ms_temp PRIMARY KEY (LocationName, timestamp)
+  )
+  CHARACTER SET latin1 COLLATE latin1_swedish_ci;
 "
   nm <- DBI::dbQuoteIdentifier(conn, dst_table)
   #Copy the Meteoswiss data into the temporary table
   DBI::dbExecute(conn = conn, glue::glue_sql('DROP TABLE IF EXISTS CarboSense.{nm}'))
-  DBI::dbGetQuery(conn = conn, glue::glue_sql(temp_q))
+  DBI::dbExecute(conn = conn, glue::glue_sql(temp_q))
 }
 
 
 
 
-#Function to set to NA the data in case it is in the list of eclusion periods
-set_excl <- function(data, excl_data){
-  
-}
+
 
 
 
@@ -146,7 +154,7 @@ SELECT DISTINCT
 DATE(FROM_UNIXTIME(timestamp)) AS Date
 FROM METEOSWISS_Measurements
 "
-ms_all_days <- carboutil::get_query_parametrized(con, ms_all_days_query) %>%
+ms_all_days <- carboutil::get_query_parametrized(conn, ms_all_days_query) %>%
   mutate(Date=lubridate::as_date(Date))
 
 #One data delivery covers two days
@@ -156,7 +164,7 @@ format_change_date <- lubridate::date('2020-06-10')
 
 
 #Get the exclusion times
-excl_times <- carboutil::get_query_parametrized(con, "SELECT * FROM MCHMeasExclusionPeriods;")
+excl_times <- carboutil::get_query_parametrized(conn, "SELECT * FROM MCHMeasExclusionPeriods;")
 
  
 #Find all datasets matching pattern of the CSV delivery
@@ -188,11 +196,11 @@ str(paths_df)
 
 
 
-
+#Create the temporary table
 create_temp_table(conn)
 str(paths_df)
-#Load the files into the DB
-map2(paths_df$path, paths_df$old_format, function(x,y) load_and_copy_meteoswiss(x, y, 'meteoswiss_temp', con))
+#Load the files and copy them into the DB
+map2(paths_df$path, paths_df$old_format, function(x,y) load_and_copy_meteoswiss(x, y, 'meteoswiss_temp', conn))
 
 
 
@@ -234,25 +242,16 @@ get_last_nabel <- function(con){
   
 }
 
-copy_nabel_data <- function(con, tmp_table = 'meteoswiss_temp') {
- 
-  last_nabel_stat <- get_last_nabel(con)
+copy_nabel_data <- function(in_con, out_con, tmp_table = 'meteoswiss_temp') {
+  #Get information of the last nabel data
+
+  last_nabel_stat <- get_last_nabel(out_con)
+  print(last_nabel_stat)
   copy_nabel_query <-
   "
-  INSERT INTO {tn}
-  (LocationName,
-  Date,
-  Radiance,
-  Windspeed,
-  Winddirection,
-  Pressure,
-  Rain,
-  Temperature,
-  RH,
-  Sunshine)
-  (
     SELECT
       {ln} AS LocationName,
+      mt.timed/1e3 AS timestamp,
       FROM_UNIXTIME(mt.timed/1e3) AS Date,
       COALESCE(mt.GLOBALRADIATION, -999) AS Radiance,
       COALESCE(mt.WINDSPEED, -999) AS Windspeed,
@@ -263,12 +262,7 @@ copy_nabel_data <- function(con, tmp_table = 'meteoswiss_temp') {
       COALESCE(mt.RELATIVEHUMIDITY, -999) AS RH,
       -999 AS Sunshine
     FROM NabelGsn.{sn} AS mt
-      LEFT JOIN CarboSense.METEOSWISS_Measurements AS mo
-      	ON mo.LocationName = {ln}
-      	#Subtract 600 to align to the CarboSense measurements
-      	and (mt.timed / 1e3 - 600) = mo.timestamp
-    WHERE timed >= ({le} + 1200)*1e3 AND mo.timestamp IS NULL
-  )
+    WHERE timed > ({le} + 1200)*1e3 
 "
   #Iterate over the entries
   #of the nabel measurements 
@@ -279,20 +273,31 @@ copy_nabel_data <- function(con, tmp_table = 'meteoswiss_temp') {
     last_nabel_stat$TS_LAST_ENTRY
   ),
   function(x, y, z)
-    get_query_parametrized(
-      con,
+  {
+    #Copy the data locally
+    temp_data <- get_query_parametrized(
+      in_con,
       copy_nabel_query,
-      tn = DBI::dbQuoteIdentifier(conn = con, tmp_table),
       ln = y,
-      sn = DBI::dbQuoteIdentifier(conn = con, x),
+      sn = DBI::dbQuoteIdentifier(conn = in_con, x),
       le = z
-    ))
+    )
+    #Write it
+    carboutil::write_chuncks(
+    out_con,
+    as.data.frame(temp_data),
+    tmp_table) 
+
+  
+  }
+  )
 }
 
 
-
+nabel_con <- carboutil::get_conn(group='nabelGSN')
+cs_con <- carboutil::get_conn(group='CarboSense_MySQL')
 #Exceute the function to copy the data
-copy_nabel_data(con)
+copy_nabel_data(nabel_con, cs_con)
 
 
 
@@ -304,8 +309,7 @@ INSERT INTO CarboSense.METEOSWISS_Measurements
 (
   SELECT  
   	mt.LocationName,
-  	#Subtract 600 to align NABEL and Meteosuisse timestamp to CarboSense
-  	UNIX_TIMESTAMP(mt.Date) - 600 AS timestamp,
+    mt.timestamp,
   	mt.Radiance,
   	mt.Windspeed,
   	mt.Winddirection,
@@ -318,7 +322,7 @@ INSERT INTO CarboSense.METEOSWISS_Measurements
   	LEFT JOIN CarboSense.METEOSWISS_Measurements AS mo
   	ON mo.LocationName = mt.LocationName
   	#align to the extisting data
-  	and UNIX_TIMESTAMP(mt.Date) - 600 = mo.timestamp
+  	and mt.timestamp = mo.timestamp
   WHERE mt.LocationName  IN
   	(
   		SELECT DISTINCT
@@ -328,6 +332,6 @@ INSERT INTO CarboSense.METEOSWISS_Measurements
   AND mo.timestamp IS NULL
 )
 "
-DBI::dbExecute(con, copy_query)
+DBI::dbExecute(cs_con, copy_query)
 
 
