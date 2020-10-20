@@ -77,16 +77,17 @@ _export:
             +outlier_detection:
                 sh>: Rscript ${base_folder}/LP8_measurement_processing/Empa_OutlierDetection_P.r ${config[0]} ${config[1]}
         
-            #+measurement_analysis:
+            +measurement_analysis:
                 #Only run on Sunday (it takes a long time)
-                # if>: ${moment(session_date).format('dddd')== 'Sunday'}
-                # _do:
-                    
-                #     if>: ${config[1] == 'DUE'}
-                #     _do:
-                #         sh>: Rscript ${base_folder}/LP8_measurement_processing/LP8_measurement_analysis.r ${config[0]} ${config[1]}  
-                #     _else_do:
-                #         sh>: Rscript ${base_folder}/LP8_measurement_processing/LP8_measurement_analysis.r ${config[0]}  
+                if>: ${moment(session_date).format('dddd' )== 'Sunday'}
+                _do:
+                    if>: ${config[1] == 'DUE'}
+                    _do:
+                        sh>: Rscript ${base_folder}/LP8_measurement_processing/LP8_measurement_analysis.r ${config[0]} ${config[1]}  
+                    _else_do:
+                        sh>: Rscript ${base_folder}/LP8_measurement_processing/LP8_measurement_analysis.r ${config[0]}  
+                _else_do:
+                    echo>: "Skipping measurement analysis"
 
             +drift_correction:
                 sh>: Rscript ${base_folder}/LP8_measurement_processing/LP8_DriftCorrection.r  ${config[0]} F
@@ -94,8 +95,9 @@ _export:
             +consistency_check:
                     sh>: Rscript ${base_folder}/LP8_measurement_processing/LP8_ConsistencyCheck.r ${config[0]}
 
+            #Only plot on sunday
             +plot_lp8:
-                if>: ${config[1]  != 'DUE' }
+                if>: ${config[1] != 'DUE' && moment(session_date).format('dddd') == 'Sunday'}
                 _do:
                     +plots:
                         +plot_lp8_ts:
@@ -115,6 +117,8 @@ _export:
 
                         +comparison_lp8_HPP:
                             sh>: Rscript ${base_folder}/LP8_measurement_processing/Comparison_CO2_LP8_HPP.r ${config[0]}
+                _else_do:
+                    echo>: "Skipping plotting. LP8 plotting is only run on sundays"
                 
     #Process the final model
     +final_mode:
@@ -179,3 +183,5 @@ _export:
             _export:
                 lp8_result_folder: /project/CarboSense/Carbosense_Network/LP8_Calibration/LP8_CAL
             sh>: Rscript ${base_folder}/LP8_sensor_calibration/CO2_LP8_SensorCalibration_LINUX_DRY.r ${lp8_result_folder} 0 MEAN
+    _else_do:
+        echo>: "Skipping calibration"
