@@ -170,6 +170,7 @@ if(COMP_DUE==F){
 }
 
 
+
 ### ----------------------------------------------------------------------------------------------------------------------------
 
 ## Decentlab DB information
@@ -189,6 +190,10 @@ SensorUnit_ID_2_proc   <- c(1010:1334)
 
 SensorUnit_ID_2_proc   <- sort(unique(SensorUnit_ID_2_proc))
 n_SensorUnit_ID_2_proc <- length(SensorUnit_ID_2_proc)
+
+
+
+
 
 
 # # -------
@@ -956,29 +961,14 @@ for(ith_SensorUnit_ID_2_proc in 1:n_SensorUnit_ID_2_proc){
       
       id   <- id_insert_from:id_insert_to
       n_id <- length(id)
-      
-      
-      # query_str <- paste("INSERT INTO ",InsertDBTableName," (`LocationName`, `SensorUnit_ID`, `timestamp`, `CO2`,`CO2_L`,`H2O`,`LP8_IR`,`LP8_IR_L`,`LP8_T`,`SHT21_T`,`SHT21_RH`,`FLAG`) VALUES ",sep="")
-      # query_str <- paste(query_str,
-      #                    paste("(",paste("'",sensor_data$LocationName[id_insert[id]],"',",
-      #                                    rep(SensorUnit_ID_2_proc[ith_SensorUnit_ID_2_proc],n_id),",",
-      #                                    sensor_data$timestamp_DB[id_insert[id]],",",
-      #                                    sensor_data$CO2_CAL[id_insert[id]],",",
-      #                                    sensor_data$CO2_CAL_L[id_insert[id]],",",
-      #                                    sensor_data$H2O[id_insert[id]],",",
-      #                                    sensor_data$lp8_ir[id_insert[id]],",",
-      #                                    sensor_data$lp8_ir_l[id_insert[id]],",",
-      #                                    sensor_data$lp8_T[id_insert[id]],",",
-      #                                    sensor_data$sht21_T[id_insert[id]],",",
-      #                                    sensor_data$sht21_RH[id_insert[id]],",",
-      #                                    FLAG[id_insert[id]],
-      #                                    collapse = "),(",sep=""),");",sep="")
-      # )
+    
+
 
       #Create tibbles to insert
-      data2_insert <- dplyr::mutate(tibble::tibble(sensor_data[id_insert[id],]),
+      data2_insert <- dplyr::mutate_if(dplyr::mutate(tibble::tibble(sensor_data[id_insert[id],]),
       SensorUnit_ID=SensorUnit_ID_2_proc[ith_SensorUnit_ID_2_proc],
-      FLAG=FLAG[id_insert[id]])
+      FLAG=FLAG[id_insert[id]]),
+      is.numeric, function(x) dplyr::coalesce(x, -999))
 
       cols2_to_insert <- dplyr::select(data2_insert,
       'LocationName'=LocationName,
@@ -994,17 +984,17 @@ for(ith_SensorUnit_ID_2_proc in 1:n_SensorUnit_ID_2_proc){
       'SHT21_RH'=sht21_RH,
       FLAG
       )
-
-      drv  <- dbDriver("MySQL")
+      #Write data
       con<-carboutil::get_conn()
-      DBI::dbWriteTable(
-      conn=con, 
-      name=InsertDBTableName, 
-      value=as.data.frame(cols2_to_insert),
-      overwrite = 0,
-      append = 1,
-      temporary = FALSE,
-      row.names = 0)
+      carboutil::write_chuncks(con , as.data.frame(cols2_to_insert), InsertDBTableName)
+      # DBI::dbWriteTable(
+      # conn=con, 
+      # name=InsertDBTableName, 
+      # value=as.data.frame(cols2_to_insert),
+      # overwrite = 0,
+      # append = 1,
+      # temporary = FALSE,
+      # row.names = 0)
 
       #res             <- dbSendQuery(con, query_str)
       #dbClearResult(res)
