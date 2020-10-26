@@ -11,6 +11,7 @@
 #
 # -----------------------------------
 
+
 ## clear variables
 rm(list=ls(all=TRUE))
 gc()
@@ -21,17 +22,23 @@ library(DBI)
 require(RMySQL)
 require(chron)
 library(data.table)
-
+library(dplyr)
+library(dbplyr)
 ## source
 source("/project/CarboSense/Software/CarboSenseUtilities/api-v1.3.r")
 source("/project/CarboSense/Software/CarboSenseUtilities/CarboSenseFunctions.r")
 
 ### ----------------------------------------------------------------------------------------------------------------------------
 
+
+#Trick to make things work with timezones
+dbFetch <- function(...) lubridate::with_tz(DBI::dbFetch(...), tz='UTC')
+
+
 ## ARGUMENTS
 
 args = commandArgs(trailingOnly=TRUE)
-
+print(args)
 if(length(args)==1){
   
   PARTIAL_COMPUTATION   <- as.logical(args[1])
@@ -49,7 +56,7 @@ if(length(args)==1){
 }
 
 if(length(args)==2){
-  PARTIAL_COMPUTATION  <- F
+  PARTIAL_COMPUTATION  <- args[1]
   SelectedLocationName <- args[2]
 }
 
@@ -79,6 +86,7 @@ if(is.null(SelectedLocationName)){
   figname_HPP_CALIBRATIONS          <- paste(resultdir,"HPP_CALIBRATIONS.pdf",sep="")
   filename_HPP_DataProcessing_csv   <- paste(resultdir,"HPP_DataProcessing.csv",sep="")
 }else{
+  print(paste("Processing only", SelectedLocationName))
   figname_CYL_PRESSURE              <- paste(resultdir,SelectedLocationName,"_","CYL_PRESSURE.pdf",sep="")
   figname_HPP_CALIBRATIONS_T        <- paste(resultdir,SelectedLocationName,"_","HPP_CALIBRATIONS_T.pdf",sep="")
   figname_HPP_CALIBRATIONS_H2O      <- paste(resultdir,SelectedLocationName,"_","HPP_CALIBRATIONS_H2O.pdf",sep="")
@@ -87,6 +95,8 @@ if(is.null(SelectedLocationName)){
   filename_HPP_DataProcessing_csv   <- paste(resultdir,SelectedLocationName,"_","HPP_DataProcessing.csv",sep="")
 }
 
+
+print(figname_HPP_CALIBRATIONS_T)
 ### ----------------------------------------------------------------------------------------------------------------------------
 
 ## Variables
@@ -119,7 +129,7 @@ n_SensorUnit_ID_2_proc <- length(SensorUnit_ID_2_proc)
 
 query_str       <- paste("SELECT * FROM CalibrationParameters;",sep="")
 drv             <- dbDriver("MySQL")
-con <-carboutil::get_conn()
+con <-carboutil::get_conn(group='CarboSense_MySQL')
 res             <- dbSendQuery(con, query_str)
 tbl_calPar      <- dbFetch(res, n=-1)
 dbClearResult(res)
@@ -135,8 +145,10 @@ if(is.null(SelectedLocationName)){
   query_str <- paste(query_str, "AND SensorUnit_ID BETWEEN 426 AND 445;",sep="")
 }
 
+print(query_str)
+
 drv             <- dbDriver("MySQL")
-con <-carboutil::get_conn()
+con <-carboutil::get_conn(group='CarboSense_MySQL')
 res             <- dbSendQuery(con, query_str)
 tbl_deployment  <- dbFetch(res, n=-1)
 dbClearResult(res)
@@ -167,7 +179,7 @@ tbl_deployment$timestamp_to   <- as.numeric(difftime(time1=strptime(tbl_deployme
 
 query_str       <- paste("SELECT * FROM Sensors WHERE SensorUnit_ID BETWEEN 426 AND 445;",sep="")
 drv             <- dbDriver("MySQL")
-con <-carboutil::get_conn()
+con <-carboutil::get_conn(group='CarboSense_MySQL')
 res             <- dbSendQuery(con, query_str)
 tbl_sensors     <- dbFetch(res, n=-1)
 dbClearResult(res)
@@ -176,11 +188,13 @@ dbDisconnect(con)
 tbl_sensors$Date_UTC_from <- strptime(tbl_sensors$Date_UTC_from,"%Y-%m-%d %H:%M:%S",tz="UTC")
 tbl_sensors$Date_UTC_to   <- strptime(tbl_sensors$Date_UTC_to,  "%Y-%m-%d %H:%M:%S",tz="UTC")
 
+
+print(paste("The sensors to process are", tbl_sensors$SensorUnit_ID))
 # Location
 
 query_str       <- paste("SELECT * FROM Location;",sep="")
 drv             <- dbDriver("MySQL")
-con <-carboutil::get_conn()
+con <-carboutil::get_conn(group='CarboSense_MySQL')
 res             <- dbSendQuery(con, query_str)
 tbl_location    <- dbFetch(res, n=-1)
 dbClearResult(res)
@@ -190,7 +204,7 @@ dbDisconnect(con)
 
 query_str       <- paste("SELECT * FROM SensorExclusionPeriods;",sep="")
 drv             <- dbDriver("MySQL")
-con <-carboutil::get_conn()
+con <-carboutil::get_conn(group='CarboSense_MySQL')
 res             <- dbSendQuery(con, query_str)
 tbl_SEP         <- dbFetch(res, n=-1)
 dbClearResult(res)
@@ -200,51 +214,47 @@ tbl_SEP$Date_UTC_from <- strptime(tbl_SEP$Date_UTC_from,"%Y-%m-%d %H:%M:%S",tz="
 tbl_SEP$Date_UTC_to   <- strptime(tbl_SEP$Date_UTC_to,  "%Y-%m-%d %H:%M:%S",tz="UTC")
 
 ### ----------------------------------------------------------------------------------------------------------------------------
-
 ## Loop over all HPP sensor units
-
 for(ith_SensorUnit_ID_2_proc in 1:n_SensorUnit_ID_2_proc){
   
   # Get HPP sensors of this SensorUnit
   
   id_sensors   <- which(tbl_sensors$SensorUnit_ID == SensorUnit_ID_2_proc[ith_SensorUnit_ID_2_proc] & tbl_sensors$Type == 'HPP')
   n_id_sensors <- length(id_sensors)
+
   
   if(n_id_sensors==0){
     next
   }
   
   # reference gas cylinder information
-  
-  query_str         <- paste("SELECT * FROM RefGasCylinder_Deployment where SensorUnit_ID=",SensorUnit_ID_2_proc[ith_SensorUnit_ID_2_proc],";",sep="")
-  drv               <- dbDriver("MySQL")
-  con <-carboutil::get_conn()
+
+  query_str         <- paste("SELECT * FROM RefGasCylinder_Deployment where SensorUnit_ID=",SensorUnit_ID_2_proc[ith_SensorUnit_ID_2_proc],sep="")
+  con <-carboutil::get_conn(group='CarboSense_MySQL')
   res               <- dbSendQuery(con, query_str)
-  tbl_refGasCylDepl <- dbFetch(res, n=-1)
+  tbl_refGasCylDepl <-  dbFetch(res, n=-1)
   dbClearResult(res)
   dbDisconnect(con)
-  
+
   #
-  
+  print(tbl_refGasCylDepl)
   if(dim(tbl_refGasCylDepl)[1]>=1){
-    
+    print(tbl_refGasCylDepl$Date_UTC_to)
     tbl_refGasCylDepl$Date_UTC_from <- strptime(tbl_refGasCylDepl$Date_UTC_from,"%Y-%m-%d %H:%M:%S",tz="UTC")
     tbl_refGasCylDepl$Date_UTC_to   <- strptime(tbl_refGasCylDepl$Date_UTC_to,  "%Y-%m-%d %H:%M:%S",tz="UTC")
-    
     tbl_refGasCylDepl$CO2           <- NA
     
     for(ith_refGasCylDepl in 1:dim(tbl_refGasCylDepl)[1]){
-      
+      print(strftime(tbl_refGasCylDepl$Date_UTC_to[ith_refGasCylDepl],"%Y-%m-%d %H:%M:%S",tz="UTC"))
       query_str       <- paste("SELECT * FROM RefGasCylinder where CylinderID='",tbl_refGasCylDepl$CylinderID[ith_refGasCylDepl],"' and Date_UTC_from <= '",strftime(tbl_refGasCylDepl$Date_UTC_from[ith_refGasCylDepl],"%Y-%m-%d %H:%M:%S",tz="UTC"),"' and Date_UTC_to >= '",strftime(tbl_refGasCylDepl$Date_UTC_to[ith_refGasCylDepl],"%Y-%m-%d %H:%M:%S",tz="UTC"),"';",sep="")
       drv             <- dbDriver("MySQL")
-      con <-carboutil::get_conn()
+      con <-carboutil::get_conn(group='CarboSense_MySQL')
       res             <- dbSendQuery(con, query_str)
       tbl             <- dbFetch(res, n=-1)
       dbClearResult(res)
       dbDisconnect(con)
-      
       if(dim(tbl)[1]!=1){
-        stop()
+        stop("D")
       }
       
       tbl_refGasCylDepl$CO2[ith_refGasCylDepl] <- tbl$CO2[1]

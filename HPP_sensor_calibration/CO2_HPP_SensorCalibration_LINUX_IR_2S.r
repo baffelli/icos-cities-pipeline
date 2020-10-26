@@ -22,6 +22,7 @@ require(chron)
 library(MASS)
 library(mgcv)
 library(data.table)
+library(dplyr)
 
 ## source
 
@@ -32,6 +33,8 @@ source("/project/CarboSense/Software/CarboSenseUtilities/CarboSenseFunctions.r")
 
 resultdir <- "/project/CarboSense/Carbosense_Network/HPP_Calibration/HPP_CalibrationResults_DEFAULT/"
 
+#Functions
+dbFetch_UTC <- function(...) lubridate::with_tz(dbFetch(...), 'UTC')
 
 
 ## ARGUMENTS
@@ -516,7 +519,7 @@ for(ith_SensorUnit_ID_2_cal in 1:n_SensorUnit_ID_2_cal){
   drv             <- dbDriver("MySQL")
   con <-carboutil::get_conn( group="CarboSense_MySQL")
   res             <- dbSendQuery(con, query_str)
-  tbl_calibration <- dbFetch(res, n=-1)
+  tbl_calibration <- dbFetch_UTC(res, n=-1)
   dbClearResult(res)
   dbDisconnect(con)
   
@@ -524,16 +527,18 @@ for(ith_SensorUnit_ID_2_cal in 1:n_SensorUnit_ID_2_cal){
   tbl_calibration$Date_UTC_to   <- strptime(tbl_calibration$Date_UTC_to,  "%Y-%m-%d %H:%M:%S",tz="UTC")
   
   
+  print(tbl_calibration)
   # reference gas cylinder information
   
   query_str       <- paste("SELECT * FROM RefGasCylinder_Deployment where SensorUnit_ID=",SensorUnit_ID_2_cal[ith_SensorUnit_ID_2_cal],";",sep="")
   drv             <- dbDriver("MySQL")
   con <-carboutil::get_conn( group="CarboSense_MySQL")
   res             <- dbSendQuery(con, query_str)
-  tbl_refGasCylDepl <- dbFetch(res, n=-1)
+  tbl_refGasCylDepl <- dbFetch_UTC(res, n=-1)
   dbClearResult(res)
   dbDisconnect(con)
   
+ 
   #
   
   if(dim(tbl_refGasCylDepl)[1]>=1){
@@ -549,11 +554,14 @@ for(ith_SensorUnit_ID_2_cal in 1:n_SensorUnit_ID_2_cal){
       drv             <- dbDriver("MySQL")
       con <-carboutil::get_conn( group="CarboSense_MySQL")
       res             <- dbSendQuery(con, query_str)
-      tbl             <- dbFetch(res, n=-1)
+      tbl             <- dbFetch_UTC(res, n=-1)
       dbClearResult(res)
       dbDisconnect(con)
       
+    
       if(dim(tbl)[1]!=1){
+        print(query_str)
+        print(tbl)
         stop()
       }
       
@@ -574,7 +582,7 @@ for(ith_SensorUnit_ID_2_cal in 1:n_SensorUnit_ID_2_cal){
   tbl_sensors <- dbFetch(res, n=-1)
   dbClearResult(res)
   dbDisconnect(con)
-  
+  print(tbl_sensors)
   tbl_sensors$Date_UTC_from <- strptime(tbl_sensors$Date_UTC_from,"%Y-%m-%d %H:%M:%S",tz="UTC")
   tbl_sensors$Date_UTC_to   <- strptime(tbl_sensors$Date_UTC_to,  "%Y-%m-%d %H:%M:%S",tz="UTC")
   
@@ -585,7 +593,11 @@ for(ith_SensorUnit_ID_2_cal in 1:n_SensorUnit_ID_2_cal){
   for(ith_sensor in 1:dim(tbl_sensors)[1]){
     
     for(ith_cal in 1:dim(tbl_calibration)[1]){
-      
+
+      print(tbl_calibration[ith_cal,])
+      print(tbl_sensors[ith_sensor,])
+      print(ith_cal)
+      print(ith_sensor)
       if(tbl_calibration$Date_UTC_to[ith_cal]<tbl_sensors$Date_UTC_from[ith_sensor]){
         next
       }
@@ -617,6 +629,28 @@ for(ith_SensorUnit_ID_2_cal in 1:n_SensorUnit_ID_2_cal){
     }
   }
   
+  #Get the info with a single SQL query
+    info_q <- 
+    "
+    SELECT 
+    cal.SensorUnit_ID,
+    Type,
+    Serialnumber,
+    GREATEST(cal.Date_UTC_from, sens.Date_UTC_from) AS Date_UTC_from,
+    LEAST(cal.Date_UTC_from, sens.Date_UTC_from) AS Date_UTC_to,
+    LocationName,
+    DBTableNameRefData,
+    CalMode
+  FROM Sensors AS sens
+    JOIN Calibration AS cal
+    ON  sens.SensorUnit_ID = cal.SensorUnit_ID
+  WHERE sens.SensorUnit_ID={ith_SensorUnit_ID_2_cal} AND Type='HPP' AND CalMode in (1,2,3)
+  AND NOT (cal.Date_UTC_to < sens.Date_UTC_from OR cal.Date_UTC_from > sens.Date_UTC_to)
+  "
+  con <-carboutil::get_conn( group="CarboSense_MySQL")
+  dt <- lubridate::with_tz(dplyr::tbl(con, sql(glue::glue_sql(info_q))) %>% collect(), 'UTC')
+  print(dt)
+  print(sensor_calibration_info)
   #
   
   sensor_calibration_info$timestamp_from <- as.numeric(difftime(time1=sensor_calibration_info$Date_UTC_from,
@@ -658,7 +692,7 @@ for(ith_SensorUnit_ID_2_cal in 1:n_SensorUnit_ID_2_cal){
     drv         <- dbDriver("MySQL")
     con <-carboutil::get_conn( group="CarboSense_MySQL")
     res         <- dbSendQuery(con, query_str)
-    SEP         <- dbFetch(res, n=-1)
+    SEP         <- dbFetch_UTC(res, n=-1)
     dbClearResult(res)
     dbDisconnect(con)
     
@@ -814,7 +848,7 @@ for(ith_SensorUnit_ID_2_cal in 1:n_SensorUnit_ID_2_cal){
       drv       <- dbDriver("MySQL")
       con <-carboutil::get_conn( group="CarboSense_MySQL")
       res       <- dbSendQuery(con, query_str)
-      tmp       <- dbFetch(res, n=-1)
+      tmp       <- dbFetch_UTC(res, n=-1)
       dbClearResult(res)
       dbDisconnect(con)
       
@@ -1101,7 +1135,7 @@ for(ith_SensorUnit_ID_2_cal in 1:n_SensorUnit_ID_2_cal){
           drv             <- dbDriver("MySQL")
           con <-carboutil::get_conn( group="CarboSense_MySQL")
           res             <- dbSendQuery(con, query_str)
-          tbl_calibration <- dbFetch(res, n=-1)
+          tbl_calibration <- dbFetch_UTC(res, n=-1)
           dbClearResult(res)
           dbDisconnect(con)
           
@@ -1143,7 +1177,7 @@ for(ith_SensorUnit_ID_2_cal in 1:n_SensorUnit_ID_2_cal){
           drv             <- dbDriver("MySQL")
           con <-carboutil::get_conn( group="CarboSense_MySQL")
           res             <- dbSendQuery(con, query_str)
-          tbl_calibration <- dbFetch(res, n=-1)
+          tbl_calibration <- dbFetch_UTC(res, n=-1)
           dbClearResult(res)
           dbDisconnect(con)
           
@@ -2389,7 +2423,7 @@ for(ith_SensorUnit_ID_2_cal in 1:n_SensorUnit_ID_2_cal){
           drv             <- dbDriver("MySQL")
           con <-carboutil::get_conn( group="CarboSense_MySQL")
           res             <- dbSendQuery(con, query_str)
-          tbl_calibration <- dbFetch(res, n=-1)
+          tbl_calibration <- dbFetch_UTC(res, n=-1)
           dbClearResult(res)
           dbDisconnect(con)
           
@@ -2433,7 +2467,7 @@ for(ith_SensorUnit_ID_2_cal in 1:n_SensorUnit_ID_2_cal){
           drv             <- dbDriver("MySQL")
           con <-carboutil::get_conn( group="CarboSense_MySQL")
           res             <- dbSendQuery(con, query_str)
-          tbl_calibration <- dbFetch(res, n=-1)
+          tbl_calibration <- dbFetch_UTC(res, n=-1)
           dbClearResult(res)
           dbDisconnect(con)
           
