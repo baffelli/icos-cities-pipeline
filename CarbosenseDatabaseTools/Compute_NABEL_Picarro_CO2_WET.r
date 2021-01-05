@@ -168,20 +168,27 @@ if(T){
     }
     
     
-    query_str <- paste("INSERT INTO ",DBtable," (timestamp,CO2_WET_COMP) ",sep="")
-    query_str <- paste(query_str,"VALUES ")
-    query_str <- paste(query_str,
-                       paste("(",paste(tmp$timestamp,",",
-                                       tmp$CO2_WET_COMP,
-                                       collapse = "),(",sep=""),")",sep=""),
-                       paste(" ON DUPLICATE KEY UPDATE "))
+    # query_str <- paste("INSERT INTO ",DBtable," (timestamp,CO2_WET_COMP) ",sep="")
+    # query_str <- paste(query_str,"VALUES ")
+    # query_str <- paste(query_str,
+    #                    paste("(",paste(tmp$timestamp,",",
+    #                                    tmp$CO2_WET_COMP,
+    #                                    collapse = "),(",sep=""),")",sep=""),
+    #                    paste(" ON DUPLICATE KEY UPDATE "))
     
-    query_str       <- paste(query_str,paste("CO2_WET_COMP=VALUES(CO2_WET_COMP);",    sep=""))
-    drv          <- dbDriver("MySQL")
+    # query_str       <- paste(query_str,paste("CO2_WET_COMP=VALUES(CO2_WET_COMP);",    sep=""))
+    # res          <- dbSendQuery(con, query_str)
+    # dbClearResult(res)
+    # dbDisconnect(con)
+
     con<-carboutil::get_conn(group="CarboSense_MySQL")
-    res          <- dbSendQuery(con, query_str)
-    dbClearResult(res)
-    dbDisconnect(con)
+    query_str <- stringr::str_interp("INSERT INTO ${DBtable} (timestamp,CO2_WET_COMP) VALUES (?,?) ON DUPLICATE KEY UPDATE CO2_WET_COMP=VALUES(CO2_WET_COMP);")
+    print(query_str)
+    q_res          <- dbSendQuery(con, query_str)
+    dbBind(q_res, list(tmp$timestamp, tmp$CO2_WET_COMP))
+    res <- dbFetch(q_res, -1)
+
+
     
   }
 }
