@@ -24,6 +24,7 @@ require(chron)
 library(data.table)
 library(dplyr)
 library(dbplyr)
+library(argparse)
 ## source
 source("/project/CarboSense/Software/CarboSenseUtilities/api-v1.3.r")
 source("/project/CarboSense/Software/CarboSenseUtilities/CarboSenseFunctions.r")
@@ -37,28 +38,24 @@ dbFetch <- function(...) lubridate::with_tz(DBI::dbFetch(...), tz='UTC')
 
 ## ARGUMENTS
 
-args = commandArgs(trailingOnly=TRUE)
-print(args)
-if(length(args)==1){
-  
-  PARTIAL_COMPUTATION   <- as.logical(args[1])
-  
-  if(!(PARTIAL_COMPUTATION==T | PARTIAL_COMPUTATION == F)){
-    stop("PARTIAL_COMPUTATION: T or F!")
-  }
-  
-  if(PARTIAL_COMPUTATION==T){
-    Computation_date_from      <- strptime(strftime(Sys.time(),"%Y%m%d%H%M%S",tz="UTC"),"%Y%m%d%H%M%S",tz="UTC") - 61 * 86400
-    Computation_timestamp_from <- as.numeric(difftime(time1=Computation_date_from,time2=strptime("19700101000000","%Y%m%d%H%M%S",tz="UTC"),tz="UTC",units="secs"))
-  }
-  
-  SelectedLocationName <- NULL
+parser <- ArgumentParser(description='Process HPP data')
+parser$add_argument('PARTIAL_COMPUTATION', type="logical", nargs=1, help='Perform partial computation?')
+parser$add_argument('SelectedLocationName', type="character", nargs='?', default=NULL, help='Location to process')
+args <- parser$parse_args(commandArgs(trailingOnly=TRUE))
+
+
+if(args$PARTIAL_COMPUTATION){
+
+  Computation_date_from      <- lubridate::now() - lubridate::days(x=20)
+  Computation_timestamp_from <- as.numeric(Computation_date_from)
 }
+  
 
 if(length(args)==2){
-  PARTIAL_COMPUTATION  <- args[1]
-  SelectedLocationName <- args[2]
+  PARTIAL_COMPUTATION  <- args$PARTIAL_COMPUTATION
+  SelectedLocationName <- args$SelectedLocationName
 }
+
 
 ### ----------------------------------------------------------------------------------------------------------------------------
 
@@ -68,7 +65,7 @@ if(length(args)==2){
 CalibrationModelName <- "HPP_CO2_IR_CP1_pIR_SHTT_H2O_DCAL_PLF14d"
 # CalibrationModelName <- "HPP_CO2_IR_CP1_pIR_SHTT_DCAL_PLF14d"
 
-CV_mode <- 4
+CV_mode <- 0
 
 ## Insert results into CarboSense DB table name
 
@@ -95,8 +92,6 @@ if(is.null(SelectedLocationName)){
   filename_HPP_DataProcessing_csv   <- paste(resultdir,SelectedLocationName,"_","HPP_DataProcessing.csv",sep="")
 }
 
-
-print(figname_HPP_CALIBRATIONS_T)
 ### ----------------------------------------------------------------------------------------------------------------------------
 
 ## Variables
@@ -116,8 +111,6 @@ DL_DB_apiKey      <- "eyJrIjoiSFd4bWJhczJjclpaUnpHeXluck1WYlJ0MkdINWhneFciLCJuIj
 
 SensorUnit_ID_2_proc   <- c(426:445)
 
-# 
-
 SensorUnit_ID_2_proc   <- sort(unique(SensorUnit_ID_2_proc))
 n_SensorUnit_ID_2_proc <- length(SensorUnit_ID_2_proc)
 
@@ -136,43 +129,29 @@ dbClearResult(res)
 dbDisconnect(con)
 
 # Deployment
-
-if(is.null(SelectedLocationName)){
-  query_str <- paste("SELECT * FROM Deployment WHERE LocationName NOT IN ('DUE1','DUE2','DUE3','DUE4','DUE5','MET1') ",sep="")
-  query_str <- paste(query_str, "AND SensorUnit_ID BETWEEN 426 AND 445 ORDER BY SensorUnit_ID ASC, Date_UTC_from ASC;",sep="")
-}else{
-  query_str <- paste("SELECT * FROM Deployment WHERE LocationName = '",SelectedLocationName,"' ",sep="")
-  query_str <- paste(query_str, "AND SensorUnit_ID BETWEEN 426 AND 445;",sep="")
-}
-
-print(query_str)
-
 drv             <- dbDriver("MySQL")
 con <-carboutil::get_conn(group='CarboSense_MySQL')
-res             <- dbSendQuery(con, query_str)
-tbl_deployment  <- dbFetch(res, n=-1)
+if(is.null(SelectedLocationName)){
+  date_start <- strptime('2018-07-01 00:00:00',"%Y-%m-%d %H:%M:%S",tz="UTC")
+  query_str <- "SELECT *, UNIX_TIMESTAMP(Date_UTC_from) AS timestamp_from, UNIX_TIMESTAMP(Date_UTC_to) AS timestamp_to  FROM Deployment WHERE LocationName NOT IN ('DUE2','DUE3','DUE4','DUE5','MET1')
+  AND SensorUnit_ID BETWEEN 426 AND 445 AND Date_UTC_to >'2018-07-01 00:00:00' ORDER BY SensorUnit_ID ASC, Date_UTC_from ASC;"
+  res <- dbSendQuery(con, query_str)
+}else{
+  query_str <- "SELECT *, UNIX_TIMESTAMP(Date_UTC_from) AS timestamp_from, UNIX_TIMESTAMP(Date_UTC_to) AS timestamp_to FROM Deployment WHERE LocationName = ? AND SensorUnit_ID BETWEEN 426 AND 445 AND Date_UTC_to > '2018-03-01 00:00:00';"
+  date_start <- strptime("2018-03-01 00:00:00","%Y-%m-%d %H:%M:%S",tz="UTC")
+  res <- dbSendQuery(con, query_str)
+  dbBind(res, SelectedLocationName)
+}
+
+
+
+
+
+
+tbl_deployment  <- dbFetch(res, n=-1) %>% mutate(timestamp_to=coalesce(timestamp_to, as.integer(lubridate::now())))
 dbClearResult(res)
 dbDisconnect(con)
 
-tbl_deployment$Date_UTC_from <- strptime(tbl_deployment$Date_UTC_from,"%Y-%m-%d %H:%M:%S",tz="UTC")
-tbl_deployment$Date_UTC_to   <- strptime(tbl_deployment$Date_UTC_to,  "%Y-%m-%d %H:%M:%S",tz="UTC")
-
-if(is.null(SelectedLocationName)){
-  date_start <- strptime("2018-07-01 00:00:00","%Y-%m-%d %H:%M:%S",tz="UTC")
-}else{
-  date_start <- strptime("2018-03-01 00:00:00","%Y-%m-%d %H:%M:%S",tz="UTC")
-}
-
-tbl_deployment <- tbl_deployment[which(tbl_deployment$Date_UTC_to>date_start),]
-
-id <- which(tbl_deployment$Date_UTC_from < date_start)
-
-if(length(id)>0){
-  tbl_deployment$Date_UTC_from[id] <- date_start
-}
-
-tbl_deployment$timestamp_from <- as.numeric(difftime(time1=strptime(tbl_deployment$Date_UTC_from,"%Y-%m-%d %H:%M:%S",tz="UTC"),time2=strptime("19700101000000","%Y%m%d%H%M%S",tz="UTC"),units="secs",tz="UTC"))
-tbl_deployment$timestamp_to   <- as.numeric(difftime(time1=strptime(tbl_deployment$Date_UTC_to,  "%Y-%m-%d %H:%M:%S",tz="UTC"),time2=strptime("19700101000000","%Y%m%d%H%M%S",tz="UTC"),units="secs",tz="UTC"))
 
 
 # Sensors
@@ -189,7 +168,7 @@ tbl_sensors$Date_UTC_from <- strptime(tbl_sensors$Date_UTC_from,"%Y-%m-%d %H:%M:
 tbl_sensors$Date_UTC_to   <- strptime(tbl_sensors$Date_UTC_to,  "%Y-%m-%d %H:%M:%S",tz="UTC")
 
 
-print(paste("The sensors to process are", tbl_sensors$SensorUnit_ID))
+
 # Location
 
 query_str       <- paste("SELECT * FROM Location;",sep="")
@@ -214,9 +193,10 @@ tbl_SEP$Date_UTC_from <- strptime(tbl_SEP$Date_UTC_from,"%Y-%m-%d %H:%M:%S",tz="
 tbl_SEP$Date_UTC_to   <- strptime(tbl_SEP$Date_UTC_to,  "%Y-%m-%d %H:%M:%S",tz="UTC")
 
 ### ----------------------------------------------------------------------------------------------------------------------------
-## Loop over all HPP sensor units
+## Loop over all HPP sensor units (which are in the table of sensors to process)
 for(ith_SensorUnit_ID_2_proc in 1:n_SensorUnit_ID_2_proc){
   
+  print(paste("The sensors to process are", SensorUnit_ID_2_proc[ith_SensorUnit_ID_2_proc]))
   # Get HPP sensors of this SensorUnit
   
   id_sensors   <- which(tbl_sensors$SensorUnit_ID == SensorUnit_ID_2_proc[ith_SensorUnit_ID_2_proc] & tbl_sensors$Type == 'HPP')
@@ -229,40 +209,16 @@ for(ith_SensorUnit_ID_2_proc in 1:n_SensorUnit_ID_2_proc){
   
   # reference gas cylinder information
 
-  query_str         <- paste("SELECT * FROM RefGasCylinder_Deployment where SensorUnit_ID=",SensorUnit_ID_2_proc[ith_SensorUnit_ID_2_proc],sep="")
+
+  query_str <- "SELECT rgc_d.*, rgc.CO2, rgc.pressure AS InitialPressure FROM RefGasCylinder_Deployment AS rgc_d JOIN RefGasCylinder AS rgc ON rgc_d.CylinderID = rgc.CylinderID AND rgc_d.Date_UTC_from BETWEEN rgc.Date_UTC_from AND rgc.Date_UTC_to where SensorUnit_ID=?"
   con <-carboutil::get_conn(group='CarboSense_MySQL')
-  res               <- dbSendQuery(con, query_str)
-  tbl_refGasCylDepl <-  dbFetch(res, n=-1)
-  dbClearResult(res)
+  pq <- dbSendQuery(con, query_str)
+  dbBind(pq, SensorUnit_ID_2_proc[ith_SensorUnit_ID_2_proc])
+  tbl_refGasCylDepl <-  dbFetch(pq, n=-1)
+  dbClearResult(pq)
   dbDisconnect(con)
 
-  #
-  print(tbl_refGasCylDepl)
-  if(dim(tbl_refGasCylDepl)[1]>=1){
-    print(tbl_refGasCylDepl$Date_UTC_to)
-    tbl_refGasCylDepl$Date_UTC_from <- strptime(tbl_refGasCylDepl$Date_UTC_from,"%Y-%m-%d %H:%M:%S",tz="UTC")
-    tbl_refGasCylDepl$Date_UTC_to   <- strptime(tbl_refGasCylDepl$Date_UTC_to,  "%Y-%m-%d %H:%M:%S",tz="UTC")
-    tbl_refGasCylDepl$CO2           <- NA
-    
-    for(ith_refGasCylDepl in 1:dim(tbl_refGasCylDepl)[1]){
-      print(strftime(tbl_refGasCylDepl$Date_UTC_to[ith_refGasCylDepl],"%Y-%m-%d %H:%M:%S",tz="UTC"))
-      query_str       <- paste("SELECT * FROM RefGasCylinder where CylinderID='",tbl_refGasCylDepl$CylinderID[ith_refGasCylDepl],"' and Date_UTC_from <= '",strftime(tbl_refGasCylDepl$Date_UTC_from[ith_refGasCylDepl],"%Y-%m-%d %H:%M:%S",tz="UTC"),"' and Date_UTC_to >= '",strftime(tbl_refGasCylDepl$Date_UTC_to[ith_refGasCylDepl],"%Y-%m-%d %H:%M:%S",tz="UTC"),"';",sep="")
-      drv             <- dbDriver("MySQL")
-      con <-carboutil::get_conn(group='CarboSense_MySQL')
-      res             <- dbSendQuery(con, query_str)
-      tbl             <- dbFetch(res, n=-1)
-      dbClearResult(res)
-      dbDisconnect(con)
-      if(dim(tbl)[1]!=1){
-        stop("D")
-      }
-      
-      tbl_refGasCylDepl$CO2[ith_refGasCylDepl] <- tbl$CO2[1]
-    }
-  }else{
-    tbl_refGasCylDepl <- NULL 
-  }
-  
+
   
   # Get calibration parameters (HPP/HPP pressure) of each individual HPP sensor of this SensorUnit
   
@@ -319,7 +275,6 @@ for(ith_SensorUnit_ID_2_proc in 1:n_SensorUnit_ID_2_proc){
   }
   
   
-  
   # Get measurements from this SensorUnit for each deployment period 
   
   sensor_data <- NULL 
@@ -333,7 +288,6 @@ for(ith_SensorUnit_ID_2_proc in 1:n_SensorUnit_ID_2_proc){
       # Get information about the location of the deployment and the installation
       
       id_loc <- which(tbl_location$LocationName==tbl_deployment$LocationName[id_depl[ith_depl]])
-      
       if(length(id_loc)==0){
         next
       }
@@ -343,7 +297,7 @@ for(ith_SensorUnit_ID_2_proc in 1:n_SensorUnit_ID_2_proc){
       
       timeFilter <- paste("time >= ",tbl_deployment$timestamp_from[id_depl[ith_depl]],"s AND time < ",tbl_deployment$timestamp_to[id_depl[ith_depl]],"s",sep="")
       device     <- paste("/",SensorUnit_ID_2_proc[ith_SensorUnit_ID_2_proc],"/",sep="")
-      
+      print(timeFilter)
       tmp0 <- tryCatch({
         query(domain=DL_DB_domain,
               apiKey=DL_DB_apiKey,
@@ -487,7 +441,7 @@ for(ith_SensorUnit_ID_2_proc in 1:n_SensorUnit_ID_2_proc){
       id_set_to_NA <- which(sensor_data$hpp_status==32)
       
       if(length(id_set_to_NA)>0){
-        write.table(x = sensor_data[id_set_to_NA,],file = paste("/project/muem/",SensorUnit_ID_2_proc[ith_SensorUnit_ID_2_proc],".csv",sep=""),sep=";",col.names=T,row.names=F)
+        write.table(x = sensor_data[id_set_to_NA,],file = paste("/project/CarboSense/",SensorUnit_ID_2_proc[ith_SensorUnit_ID_2_proc],".csv",sep=""),sep=";",col.names=T,row.names=F)
       }
       
       
@@ -515,24 +469,10 @@ for(ith_SensorUnit_ID_2_proc in 1:n_SensorUnit_ID_2_proc){
       rm(id_SEP_SU,n_id_SEP_SU,id_setToNA)
       gc()
       
-      
-      # H2O [Vol-%]
-      
-      coef_1 <-  -7.85951783
-      coef_2 <-   1.84408259
-      coef_3 <-  -11.7866497
-      coef_4 <-   22.6807411
-      coef_5 <-  -15.9618719
-      coef_6 <-   1.80122502
-      
-      theta      <- 1 - (273.15+sensor_data$sht21_T)/647.096
-      Pws_sht21  <- 220640 * exp( 647.096/(273.15+sensor_data$sht21_T) * (coef_1*theta + coef_2*theta^1.5 + coef_3*theta^3 + coef_4*theta^3.5 + coef_5*theta^4 + coef_6*theta^7.5))
-      Pw_sht21   <- sensor_data$sht21_RH*(Pws_sht21*100)/100
-      sensor_data$sht21_H2O <- Pw_sht21 / (sensor_data$hpp_pressure*1e2)*1e2
-      
+      #Absolute humidity
+      sensor_data$sht21_H2O_1 <- carboutil::relative_to_absolute_humidity(sensor_data$sht21_RH, sensor_data$sht21_T+273.15, sensor_data$hpp_pressure*1e2)
       
       # BCP
-      
       if(!is.null(tbl_refGasCylDepl)){
         
         sensor_data$CO2        <- NA
@@ -550,7 +490,7 @@ for(ith_SensorUnit_ID_2_proc in 1:n_SensorUnit_ID_2_proc){
           }
         }
         
-        sensor_data$valveNo                <- NA
+        sensor_data$valveNo <- NA
         sensor_data$valveNo[sensor_data$valve==1] <- cumsum( c(0,as.numeric(diff(sensor_data$timestamp[sensor_data$valve==1])>600))  )
         
       }
@@ -683,6 +623,7 @@ for(ith_SensorUnit_ID_2_proc in 1:n_SensorUnit_ID_2_proc){
                                                   T_LAST         = sensor_data$sht21_T[id[n_id]],
                                                   stringsAsFactors = F))
               }
+
             }
             
             
@@ -736,21 +677,28 @@ for(ith_SensorUnit_ID_2_proc in 1:n_SensorUnit_ID_2_proc){
       # Delete all the data from this SensorUnit from table "CarboSense_CO2" (or InsertDBTableName)
       
       if(PARTIAL_COMPUTATION==T){
-        
-        if(Computation_timestamp_from <= tbl_deployment$timestamp_from[id_depl[ith_depl]]){
-          Computation_timestamp_from_DB <- tbl_deployment$timestamp_from[id_depl[ith_depl]]
-        }
-        query_str <- paste("DELETE FROM ",InsertDBTableName," WHERE SensorUnit_ID = ",SensorUnit_ID_2_proc[ith_SensorUnit_ID_2_proc]," and LocationName = '",tbl_deployment$LocationName[id_depl[ith_depl]],"' ",sep="")
-        query_str <- paste(query_str, "AND timestamp >= ",Computation_timestamp_from_DB,";",sep="")
+        # if(Computation_timestamp_from <= tbl_deployment$timestamp_from[id_depl[ith_depl]]){
+        #   Computation_timestamp_from_DB <- tbl_deployment$timestamp_from[id_depl[ith_depl]]
+        # }
+
+        Computation_timestamp_from_DB <- min(c( tbl_deployment$timestamp_from[id_depl[ith_depl]], Computation_timestamp_from))
+
+        query_str <- stringr::str_interp("DELETE FROM ${InsertDBTableName} WHERE SensorUnit_ID = ? AND LocationName = ? AND timestamp >= ?;")
+        query_params <- list(SensorUnit_ID_2_proc[ith_SensorUnit_ID_2_proc], tbl_deployment$LocationName[id_depl[ith_depl]], Computation_timestamp_from_DB)
+        #query_str <- paste("DELETE FROM ",InsertDBTableName," WHERE SensorUnit_ID = ",SensorUnit_ID_2_proc[ith_SensorUnit_ID_2_proc]," and LocationName = '",tbl_deployment$LocationName[id_depl[ith_depl]],"' ",sep="")
+        #query_str <- paste(query_str, "AND timestamp >= ",Computation_timestamp_from_DB,";",sep="")
       }else{
-        query_str <- paste("DELETE FROM ",InsertDBTableName," WHERE SensorUnit_ID = ",SensorUnit_ID_2_proc[ith_SensorUnit_ID_2_proc]," and LocationName = '",tbl_deployment$LocationName[id_depl[ith_depl]],"' ",sep="")
-        query_str <- paste(query_str, "AND timestamp >= ",tbl_deployment$timestamp_from[id_depl[ith_depl]]," AND timestamp <= ",tbl_deployment$timestamp_to[id_depl[ith_depl]],";",sep="")
+        query_str <- stringr::str_interp("DELETE FROM ${InsertDBTableName} WHERE SensorUnit_ID = ? AND LocationName = ? AND timestamp >= ? AND timestamp <= ?;")
+         query_params <- list(SensorUnit_ID_2_proc[ith_SensorUnit_ID_2_proc], tbl_deployment$LocationName[id_depl[ith_depl]], tbl_deployment$timestamp_from[id_depl[ith_depl]], tbl_deployment$timestamp_to[id_depl[ith_depl]])
+        #query_str <- paste("DELETE FROM ",InsertDBTableName," WHERE SensorUnit_ID = ",SensorUnit_ID_2_proc[ith_SensorUnit_ID_2_proc]," and LocationName = '",tbl_deployment$LocationName[id_depl[ith_depl]],"' ",sep="")
+        #query_str <- paste(query_str, "AND timestamp >= ",tbl_deployment$timestamp_from[id_depl[ith_depl]]," AND timestamp <= ",tbl_deployment$timestamp_to[id_depl[ith_depl]],";",sep="")
       }
       
       
       drv             <- dbDriver("MySQL")
       con <-carboutil::get_conn()
       res             <- dbSendQuery(con, query_str)
+      dbBind(res, query_params)
       dbClearResult(res)
       dbDisconnect(con)
       
@@ -758,74 +706,112 @@ for(ith_SensorUnit_ID_2_proc in 1:n_SensorUnit_ID_2_proc){
       
       id_insert   <- which(!is.na(sensor_data$CO2_CAL) & sensor_data_ok & !sensor_data$SEP)
       n_id_insert <- length(id_insert)
+      # Substitution of NA with "-999"
+      sensor_data <- mutate_at(sensor_data, c("CO2_CAL_BCP","CO2_CAL_DRY","CO2_CAL_BCP_DRY"), function(x) replace(x, is.na(x), -999) )
       
       #
       
       if(n_id_insert>0){
         
-        # Substitution of NA with "-999"
-        
-        for(cn in c("CO2_CAL_BCP","CO2_CAL_DRY","CO2_CAL_BCP_DRY")){
-          
-          pos <- which(colnames(sensor_data)==cn)
-          
-          id <- which(is.na(sensor_data[id_insert,pos]))
-          
-          if(length(id)>0){
-            sensor_data[id_insert[id],pos] <- -999
-          }
-        }
-        
-        #
-        
         print(paste("Insert data for SU",SensorUnit_ID_2_proc[ith_SensorUnit_ID_2_proc]))
-        
-        
-        insert_pos_1 <- 1
-        
-        while(insert_pos_1<=n_id_insert){
-          
-          #
-          
-          insert_pos_2 <- insert_pos_1 + 1e4
-          
-          if(insert_pos_2>n_id_insert){
-            insert_pos_2 <- n_id_insert
-          }
-          
-          n_id_insert_partly <- insert_pos_2 - insert_pos_1 + 1
-          id_insert_partly   <- id_insert[insert_pos_1:insert_pos_2]
-          
-          #
-          
-          
-          query_str <- paste("INSERT INTO ",InsertDBTableName," (`LocationName`, `SensorUnit_ID`, `timestamp`, `CO2_CAL`, `CO2_CAL_DRY`,`CO2_CAL_ADJ`,`CO2_CAL_ADJ_DRY`,`H2O`,`Pressure`,`T`,`RH`,`Valve`) VALUES ",sep="")
-          query_str <- paste(query_str,
-                             paste("(",paste("'",sensor_data$LocationName[id_insert_partly],"',",
-                                             rep(SensorUnit_ID_2_proc[ith_SensorUnit_ID_2_proc],n_id_insert_partly),",",
-                                             sensor_data$timestamp[id_insert_partly],",",
-                                             sensor_data$CO2_CAL[id_insert_partly],",",
-                                             sensor_data$CO2_CAL_DRY[id_insert_partly],",",
-                                             sensor_data$CO2_CAL_BCP[id_insert_partly],",",
-                                             sensor_data$CO2_CAL_BCP_DRY[id_insert_partly],",",
-                                             sensor_data$sht21_H2O[id_insert_partly],",",
-                                             sensor_data$hpp_pressure[id_insert_partly],",",
-                                             sensor_data$sht21_T[id_insert_partly],",",
-                                             sensor_data$sht21_RH[id_insert_partly],",",
-                                             sensor_data$valve[id_insert_partly],
-                                             collapse = "),(",sep=""),");",sep="")
-          )
-          
-          drv             <- dbDriver("MySQL")
+        nins <- length(sensor_data$timestamp[id_insert])
+        print(nins)
+        #List of values to insert
+          insert_df <- tibble(
+            LocationName=sensor_data$LocationName[id_insert],
+            SensorUnit_ID=rep(SensorUnit_ID_2_proc[ith_SensorUnit_ID_2_proc],nins),
+            timestamp=sensor_data$timestamp[id_insert],
+            CO2_CAL=sensor_data$CO2_CAL[id_insert],
+            CO2_CAL_DRY=sensor_data$CO2_CAL_DRY[id_insert],
+            CO2_CAL_ADJ=sensor_data$CO2_CAL_BCP[id_insert],
+            CO2_CAL_ADJ_DRY=sensor_data$CO2_CAL_BCP_DRY[id_insert],
+            H2O=sensor_data$sht21_H2O[id_insert],
+            Pressure=sensor_data$hpp_pressure[id_insert],
+            T=sensor_data$sht21_T[id_insert],
+            RH=sensor_data$sht21_RH[id_insert],
+            Valve=sensor_data$valve[id_insert])
           con <-carboutil::get_conn()
-          res             <- dbSendQuery(con, query_str)
-          dbClearResult(res)
-          dbDisconnect(con)
+          dbWriteTable(con, InsertDBTableName, insert_df, append=TRUE, overwrite=FALSE)
+          # #Parametrised query
+          # insert_query <- stringr::str_interp(
+          #   "INSERT INTO ${InsertDBTableName} (`LocationName`, `SensorUnit_ID`, `timestamp`, `CO2_CAL`, `CO2_CAL_DRY`,`CO2_CAL_ADJ`,`CO2_CAL_ADJ_DRY`,`H2O`,`Pressure`,`T`,`RH`,`Valve`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);"
+          # )
+          # print(insert_query)
           
-          #
+          # drv             <- dbDriver("MySQL")
+          # con <-carboutil::get_conn()
+          # res             <- dbSendQuery(con, query_str)
+          # dbBind(res, insert_df)
+          # dbFetch(res)
+          # dbClearResult(res)
+          # dbDisconnect(con)
+        
+        # insert_pos_1 <- 1
+        
+        # while(insert_pos_1<=n_id_insert){
           
-          insert_pos_1 <- insert_pos_1 + 1e4 + 1
-        }
+        #   #
+          
+        #   insert_pos_2 <- insert_pos_1 + 1e4
+          
+        #   if(insert_pos_2>n_id_insert){
+        #     insert_pos_2 <- n_id_insert
+        #   }
+          
+        #   n_id_insert_partly <- insert_pos_2 - insert_pos_1 + 1
+        #   id_insert_partly   <- id_insert[insert_pos_1:insert_pos_2]
+          
+        #   #
+          
+          
+        #   query_str <- paste("INSERT INTO ",InsertDBTableName," (`LocationName`, `SensorUnit_ID`, `timestamp`, `CO2_CAL`, `CO2_CAL_DRY`,`CO2_CAL_ADJ`,`CO2_CAL_ADJ_DRY`,`H2O`,`Pressure`,`T`,`RH`,`Valve`) VALUES ",sep="")
+        #   query_str <- paste(query_str,
+        #                      paste("(",paste("'",sensor_data$LocationName[id_insert_partly],"',",
+        #                                      rep(SensorUnit_ID_2_proc[ith_SensorUnit_ID_2_proc],n_id_insert_partly),",",
+        #                                      sensor_data$timestamp[id_insert_partly],",",
+        #                                      sensor_data$CO2_CAL[id_insert_partly],",",
+        #                                      sensor_data$CO2_CAL_DRY[id_insert_partly],",",
+        #                                      sensor_data$CO2_CAL_BCP[id_insert_partly],",",
+        #                                      sensor_data$CO2_CAL_BCP_DRY[id_insert_partly],",",
+        #                                      sensor_data$sht21_H2O[id_insert_partly],",",
+        #                                      sensor_data$hpp_pressure[id_insert_partly],",",
+        #                                      sensor_data$sht21_T[id_insert_partly],",",
+        #                                      sensor_data$sht21_RH[id_insert_partly],",",
+        #                                      sensor_data$valve[id_insert_partly],
+        #                                      collapse = "),(",sep=""),");",sep="")
+        #   )
+        #   #List of values to insert
+        #   insert_df <- list(
+        #     sensor_data$LocationName[id_insert_partly],
+        #     rep(SensorUnit_ID_2_proc[ith_SensorUnit_ID_2_proc],n_id_insert_partly),
+        #     sensor_data$timestamp[id_insert_partly],
+        #     sensor_data$CO2_CAL[id_insert_partly],
+        #     sensor_data$CO2_CAL_DRY[id_insert_partly],
+        #     sensor_data$CO2_CAL_BCP[id_insert_partly],
+        #     sensor_data$CO2_CAL_BCP_DRY[id_insert_partly],
+        #     sensor_data$sht21_H2O[id_insert_partly],
+        #     sensor_data$hpp_pressure[id_insert_partly],
+        #     sensor_data$sht21_T[id_insert_partly],
+        #     sensor_data$sht21_RH[id_insert_partly],
+        #     sensor_data$valve[id_insert_partly])
+        #   #Parametrised query
+        #   insert_query <- stringr::str_interp(
+        #     "INSERT INTO ${InsertDBTableName} (`LocationName`, `SensorUnit_ID`, `timestamp`, `CO2_CAL`, `CO2_CAL_DRY`,`CO2_CAL_ADJ`,`CO2_CAL_ADJ_DRY`,`H2O`,`Pressure`,`T`,`RH`,`Valve`) VALUES 
+        #     (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        #     "
+        #   )
+          
+        #   drv             <- dbDriver("MySQL")
+        #   con <-carboutil::get_conn()
+        #   res             <- dbSendQuery(con, query_str)
+        #   dbBind(res, insert_df)
+        #   dbClearResult(res)
+        #   dbDisconnect(con)
+          
+        #   #
+          
+        #   insert_pos_1 <- insert_pos_1 + 1e4 + 1
+        # }
       }
     }
   }
@@ -970,7 +956,7 @@ for(ith_depl in 1:dim(tbl_deployment)[1]){
   
   mainStr <- paste("HPP",tbl_deployment$SensorUnit_ID[ith_depl],"@",tbl_deployment$LocationName[ith_depl],strftime(tbl_deployment$Date_UTC_from[ith_depl],"%d/%m/%Y",tz="UTC"),"-",strftime(tbl_deployment$Date_UTC_to[ith_depl],"%d/%m/%Y",tz="UTC"))
   
-  
+  print(BCP_df$date[id])
   plot(  as.POSIXct(BCP_df$date[id]),BCP_df$RH_MIN[id],ylim=yrange,cex.lab=1.25,cex.axis=1.25,cex.main=1.25,col=2,pch=15,cex=0.5,xlab="Date",ylab="RH [%]",main=mainStr,xaxt="n")
   axis(side = 1,at = label_dates,labels = label_dates_str,cex.axis=1.25,cex.lab=1.25)
   
@@ -1198,14 +1184,14 @@ for(SU_ID in u_SU_ID){
     dbDisconnect(con)
     
     if(dim(tbl)[1]!=1){
-      stop("Problem with finding attached gas cylinder.")
+      stop(paste("Sensor Unit:",SU_ID, " : problem with finding attached gas cylinder with ID:",tbl_refGasCylDepl$CylinderID[ith_refGasCylDepl]))
     }
     
     tbl_refGasCylDepl$InitialPressure[ith_refGasCylDepl] <- tbl$pressure[1]
   }
   
   #
-  
+  print(tbl_refGasCylDepl)
   for(ith_refGasCylDepl in 1:dim(tbl_refGasCylDepl)[1]){
     
     id_cyl   <- which(  BCP_df$timestamp     >= tbl_refGasCylDepl$timestamp_from[ith_refGasCylDepl] 
