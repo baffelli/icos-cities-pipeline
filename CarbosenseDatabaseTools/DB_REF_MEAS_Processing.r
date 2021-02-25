@@ -175,9 +175,6 @@ for(ith_db_table in 1:n_db_tables){
   }
   
   if(processing_mode=="last_measurements"){
-    
-    # MIN_TIMESTAMP <- ((as.numeric(difftime(time1=strptime(strftime(Sys.time(),"%Y%m%d%H%M%S",tz="UTC"),"%Y%m%d%H%M%S",tz="UTC"),
-    #                                        time2=strptime("19700101000000","%Y%m%d%H%M%S",tz="UTC"),units="secs",tz="UTC")))%/%60)*60
     con <-carboutil::get_conn(group=DB_group)
     query_res  <- carboutil::get_query_parametrized(con, "SELECT MAX(timestamp) AS MAX_TIMESTAMP FROM {`tb`}", tb=db_tables[ith_db_table]);
     MIN_TIMESTAMP <- query_res$MAX_TIMESTAMP
@@ -601,19 +598,22 @@ for(ith_db_table in 1:n_db_tables){
     
     ok <- ok & (all_timestamps%in%all_data_timestamps) & all_timestamps >=data_set_timestamp_from & all_timestamps < data_set_timestamp_to
     
-    
+    # TODO improve this by using proper parametrised queries
     # Insert into database
-    
+    print(db_tables[ith_db_table])
+    cols_to_process <-species2comp[which(speciesToBeProcessed==T)]
+
     for(ith_species in 1:n_species){
       
       if(speciesToBeProcessed[ith_species]==T){
         
         # SET TO DEFAULT -999
-        
-        query_str <- paste("UPDATE ",db_tables[ith_db_table]," SET ",species2comp[ith_species]," = -999 WHERE timestamp >= ",data_set_timestamp_from," and timestamp < ",data_set_timestamp_to,";",sep="")
-        drv       <- dbDriver("MySQL")
         con<-carboutil::get_conn(group=DB_group)
-        res       <- dbSendQuery(con, query_str)
+        query_str_par <- glue::glue_sql("UPDATE {`db_tables[ith_db_table]`} SET {`species2comp[ith_species]`} = -999  WHERE timestamp BETWEEN {data_set_timestamp_from} AND {data_set_timestamp_to}", .con=con)
+        #query_str <- paste("UPDATE ",db_tables[ith_db_table]," SET ",species2comp[ith_species]," = -999 WHERE timestamp >= ",data_set_timestamp_from," and timestamp < ",data_set_timestamp_to,";",sep="")
+     
+      
+        res <- dbSendQuery(con, query_str_par)
         dbClearResult(res)
         dbDisconnect(con)
         
@@ -633,20 +633,26 @@ for(ith_db_table in 1:n_db_tables){
         
         # INSERT
         
-        query_str <- paste("INSERT INTO ",db_tables[ith_db_table]," (timestamp,",species2comp[ith_species],")",sep="")
-        query_str <- paste(query_str,"VALUES" )
+        # query_str <- paste("INSERT INTO ",db_tables[ith_db_table]," (timestamp,",species2comp[ith_species],")",sep="")
+        # query_str <- paste(query_str,"VALUES" )
         
-        query_str <- paste(query_str,
-                           paste("(",paste(mm2comp$timestamp[id_insert],",",
-                                           mm2comp[id_insert,1+ith_species],
-                                           collapse = "),(",sep=""),")",sep=""),
-                           paste(" ON DUPLICATE KEY UPDATE "))
+        # query_str <- paste(query_str,
+        #                    paste("(",paste(mm2comp$timestamp[id_insert],",",
+        #                                    mm2comp[id_insert,1+ith_species],
+        #                                    collapse = "),(",sep=""),")",sep=""),
+        #                    paste(" ON DUPLICATE KEY UPDATE "))
         
-        query_str <- paste(query_str,species2comp[ith_species],"=VALUES(",species2comp[ith_species],");",sep="")
-        
-        drv       <- dbDriver("MySQL")
+        # query_str <- paste(query_str,species2comp[ith_species],"=VALUES(",species2comp[ith_species],");",sep="")
+
         con<-carboutil::get_conn(group=DB_group)
-        res       <- dbSendQuery(con, query_str)
+        query_str_par <- glue::glue_sql("INSERT INTO {`db_tables[ith_db_table]`} (timestamp, {`species2comp[ith_species]`}) VALUES (?,?) ON DUPLICATE KEY UPDATE  {`species2comp[ith_species]`}=VALUES({`species2comp[ith_species]`});", .con=con)
+        print(query_str_par)
+
+
+        data_to_insert <- list(mm2comp$timestamp[id_insert],  mm2comp[id_insert,1+ith_species])
+    
+        res       <- dbSendQuery(con, query_str_par)
+        dbBind(res, data_to_insert)
         dbClearResult(res)
         dbDisconnect(con)
       }
