@@ -60,6 +60,23 @@ _export:
     +free_station_kml:
         sh>: Rscript ${base_folder}/CarbosenseNetworkStatus/make_free_locations_kml.r
 
++HPP:
+    +process_hpp:
+        sh>: Rscript ${base_folder}/HPP_measurement_processing/Compute_CarboSense_HPP_CO2_values.r F
+    +plot_hpp_ts:
+        sh>: Rscript ${base_folder}/HPP_measurement_processing/Plot_HPP_CO2.r
+    +comparison_hpp_ref:
+        sh>: Rscript ${base_folder}/HPP_measurement_processing/Comparison_CO2_HPP_REF.r 
+    +upload_to_decentlab:
+        sh>: ${base_folder}/UploadProcessedMeasurementsToDecentlabDB/Upload_HPP_Measurements_To_swiss_co2_live.sh
+    #+diagnostics:
+    #    sh>: Rscript ${base_folder}//HPP_measurement_processing/hpp_performance.R
+    +process_HHP_due:
+        +process_HPP_CO2_due:
+            sh>: Rscript ${base_folder}/HPP_measurement_processing/Compute_CarboSense_HPP_CO2_values.r F DUE1
+        +comparison_hpp_ref_mch:
+            sh>: Rscript ${base_folder}/HPP_measurement_processing/Comparison_H2O_HPP_MCH.r
+
 +process_lp8:
     #Process various testing modes that are not uploaded to decentlab
     +special_modes:
@@ -115,8 +132,8 @@ _export:
                         +comparison_lp8_lp8:
                             sh>: Rscript ${base_folder}/LP8_measurement_processing/Comparison_CO2_LP8_LP8.r ${config[0]}
 
-                        +comparison_lp8_HPP:
-                            sh>: Rscript ${base_folder}/LP8_measurement_processing/Comparison_CO2_LP8_HPP.r ${config[0]}
+                        #+comparison_lp8_HPP:
+                        #    sh>: Rscript ${base_folder}/LP8_measurement_processing/Comparison_CO2_LP8_HPP.r ${config[0]}
                 _else_do:
                     echo>: "Skipping plotting. LP8 plotting is only run on sundays"
                 
@@ -135,46 +152,33 @@ _export:
                 sh>:  Rscript ${base_folder}/LP8_measurement_processing/Comparison_CO2_LP8_REF.r 0 ${type}
         +comparison_lp8_lp8:
             sh>: Rscript ${base_folder}/LP8_measurement_processing/Comparison_CO2_LP8_LP8.r 0
-        +comparison_lp8_HPP:
-            sh>: Rscript ${base_folder}/LP8_measurement_processing/Comparison_CO2_LP8_HPP.r 0
+        # +comparison_lp8_HPP:
+        #     sh>: Rscript ${base_folder}/LP8_measurement_processing/Comparison_CO2_LP8_HPP.r 0
         +upload_to_decentlab:
             sh>: ${base_folder}/UploadProcessedMeasurementsToDecentlabDB/Upload_LP8_Measurements_To_swiss_co2_live.sh
-+HPP:
-    +process_hpp:
-        sh>: Rscript ${base_folder}/HPP_measurement_processing/Compute_CarboSense_HPP_CO2_values.r F
-    +plot_hpp_ts:
-        sh>: Rscript ${base_folder}/HPP_measurement_processing/Plot_HPP_CO2.r
-    +comparison_hpp_ref:
-        sh>: Rscript ${base_folder}/HPP_measurement_processing/Comparison_CO2_HPP_REF.r 
-    +upload_to_decentlab:
-        sh>: ${base_folder}/UploadProcessedMeasurementsToDecentlabDB/Upload_HPP_Measurements_To_swiss_co2_live.sh
-    +process_HHP_due:
-        +process_HPP_CO2_due:
-            sh>: Rscript ${base_folder}/HPP_measurement_processing/Compute_CarboSense_HPP_CO2_values.r F DUE1
-        +comparison_hpp_ref_mch:
-            sh>: Rscript ${base_folder}/HPP_measurement_processing/Comparison_H2O_HPP_MCH.r
+
 
 +calibration:
     #Only run weekly
     if>: ${moment(session_date).format('dddd')== 'Sunday'}
     _do: 
         +HPP: 
-            +old:
-                _export:
-                    gen_script: CO2_HPP_SensorCalibration_LINUX_IR.r
-                    script_param: 7
-                    convert_script: CONVERT_HPP_1stGENERATION_FIGURES
-                    result_folder: "/project/CarboSense/Carbosense_Network/HPP_Calibration/HPP_1stGen_RESULTS_CV07/"
-                +calibrate:
-                    sh>: Rscript  ${base_folder}/HPP_sensor_calibration/${gen_script} ${script_param} ${result_folder}
-                +plot:
-                    sh>:  sh ${base_folder}/HPP_sensor_calibration/${convert_script}.sh ${result_folder}
+            # +old:
+            #     _export:
+            #         gen_script: CO2_HPP_SensorCalibration_LINUX_IR.r
+            #         script_param: 7
+            #         convert_script: CONVERT_HPP_1stGENERATION_FIGURES
+            #         result_folder: "/project/CarboSense/Carbosense_Network/HPP_Calibration/HPP_1stGen_RESULTS_CV07/"
+            #     +calibrate:
+            #         sh>: Rscript  ${base_folder}/HPP_sensor_calibration/${gen_script} ${script_param} ${result_folder}
+            #     +plot:
+            #         sh>:  sh ${base_folder}/HPP_sensor_calibration/${convert_script}.sh ${result_folder}
             +new:
                 _export:
                     gen_script: CO2_HPP_SensorCalibration_LINUX_IR_2S.r
-                    script_param: 4
+                    script_param: 0
                     convert_script: CONVERT_HPP_2ndGENERATION_FIGURES
-                    result_folder: "/project/CarboSense/Carbosense_Network/HPP_Calibration/HPP_2ndGen_RESULTS_CV04/"
+                    result_folder: "/project/CarboSense/Carbosense_Network/HPP_Calibration/HPP_2ndGen_RESULTS_CV00/"
                 +calibrate:
                     sh>: Rscript  ${base_folder}/HPP_sensor_calibration/${gen_script} ${script_param} ${result_folder}
                 +plot:
