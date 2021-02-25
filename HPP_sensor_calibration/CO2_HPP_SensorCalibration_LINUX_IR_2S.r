@@ -65,14 +65,7 @@ DL_DB_apiKey      <- "eyJrIjoiSFd4bWJhczJjclpaUnpHeXluck1WYlJ0MkdINWhneFciLCJuIj
 ### ----------------------------------------------------------------------------------------------------------------------------
 
 SensorUnit_ID_2_cal   <- c(426:445)
-# SensorUnit_ID_2_cal   <- c(430)
-# SensorUnit_ID_2_cal   <- c(436,426:435,437:445)
-# SensorUnit_ID_2_cal   <- c(445:426)
-# SensorUnit_ID_2_cal   <- c(440,426,438,427:437,439,441:445)
-# SensorUnit_ID_2_cal   <- c(435)
-# SensorUnit_ID_2_cal   <- c(444,442,426:441,443,445)
-# SensorUnit_ID_2_cal   <- c(444,442,427,430,434,443,426,428,429,431:433,435:441,445)
-# SensorUnit_ID_2_cal   <- c(431,433,435)
+
 n_SensorUnit_ID_2_cal <- length(SensorUnit_ID_2_cal)
 
 ### ----------------------------------------------------------------------------------------------------------------------------
@@ -637,7 +630,7 @@ for(ith_SensorUnit_ID_2_cal in 1:n_SensorUnit_ID_2_cal){
     Type,
     Serialnumber,
     GREATEST(cal.Date_UTC_from, sens.Date_UTC_from) AS Date_UTC_from,
-    LEAST(cal.Date_UTC_from, sens.Date_UTC_from) AS Date_UTC_to,
+    GREATEST(cal.Date_UTC_to, sens.Date_UTC_to) AS Date_UTC_to,
     LocationName,
     DBTableNameRefData,
     CalMode
@@ -649,6 +642,7 @@ for(ith_SensorUnit_ID_2_cal in 1:n_SensorUnit_ID_2_cal){
   "
   con <-carboutil::get_conn( group="CarboSense_MySQL")
   dt <- lubridate::with_tz(dplyr::tbl(con, sql(glue::glue_sql(info_q))) %>% collect(), 'UTC')
+  print("#######################")
   print(dt)
   print(sensor_calibration_info)
   #
@@ -1909,6 +1903,22 @@ for(ith_SensorUnit_ID_2_cal in 1:n_SensorUnit_ID_2_cal){
             gc()
           }
           
+          if(T & sensors2cal[ith_sensor2cal] %in% c(2444)){
+            
+            
+            ts_1                 <- as.numeric(difftime(time1=strptime("2020-01-01 00:00:00","%Y-%m-%d %H:%M:%S",tz="UTC"),
+                                                        time2=strptime("1970-01-01 00:00:00","%Y-%m-%d %H:%M:%S",tz="UTC"),units="secs",tz="UTC"))
+            
+            ts_2                 <- as.numeric(difftime(time1=strptime("2020-02-14 00:00:00","%Y-%m-%d %H:%M:%S",tz="UTC"),
+                                                        time2=strptime("1970-01-01 00:00:00","%Y-%m-%d %H:%M:%S",tz="UTC"),units="secs",tz="UTC"))
+            
+            
+            data_training        <- data$timestamp>=ts_1 & data$timestamp<=ts_2
+            data_test            <- data$timestamp< ts_1 | data$timestamp> ts_2
+            
+            rm(ts_1,ts_2)
+            gc()
+          }
           ##
         }
       }
