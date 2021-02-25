@@ -241,45 +241,49 @@ if(T){
     id_insert <- which(data$timestamp>MAX_timestamp)
     
     if(length(id_insert)>0){
+      placeholders <- rep("?", 19)
+      qs <- "REPLACE INTO NABEL_HAE ({`colnames(data)[1:19]`*}) VALUES ({placeholders*});"
+      dt <- data[id_insert, 1:19]
+
+      # query_str <- paste("INSERT INTO NABEL_HAE (",paste(colnames(data)[1:19],collapse = ","),") ",sep="")
+      # query_str <- paste(query_str,"VALUES" )
+      # query_str <- paste(query_str,
+      #                    paste("(",paste(data[id_insert,01],",",
+      #                                    data[id_insert,02],",",
+      #                                    data[id_insert,03],",",
+      #                                    data[id_insert,04],",",
+      #                                    data[id_insert,05],",",
+      #                                    data[id_insert,06],",",
+      #                                    data[id_insert,07],",",
+      #                                    data[id_insert,08],",",
+      #                                    data[id_insert,09],",",
+      #                                    data[id_insert,10],",",
+      #                                    data[id_insert,11],",",
+      #                                    data[id_insert,12],",",
+      #                                    data[id_insert,13],",",
+      #                                    data[id_insert,14],",",
+      #                                    data[id_insert,15],",",
+      #                                    data[id_insert,16],",",
+      #                                    data[id_insert,17],",",
+      #                                    data[id_insert,18],",",
+      #                                    data[id_insert,19],
+      #                                    collapse = "),(",sep=""),")",sep=""),
+      #                    paste(" ON DUPLICATE KEY UPDATE "))
       
-      query_str <- paste("INSERT INTO NABEL_HAE (",paste(colnames(data)[1:19],collapse = ","),") ",sep="")
-      query_str <- paste(query_str,"VALUES" )
-      query_str <- paste(query_str,
-                         paste("(",paste(data[id_insert,01],",",
-                                         data[id_insert,02],",",
-                                         data[id_insert,03],",",
-                                         data[id_insert,04],",",
-                                         data[id_insert,05],",",
-                                         data[id_insert,06],",",
-                                         data[id_insert,07],",",
-                                         data[id_insert,08],",",
-                                         data[id_insert,09],",",
-                                         data[id_insert,10],",",
-                                         data[id_insert,11],",",
-                                         data[id_insert,12],",",
-                                         data[id_insert,13],",",
-                                         data[id_insert,14],",",
-                                         data[id_insert,15],",",
-                                         data[id_insert,16],",",
-                                         data[id_insert,17],",",
-                                         data[id_insert,18],",",
-                                         data[id_insert,19],
-                                         collapse = "),(",sep=""),")",sep=""),
-                         paste(" ON DUPLICATE KEY UPDATE "))
-      
-      for(ii in 2:19){
-        if(ii==19){
-          query_str <- paste(query_str,paste(colnames(data)[ii],"=VALUES(",colnames(data)[ii],"); ",sep=""))
-        }else{
-          query_str <- paste(query_str,paste(colnames(data)[ii],"=VALUES(",colnames(data)[ii],"), ",sep=""))
-        }
-      }
+      # for(ii in 2:19){
+      #   if(ii==19){
+      #     query_str <- paste(query_str,paste(colnames(data)[ii],"=VALUES(",colnames(data)[ii],"); ",sep=""))
+      #   }else{
+      #     query_str <- paste(query_str,paste(colnames(data)[ii],"=VALUES(",colnames(data)[ii],"), ",sep=""))
+      #   }
+      # }
       
       
       
       drv             <- dbDriver("MySQL")
       con<-carboutil::get_conn(group=DB_group)
-      res             <- dbSendQuery(con, query_str)
+      res             <- dbSendQuery(con, qs)
+      dbBind(res, dt)
       dbClearResult(res)
       dbDisconnect(con)
     }

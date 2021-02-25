@@ -18,6 +18,9 @@ library(openair)
 library(DBI)
 require(RMySQL)
 require(chron)
+library(dplyr)
+library(dbplyr)
+
 
 ## ----------------------------------------------------------------------------------------------------------------------
 
@@ -58,36 +61,49 @@ RefMeasExclusionPeriods$timestamp_to   <- as.numeric(difftime(time1=RefMeasExclu
 
 if(T){
   
+  #Get latest measurement date in db
+  con <- carboutil::get_conn(group=DB_group)
+  max_ts <- collect(tbl(con, dplyr::sql("SELECT FROM_UNIXTIME(MAX(timestamp)) AS MAX_timestamp FROM NABEL_HAE WHERE CO2<>-999 or NO2<>-999 or O3<>-999")))
+  last_date_in_db <- lubridate::date(max_ts$MAX_timestamp)
+
+
+  
+
+  # Import only files from 2020-03-13 and later (Exchange of LICOR by Picarro instrument on 2020-03-11)
+  chng_date <- lubridate::ymd(200313)
   files   <- list.files(path=fdirectory,pattern = "HAE Gase und Meteo_",full.names = T)
+  file_dates <- lubridate::ymd(stringr::str_match(basename(files), "\\d{6}"))
+
+
+
+  valid <- (file_dates > (last_date_in_db - lubridate::days(x=30))) & file_dates > chng_date  
+  files <- files[valid]
+  print(files)
   n_files <- length(files)
-  
-  #
-  
   for(ith_file in 1:n_files){
     
-    # Import only files from 2020-03-13 and later (Exchange of LICOR by Picarro instrument on 2020-03-11)
     
-    file_date_yy <- as.numeric(substr(files[ith_file],nchar(files[ith_file])-10+1,nchar(files[ith_file])-8))
-    file_date_mm <- as.numeric(substr(files[ith_file],nchar(files[ith_file])- 8+1,nchar(files[ith_file])-6))
-    file_date_dd <- as.numeric(substr(files[ith_file],nchar(files[ith_file])- 6+1,nchar(files[ith_file])-4))
+    # file_date_yy <- as.numeric(substr(files[ith_file],nchar(files[ith_file])-10+1,nchar(files[ith_file])-8))
+    # file_date_mm <- as.numeric(substr(files[ith_file],nchar(files[ith_file])- 8+1,nchar(files[ith_file])-6))
+    # file_date_dd <- as.numeric(substr(files[ith_file],nchar(files[ith_file])- 6+1,nchar(files[ith_file])-4))
     
-    str(files[ith_file])
+    # str(files[ith_file])
 
-    if(is.na(file_date_yy) | is.na(file_date_mm) | is.na(file_date_dd)){
-      stop("Check file selection.")
-    }
+    # if(is.na(file_date_yy) | is.na(file_date_mm) | is.na(file_date_dd)){
+    #   stop("Check file selection.")
+    # }
     
-    file_date <- strptime(paste(sprintf("%02.0f",file_date_yy),
-                                sprintf("%02.0f",file_date_mm),
-                                sprintf("%02.0f",file_date_dd),"000000",sep=""),"%y%m%d%H%M%S",tz="UTC")
+    # file_date <- strptime(paste(sprintf("%02.0f",file_date_yy),
+    #                             sprintf("%02.0f",file_date_mm),
+    #                             sprintf("%02.0f",file_date_dd),"000000",sep=""),"%y%m%d%H%M%S",tz="UTC")
     
-    if(file_date < strptime("20200313000000","%Y%m%d%H%M%S",tz="UTC")){
-      next
-    }
+    # if(file_date < strptime("20200313000000","%Y%m%d%H%M%S",tz="UTC")){
+    #   next
+    # }
     
     #
     
-    data <- read.table(file = files[ith_file],header = F,sep = ";",skip = 4)
+    data <- data.table::fread(file = files[ith_file],header = F,sep = ";",skip = 4, data.table=FALSE)
     
     
     if(!dim(data)[2]%in%c(22)){
@@ -208,52 +224,54 @@ if(T){
       MAX_timestamp <- 0
     }
     
-    #
-    
+    # 
     id_insert <- which(data$timestamp>MAX_timestamp)
     
     if(length(id_insert)>0){
+      con <- carboutil::get_conn(group=DB_group)
+      qs <- glue::glue_sql("REPLACE INTO NABEL_HAE ({`colnames(data)[1:21]`*}) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);", .con=con)
+      dt <- setNames(as.list(data[id_insert, 1:21]), NULL)
+      # query_str <- paste("INSERT INTO NABEL_HAE (",paste(colnames(data)[1:21],collapse = ","),") ",sep="")
+      # query_str <- paste(query_str,"VALUES" )
+      # query_str <- paste(query_str,
+      #                    paste("(",paste(data[id_insert,01],",",
+      #                                    data[id_insert,02],",",
+      #                                    data[id_insert,03],",",
+      #                                    data[id_insert,04],",",
+      #                                    data[id_insert,05],",",
+      #                                    data[id_insert,06],",",
+      #                                    data[id_insert,07],",",
+      #                                    data[id_insert,08],",",
+      #                                    data[id_insert,09],",",
+      #                                    data[id_insert,10],",",
+      #                                    data[id_insert,11],",",
+      #                                    data[id_insert,12],",",
+      #                                    data[id_insert,13],",",
+      #                                    data[id_insert,14],",",
+      #                                    data[id_insert,15],",",
+      #                                    data[id_insert,16],",",
+      #                                    data[id_insert,17],",",
+      #                                    data[id_insert,18],",",
+      #                                    data[id_insert,19],",",
+      #                                    data[id_insert,20],",",
+      #                                    data[id_insert,21],
+      #                                    collapse = "),(",sep=""),")",sep=""),
+      #                    paste(" ON DUPLICATE KEY UPDATE "))
       
-      query_str <- paste("INSERT INTO NABEL_HAE (",paste(colnames(data)[1:21],collapse = ","),") ",sep="")
-      query_str <- paste(query_str,"VALUES" )
-      query_str <- paste(query_str,
-                         paste("(",paste(data[id_insert,01],",",
-                                         data[id_insert,02],",",
-                                         data[id_insert,03],",",
-                                         data[id_insert,04],",",
-                                         data[id_insert,05],",",
-                                         data[id_insert,06],",",
-                                         data[id_insert,07],",",
-                                         data[id_insert,08],",",
-                                         data[id_insert,09],",",
-                                         data[id_insert,10],",",
-                                         data[id_insert,11],",",
-                                         data[id_insert,12],",",
-                                         data[id_insert,13],",",
-                                         data[id_insert,14],",",
-                                         data[id_insert,15],",",
-                                         data[id_insert,16],",",
-                                         data[id_insert,17],",",
-                                         data[id_insert,18],",",
-                                         data[id_insert,19],",",
-                                         data[id_insert,20],",",
-                                         data[id_insert,21],
-                                         collapse = "),(",sep=""),")",sep=""),
-                         paste(" ON DUPLICATE KEY UPDATE "))
-      
-      for(ii in 2:21){
-        if(ii==21){
-          query_str <- paste(query_str,paste(colnames(data)[ii],"=VALUES(",colnames(data)[ii],"); ",sep=""))
-        }else{
-          query_str <- paste(query_str,paste(colnames(data)[ii],"=VALUES(",colnames(data)[ii],"), ",sep=""))
-        }
-      }
+      # for(ii in 2:21){
+      #   if(ii==21){
+      #     query_str <- paste(query_str,paste(colnames(data)[ii],"=VALUES(",colnames(data)[ii],"); ",sep=""))
+      #   }else{
+      #     query_str <- paste(query_str,paste(colnames(data)[ii],"=VALUES(",colnames(data)[ii],"), ",sep=""))
+      #   }
+      # }
       
       
       
-      drv             <- dbDriver("MySQL")
-      con             <- carboutil::get_conn(group=DB_group)
-      res             <- dbSendQuery(con, query_str)
+      
+     
+      res <- dbSendQuery(con, qs)
+      dbBind(res, dt)
       dbClearResult(res)
       dbDisconnect(con)
     }

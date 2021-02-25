@@ -216,11 +216,11 @@ con             <- carboutil::get_conn(group=DB_group_out)
 res             <- dbSendQuery(con, query_str)
 dbClearResult(res)
 dbDisconnect(con)
-
+data$MEAS_HEIGHT <- 0
 #
 con <- carboutil::get_conn(group=DB_group_out)
 DBI::dbBegin(con)
-carboutil::write_chuncks(con, data[1:15],  "EMPA_LAEG")
+carboutil::write_chuncks(con, data[1:16],  "EMPA_LAEG")
 DBI::dbCommit(con)
 # N_dataPackets2insert <- 1e4
 

@@ -110,7 +110,7 @@ if(T){
       
       
       drv             <- dbDriver("MySQL")
-      con<-carboutil::get_conn( dbname=CS_DB_dbname, host="du-gsn1", port=3306, user=CS_DB_user, pass=CS_DB_pass)
+      con<-carboutil::get_conn(group='CarboSense')
       res             <- dbSendQuery(con, query_str)
       dbClearResult(res)
       dbDisconnect(con)
@@ -249,7 +249,7 @@ if(T){
       
       
       drv             <- dbDriver("MySQL")
-      con<-carboutil::get_conn( dbname=CS_DB_dbname, host="du-gsn1", port=3306, user=CS_DB_user, pass=CS_DB_pass)
+      con<-carboutil::get_conn(group="du-gsn1")
       res             <- dbSendQuery(con, query_str)
       dbClearResult(res)
       dbDisconnect(con)
