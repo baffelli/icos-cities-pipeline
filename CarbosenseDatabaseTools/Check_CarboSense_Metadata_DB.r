@@ -20,14 +20,10 @@ library(DBI)
 require(RMySQL)
 require(chron)
 
+dbFetch <- function(...) lubridate::with_tz(DBI::dbFetch(...), tz='UTC')
 
 ### ----------------------------------------------------------------------------------------------------------------------------
 
-# EMPA CarboSense DB information
-
-CS_DB_dbname <- "CarboSense"
-CS_DB_user   <- "muem"
-CS_DB_pass   <- ""
 
 ### ----------------------------------------------------------------------------------------------------------------------------
 
@@ -71,6 +67,8 @@ tbl_sensors$Date_UTC_from <- strptime(tbl_sensors$Date_UTC_from,"%Y-%m-%d %H:%M:
 tbl_sensors$Date_UTC_to   <- strptime(tbl_sensors$Date_UTC_to,  "%Y-%m-%d %H:%M:%S",tz="UTC")
 
 #
+
+
 
 query_str       <- paste("SELECT * FROM Location;",sep="")
 drv             <- dbDriver("MySQL")
@@ -243,7 +241,7 @@ for(ith_SUID in 1:n_u_SensorUnit_ID){
   for(ith_depl in 1:n_id_depl){
 
     if(tbl_deployment$Date_UTC_from[id_depl[ith_depl]]>=tbl_deployment$Date_UTC_to[id_depl[ith_depl]]){
-      stop(paste(u_SensorUnit_ID[ith_SUID])," >> DEPL Date_UTC_from >= Date_UTC_to <<")
+      stop(paste(u_SensorUnit_ID[ith_SUID])," >> DEPL Date_UTC_from >= Date_UTC_to <<",as.character(tbl_deployment[id_depl[ith_depl],]) )
     }
 
     if(ith_depl>1){
@@ -310,22 +308,29 @@ for(ith_cal in 1:dim(tbl_calibration)[1]){
     if(tbl_calibration$Date_UTC_from[ith_cal] >= tbl_sensors$Date_UTC_from[id_sensors[ith_sensor]] & tbl_calibration$Date_UTC_to[ith_cal] <= tbl_sensors$Date_UTC_to[id_sensors[ith_sensor]]){
       sensor_count <- sensor_count + 1
     }
-
-    if(tbl_calibration$Date_UTC_from[ith_cal] >= tbl_sensors$Date_UTC_from[id_sensors[ith_sensor]]
+    
+    if(tbl_calibration$Date_UTC_from[ith_cal] > tbl_sensors$Date_UTC_from[id_sensors[ith_sensor]]
        & tbl_calibration$Date_UTC_from[ith_cal] < tbl_sensors$Date_UTC_to[id_sensors[ith_sensor]]
        & tbl_calibration$Date_UTC_to[ith_cal] > tbl_sensors$Date_UTC_to[id_sensors[ith_sensor]]){
-      stop(paste(tbl_calibration$SensorUnit_ID[ith_cal])," >> CAL and SENSORS do not fit [1] <<")
+      print(tbl_calibration[ith_cal,])
+      print(tbl_sensors[id_sensors[ith_sensor],])
+      print(tbl_calibration$Date_UTC_from[ith_cal] >= tbl_sensors$Date_UTC_from[id_sensors[ith_sensor]])
+      print(tbl_calibration$Date_UTC_from[ith_cal] < tbl_sensors$Date_UTC_to[id_sensors[ith_sensor]])
+      print(tbl_calibration$Date_UTC_to[ith_cal] >= tbl_sensors$Date_UTC_to[id_sensors[ith_sensor]])
+      stop(paste(tbl_calibration$SensorUnit_ID[ith_cal])," >>Calibration: CAL and SENSORS do not fit [1] <<")
     }
 
     if(tbl_calibration$Date_UTC_to[ith_cal] > tbl_sensors$Date_UTC_from[id_sensors[ith_sensor]]
        & tbl_calibration$Date_UTC_to[ith_cal] <= tbl_sensors$Date_UTC_to[id_sensors[ith_sensor]]
        & tbl_calibration$Date_UTC_from[ith_cal] < tbl_sensors$Date_UTC_from[id_sensors[ith_sensor]]){
-      stop(paste(tbl_calibration$SensorUnit_ID[ith_cal])," >> CAL and SENSORS do not fit [2] <<")
+      print(tbl_calibration[ith_cal,])
+      print(tbl_sensors[id_sensors[ith_sensor],])
+      stop(paste(tbl_calibration$SensorUnit_ID[ith_cal])," >>Calibration: CAL and SENSORS do not fit [2] <<")
     }
   }
 
   if(sensor_count!=1){
-    stop(paste(tbl_calibration$SensorUnit_ID[ith_cal])," >> CAL and SENSORS do not fit [3] <<")
+    stop(paste(tbl_calibration$SensorUnit_ID[ith_cal])," >>Calibration: CAL and SENSORS do not fit [3] <<")
   }
 
 }
@@ -350,18 +355,18 @@ for(ith_depl in 1:dim(tbl_deployment)[1]){
     if(tbl_deployment$Date_UTC_from[ith_depl] >= tbl_sensors$Date_UTC_from[id_sensors[ith_sensor]]
        & tbl_deployment$Date_UTC_from[ith_depl] < tbl_sensors$Date_UTC_to[id_sensors[ith_sensor]]
        & tbl_deployment$Date_UTC_to[ith_depl] > tbl_sensors$Date_UTC_to[id_sensors[ith_sensor]]){
-      stop(paste(tbl_deployment$SensorUnit_ID[ith_depl])," >> CAL and SENSORS do not fit [1] <<")
+      stop(paste(tbl_deployment$SensorUnit_ID[ith_depl])," >> Deployment: CAL and SENSORS do not fit [1] <<")
     }
 
     if(tbl_deployment$Date_UTC_to[ith_depl] > tbl_sensors$Date_UTC_from[id_sensors[ith_sensor]]
        & tbl_deployment$Date_UTC_to[ith_depl] <= tbl_sensors$Date_UTC_to[id_sensors[ith_sensor]]
        & tbl_deployment$Date_UTC_from[ith_depl] < tbl_sensors$Date_UTC_from[id_sensors[ith_sensor]]){
-      stop(paste(tbl_deployment$SensorUnit_ID[ith_depl])," >> CAL and SENSORS do not fit [2] <<")
+      stop(paste(tbl_deployment$SensorUnit_ID[ith_depl])," >>Deployment:  CAL and SENSORS do not fit [2] <<")
     }
   }
 
   if(sensor_count!=1){
-    stop(paste(tbl_deployment$SensorUnit_ID[ith_depl])," >> CAL and SENSORS do not fit [3] <<")
+    stop(paste(tbl_deployment$SensorUnit_ID[ith_depl])," >>Deployment:  CAL and SENSORS do not fit [3] <<")
   }
 
 }
