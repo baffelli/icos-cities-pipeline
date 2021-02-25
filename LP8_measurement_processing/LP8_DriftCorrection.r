@@ -1063,7 +1063,8 @@ if(T){
             pos_REF_CO2 <- grep(pattern = paste(REF_site_selected,"[[:print:]]{1,5}","CO2$",sep=""),x = colnames(data))
           }
           
-          if(length(pos_REF_CO2)!=1){
+
+          if(length(pos_REF_CO2)>1){
             stop("'pos_REF_CO2' not unique!")
           }
           

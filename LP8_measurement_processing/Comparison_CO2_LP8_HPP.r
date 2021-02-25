@@ -101,6 +101,10 @@ if(!as.integer(args[1])%in%c(0,1,2,3,20,30)){
 
 query_str         <- paste("SELECT * FROM Deployment WHERE SensorUnit_ID BETWEEN 426 AND 445 and LocationName NOT IN ('DUE1','DUE2','DUE3','DUE4','MET1','DUE5');",sep="")
 
+
+query_str         <- paste("SELECT * FROM Deployment WHERE SensorUnit_ID = 444 and LocationName NOT IN ('DUE1','DUE2','DUE3','DUE4','MET1','DUE5');",sep="")
+
+
 drv               <- dbDriver("MySQL")
 con <-carboutil::get_conn()
 res               <- dbSendQuery(con, query_str)
@@ -123,7 +127,7 @@ weekly_statistics <- NULL
 ### ----------------------------------------------------------------------------------------------------------------------------
 
 for(ith_depl in 1:dim(tbl_depl)[1]){
-  
+  print(paste("The current deployment is", tbl_depl[ith_depl,]))
   depl_date_string <- paste(strftime(tbl_depl$Date_UTC_from[ith_depl],"%d%m%Y",tz="UTC"),"-",strftime(tbl_depl$Date_UTC_to[ith_depl],"%d%m%Y",tz="UTC"),sep="")
   
   # Compare pressure
@@ -135,6 +139,7 @@ for(ith_depl in 1:dim(tbl_depl)[1]){
   
   query_str         <- paste("SELECT timestamp, Pressure FROM ",HPP_ProcDataTblName," WHERE LocationName = '",tbl_depl$LocationName[ith_depl],"' and SensorUnit_ID = ",tbl_depl$SensorUnit_ID[ith_depl]," and timestamp >= ",tbl_depl$timestamp_from[ith_depl]," and timestamp <= ",tbl_depl$timestamp_to[ith_depl],";",sep="")
   drv               <- dbDriver("MySQL")
+  print(query_str)
   con <-carboutil::get_conn()
   res               <- dbSendQuery(con, query_str)
   tbl_HPP           <- dbFetch(res, n=-1)
@@ -143,18 +148,24 @@ for(ith_depl in 1:dim(tbl_depl)[1]){
   
   colnames(tbl_HPP) <- c("timestamp","HPP_pressure")
   
-  minTimestamp      <- min(tbl_HPP$timestamp)
-  maxTimestamp      <- max(tbl_HPP$timestamp)
+
+  HPP_fin <- tbl_HPP[is.finite(tbl_HPP$timestamp),]
+  minTimestamp      <- min(HPP_fin$timestamp)
+  maxTimestamp      <- max(HPP_fin$timestamp)
   
   # Import interpolated pressure
   
+  
   query_str         <- paste("SELECT timestamp, pressure FROM PressureInterpolation WHERE LocationName='",tbl_depl$LocationName[ith_depl],"' and timestamp >= ",minTimestamp," and timestamp <= ",maxTimestamp,";",sep="")
   drv               <- dbDriver("MySQL")
+  print(query_str)
   con <-carboutil::get_conn()
   res               <- dbSendQuery(con, query_str)
   tbl_pressure      <- dbFetch(res, n=-1)
   dbClearResult(res)
   dbDisconnect(con)
+
+
   
   query_str         <- paste("SELECT timestamp, height FROM PressureParameter WHERE timestamp >= ",minTimestamp," and timestamp <= ",maxTimestamp,";",sep="")
   drv               <- dbDriver("MySQL")
@@ -312,7 +323,7 @@ for(ith_depl in 1:dim(tbl_depl)[1]){
   
   
   for(ith_SU in 1:n_u_SensorUnit_ID){
-    
+    print(paste("Comparing LP8", u_SensorUnit_ID[ith_SU]))
     # Import processed LP8 data
     
     query_str         <- paste("SELECT * FROM ",LP8_ProcDataTblName," WHERE LocationName='",Corresponding_LP8_LocationName,"' and SensorUnit_ID=",u_SensorUnit_ID[ith_SU]," ",sep="")

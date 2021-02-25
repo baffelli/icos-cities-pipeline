@@ -456,6 +456,8 @@ if(T){
 
 # Compute daily CO2 minimum bands for the groups
 
+print(REF_HPP[1:10,])
+
 n_groups <- 3
 
 mean_CO2    <- matrix(NA,ncol=n_groups,nrow=dim(REF_HPP)[1])
@@ -485,7 +487,9 @@ for(ith_group in 1:n_groups){
     rng_CO2_minimum    <- 15
   }
   
-  n_sites_grp[,ith_group] <- apply(!is.na(REF_HPP[,id_REF_HPP]),1,sum)
+  print(REF_HPP[,id_REF_HPP])
+
+  n_sites_grp[,ith_group] <- ifelse(!is.null(dim(REF_HPP[,id_REF_HPP])), apply(!is.na(REF_HPP[,id_REF_HPP]),1,sum), 0)
   
   id <- which(n_sites_grp[,ith_group]==1)
   if(length(id)>0){
