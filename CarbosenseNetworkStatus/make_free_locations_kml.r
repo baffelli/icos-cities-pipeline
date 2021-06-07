@@ -25,8 +25,9 @@ WHERE LocationName NOT IN
 (
 SELECT DISTINCT LocationName
 FROM Deployment
+WHERE Date_UTC_to >= CURDATE()
 )
-AND Canton NOT IN ('F','DE')
+AND Canton NOT IN ('F', 'DE') AND Date_UTC_to >= CURDATE() AND LocationName NOT IN ('DUE1', 'DUE2', 'DUE3', 'DUE4', 'DUE5', 'MET1')
 "
 
 

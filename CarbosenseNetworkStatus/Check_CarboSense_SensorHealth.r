@@ -174,7 +174,7 @@ for(ith_SUID in 1:n_SensorUnit_IDs){
   
   # Location info
   
-  id_loc <- which(tbl_deployment$LocationName[id_SU_depl]==tbl_location$LocationName)
+  id_loc <- which(tbl_deployment$LocationName[id_SU_depl]==tbl_location$LocationName & tbl_deployment$Date_UTC_from[id_SU_depl] >=tbl_location$Date_UTC_from)
   
   if(length(id_loc)==1){
     report$Y_LV03[ith_SUID]    <- tbl_location$Y_LV03[id_loc]

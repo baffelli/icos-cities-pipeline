@@ -99,8 +99,13 @@ for(ith_depl in 1:dim(tbl_depl)[1]){
   
   #
   
-  id_LOC_HPP   <- which(tbl_loc$LocationName == tbl_depl$LocationName[ith_depl])
+  id_LOC_HPP   <- which(tbl_loc$LocationName == tbl_depl$LocationName[ith_depl] & tbl_depl$Date_UTC_from[ith_depl] >= tbl_loc$Date_UTC_from)
+  print(tbl_depl$LocationName[ith_depl])
+  #tbl_loc$Date_UTC_from <= tbl_depl$Date_UTC_from[ith_depl] &
+  #tbl_loc$Date_UTC_to >= tbl_depl$Date_UTC_to[ith_depl])
   id_LOC_MCH   <- which(tbl_loc$Network == "METEOSWISS")
+
+
   
   id_dist_ok   <- which(sqrt((tbl_loc$Y_LV03[id_LOC_MCH]-tbl_loc$Y_LV03[id_LOC_HPP])^2 + (tbl_loc$X_LV03[id_LOC_MCH]-tbl_loc$X_LV03[id_LOC_HPP])^2) < 15000)
   
@@ -157,6 +162,15 @@ for(ith_depl in 1:dim(tbl_depl)[1]){
     id_ok   <- which(!is.na(data$H2O) & !is.na(data$HPP_H2O))
     n_id_ok <- length(id_ok)
     
+    if(n_id_ok==0){
+      print(id_dist_ok)
+      print(tbl_MCH_sites$LocationName[ith_MCH_site])
+      print(tbl_HPP)
+      print(data)
+    }
+    
+
+
     RMSE    <- sqrt( sum( (data$H2O[id_ok]-data$HPP_H2O[id_ok])^2 ) / n_id_ok)
     corCoef <- cor(x = data$H2O[id_ok],y = data$HPP_H2O[id_ok],use = "complete.obs",method = "pearson")
     

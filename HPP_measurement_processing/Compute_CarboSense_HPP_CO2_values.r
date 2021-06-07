@@ -287,7 +287,8 @@ for(ith_SensorUnit_ID_2_proc in 1:n_SensorUnit_ID_2_proc){
       
       # Get information about the location of the deployment and the installation
       
-      id_loc <- which(tbl_location$LocationName==tbl_deployment$LocationName[id_depl[ith_depl]])
+      id_loc <- which(tbl_location$LocationName==tbl_deployment$LocationName[id_depl[ith_depl]]&tbl_location$Date_UTC_from <= tbl_deployment$Date_UTC_from[id_depl[ith_depl]])
+      print(paste("ID loc is:", id_loc))
       if(length(id_loc)==0){
         next
       }
@@ -298,6 +299,7 @@ for(ith_SensorUnit_ID_2_proc in 1:n_SensorUnit_ID_2_proc){
       timeFilter <- paste("time >= ",tbl_deployment$timestamp_from[id_depl[ith_depl]],"s AND time < ",tbl_deployment$timestamp_to[id_depl[ith_depl]],"s",sep="")
       device     <- paste("/",SensorUnit_ID_2_proc[ith_SensorUnit_ID_2_proc],"/",sep="")
       print(timeFilter)
+      print(paste("requesting data for", SensorUnit_ID_2_proc[ith_SensorUnit_ID_2_proc]))
       tmp0 <- tryCatch({
         query(domain=DL_DB_domain,
               apiKey=DL_DB_apiKey,
@@ -306,8 +308,8 @@ for(ith_SensorUnit_ID_2_proc in 1:n_SensorUnit_ID_2_proc){
               location = "//",
               sensor = "/calibration|senseair-hpp-ir-signal|senseair-hpp-pressure-filtered|senseair-hpp-status|senseair-hpp-temperature-mcu|sensirion-sht21-humidity|sensirion-sht21-temperature/",
               channel = "//",
-              aggFunc = "",
-              aggInterval = "",
+              aggFunc = "mean",
+              aggInterval = "1m",
               doCast = FALSE,
               timezone = 'UTC')
       },
@@ -320,7 +322,7 @@ for(ith_SensorUnit_ID_2_proc in 1:n_SensorUnit_ID_2_proc){
       if(is.null(tmp0)){
         next
       }
-      
+      print(paste("received data for", SensorUnit_ID_2_proc[ith_SensorUnit_ID_2_proc]))
       # previously: doCast = TRUE and without following two lines (31 Jan 2019)
       # require(reshape)
       # tmp0 <- data.frame(reshape::cast(tmp0, time ~ series, fun.aggregate = mean), check.names = FALSE)
@@ -335,7 +337,7 @@ for(ith_SensorUnit_ID_2_proc in 1:n_SensorUnit_ID_2_proc){
       tmp0      <- dcast.data.table(tmp0, time ~ series, fun.aggregate = mean,value.var = "value")
       tmp0$time <- strptime("19700101000000","%Y%m%d%H%M%S",tz="UTC") + tmp0$time/1e3
       tmp0      <- as.data.frame(tmp0)
-      
+      print(paste("Finished reshaping data for", SensorUnit_ID_2_proc[ith_SensorUnit_ID_2_proc]))
       
       # Modification of colnames
       
@@ -380,11 +382,8 @@ for(ith_SensorUnit_ID_2_proc in 1:n_SensorUnit_ID_2_proc){
       
       colnames(sensor_data) <- cn_required
       
-      
-      # Add location name
-      
-      sensor_data$LocationName <- tbl_deployment$LocationName[id_depl[ith_depl]]
-      
+   
+
       rm(cn_required,n_cn_required,tmp0)
       gc()
       
@@ -416,21 +415,31 @@ for(ith_SensorUnit_ID_2_proc in 1:n_SensorUnit_ID_2_proc){
         sensor_data$hpp_pressure[data2cal] <- tbl_calPar$PAR_00[id_cal_pressure[ith_sensor]] + tbl_calPar$PAR_01[id_cal_pressure[ith_sensor]] * sensor_data$hpp_pressure[data2cal]
       }
       
-      
-      
+      print(paste("Before averaging",nrow(sensor_data)))
+
+
       # Force time to full preceding minute / check data imported from Influx-DB (no duplicates)
+      sensor_data <- dplyr::arrange(sensor_data, date)
+      sensor_data <- openair::timeAverage(sensor_data, avg.time='1 min')
       
-      sensor_data           <- sensor_data[order(sensor_data$date),]
-      sensor_data$date      <- as.POSIXct(sensor_data$date)
+      lubridate::second(sensor_data$date) <- 0
+      sensor_data$timestamp <- as.numeric(sensor_data$date)
+      # Add location name
+      sensor_data$LocationName <- tbl_deployment$LocationName[id_depl[ith_depl]]
       
-      sensor_data$timestamp <- as.numeric(difftime(time1=sensor_data$date,time2=strptime("19700101000000","%Y%m%d%H%M%S",tz="UTC"),tz="UTC",units="secs"))
-      sensor_data           <- sensor_data[c(T,diff(sensor_data$timestamp)>50),]
+      # sensor_data           <- sensor_data[c(T,diff(sensor_data$timestamp)>20),]
+      # sensor_data           <- sensor_data[order(sensor_data$date),]
+      # sensor_data$date      <- as.POSIXct(sensor_data$date)
+      
+      #sensor_data$timestamp <- as.numeric(difftime(time1=sensor_data$date,time2=lubridate::origin))
+      #sensor_data           <- sensor_data[c(T,diff(sensor_data$timestamp)>50),]
       
       sensor_data$date      <- strptime(strftime(sensor_data$date,"%Y%m%d%H%M00",tz="UTC"),"%Y%m%d%H%M%S",tz="UTC")
-      sensor_data$timestamp <- as.numeric(difftime(time1=sensor_data$date,time2=strptime("19700101000000","%Y%m%d%H%M%S",tz="UTC"),tz="UTC",units="secs"))
-      
+      # sensor_data$timestamp <- as.numeric(difftime(time1=sensor_data$date,time2=strptime("19700101000000","%Y%m%d%H%M%S",tz="UTC"),tz="UTC",units="secs"))
+      print(sensor_data)
       sensor_data           <- sensor_data[!duplicated(sensor_data$date),]
-      
+      print(paste("After averaging",nrow(sensor_data)))
+    
       # Set CO2 measurements to NA if status !=0
       
       id_set_to_NA <- which(!sensor_data$hpp_status%in%c(0,32))
@@ -470,8 +479,7 @@ for(ith_SensorUnit_ID_2_proc in 1:n_SensorUnit_ID_2_proc){
       gc()
       
       #Absolute humidity
-      sensor_data$sht21_H2O_1 <- carboutil::relative_to_absolute_humidity(sensor_data$sht21_RH, sensor_data$sht21_T+273.15, sensor_data$hpp_pressure*1e2)
-      
+      sensor_data$sht21_H2O <- carboutil::relative_to_absolute_humidity(sensor_data$sht21_RH, sensor_data$sht21_T+273.15, sensor_data$hpp_pressure*1e2)
       # BCP
       if(!is.null(tbl_refGasCylDepl)){
         
@@ -490,8 +498,11 @@ for(ith_SensorUnit_ID_2_proc in 1:n_SensorUnit_ID_2_proc){
           }
         }
         
-        sensor_data$valveNo <- NA
-        sensor_data$valveNo[sensor_data$valve==1] <- cumsum( c(0,as.numeric(diff(sensor_data$timestamp[sensor_data$valve==1])>600))  )
+        sensor_data$valveNo <- 0
+        dplyr::mutate(sensor_data,
+        d=c(0,diff(coalesce(valve,0))),
+        valveNo = cumsum(d==1))
+        #sensor_data$valveNo[sensor_data$valve==1] <- cumsum( c(0,as.numeric(diff(sensor_data$timestamp[sensor_data$valve==1])>600))  )
         
       }
       
@@ -653,7 +664,7 @@ for(ith_SensorUnit_ID_2_proc in 1:n_SensorUnit_ID_2_proc){
           }
           
           
-          
+       
           
           # CO2_cal --> [mol/mol]
           
@@ -670,10 +681,10 @@ for(ith_SensorUnit_ID_2_proc in 1:n_SensorUnit_ID_2_proc){
       
       # 
       
-      if(!is.null(SelectedLocationName) & SensorUnit_ID_2_proc[ith_SensorUnit_ID_2_proc]!=443){
-        next
-      }
-      
+      # if(!is.null(SelectedLocationName) & SensorUnit_ID_2_proc[ith_SensorUnit_ID_2_proc]!=443){
+      #   next
+      # }
+    
       # Delete all the data from this SensorUnit from table "CarboSense_CO2" (or InsertDBTableName)
       
       if(PARTIAL_COMPUTATION==T){
@@ -689,12 +700,14 @@ for(ith_SensorUnit_ID_2_proc in 1:n_SensorUnit_ID_2_proc){
         #query_str <- paste(query_str, "AND timestamp >= ",Computation_timestamp_from_DB,";",sep="")
       }else{
         query_str <- stringr::str_interp("DELETE FROM ${InsertDBTableName} WHERE SensorUnit_ID = ? AND LocationName = ? AND timestamp >= ? AND timestamp <= ?;")
-         query_params <- list(SensorUnit_ID_2_proc[ith_SensorUnit_ID_2_proc], tbl_deployment$LocationName[id_depl[ith_depl]], tbl_deployment$timestamp_from[id_depl[ith_depl]], tbl_deployment$timestamp_to[id_depl[ith_depl]])
+        query_params <- list(SensorUnit_ID_2_proc[ith_SensorUnit_ID_2_proc], tbl_deployment$LocationName[id_depl[ith_depl]], tbl_deployment$timestamp_from[id_depl[ith_depl]], tbl_deployment$timestamp_to[id_depl[ith_depl]])
         #query_str <- paste("DELETE FROM ",InsertDBTableName," WHERE SensorUnit_ID = ",SensorUnit_ID_2_proc[ith_SensorUnit_ID_2_proc]," and LocationName = '",tbl_deployment$LocationName[id_depl[ith_depl]],"' ",sep="")
         #query_str <- paste(query_str, "AND timestamp >= ",tbl_deployment$timestamp_from[id_depl[ith_depl]]," AND timestamp <= ",tbl_deployment$timestamp_to[id_depl[ith_depl]],";",sep="")
       }
+
+
       
-      
+      print(paste("After",nrow(sensor_data))) 
       drv             <- dbDriver("MySQL")
       con <-carboutil::get_conn()
       res             <- dbSendQuery(con, query_str)
@@ -708,28 +721,30 @@ for(ith_SensorUnit_ID_2_proc in 1:n_SensorUnit_ID_2_proc){
       n_id_insert <- length(id_insert)
       # Substitution of NA with "-999"
       sensor_data <- mutate_at(sensor_data, c("CO2_CAL_BCP","CO2_CAL_DRY","CO2_CAL_BCP_DRY"), function(x) replace(x, is.na(x), -999) )
-      
+      #Find duplicates
+      dp <- which(duplicated(sensor_data[,c("timestamp","LocationName")]))
+      print(sensor_data[dp,])
       #
       
       if(n_id_insert>0){
-        
+        #print(paste("TO insert", sensor_data))
         print(paste("Insert data for SU",SensorUnit_ID_2_proc[ith_SensorUnit_ID_2_proc]))
         nins <- length(sensor_data$timestamp[id_insert])
-        print(nins)
         #List of values to insert
-          insert_df <- tibble(
-            LocationName=sensor_data$LocationName[id_insert],
-            SensorUnit_ID=rep(SensorUnit_ID_2_proc[ith_SensorUnit_ID_2_proc],nins),
-            timestamp=sensor_data$timestamp[id_insert],
-            CO2_CAL=sensor_data$CO2_CAL[id_insert],
-            CO2_CAL_DRY=sensor_data$CO2_CAL_DRY[id_insert],
-            CO2_CAL_ADJ=sensor_data$CO2_CAL_BCP[id_insert],
-            CO2_CAL_ADJ_DRY=sensor_data$CO2_CAL_BCP_DRY[id_insert],
-            H2O=sensor_data$sht21_H2O[id_insert],
-            Pressure=sensor_data$hpp_pressure[id_insert],
-            T=sensor_data$sht21_T[id_insert],
-            RH=sensor_data$sht21_RH[id_insert],
-            Valve=sensor_data$valve[id_insert])
+        insert_df <- tibble(
+          LocationName=sensor_data$LocationName[id_insert],
+          SensorUnit_ID=rep(SensorUnit_ID_2_proc[ith_SensorUnit_ID_2_proc],nins),
+          timestamp=sensor_data$timestamp[id_insert],
+          CO2_CAL=sensor_data$CO2_CAL[id_insert],
+          CO2_CAL_DRY=sensor_data$CO2_CAL_DRY[id_insert],
+          CO2_CAL_ADJ=sensor_data$CO2_CAL_BCP[id_insert],
+          CO2_CAL_ADJ_DRY=sensor_data$CO2_CAL_BCP_DRY[id_insert],
+          H2O=sensor_data$sht21_H2O[id_insert],
+          Pressure=sensor_data$hpp_pressure[id_insert],
+          T=sensor_data$sht21_T[id_insert],
+          RH=sensor_data$sht21_RH[id_insert],
+          Valve=sensor_data$valve[id_insert])
+          
           con <-carboutil::get_conn()
           dbWriteTable(con, InsertDBTableName, insert_df, append=TRUE, overwrite=FALSE)
           # #Parametrised query

@@ -32,7 +32,7 @@ ANALYSE_WINDSIT <- T
 
 ### ----------------------------------------------------------------------------------------------------------------------------
 
-query_str         <- paste("SELECT * FROM Deployment WHERE SensorUnit_ID BETWEEN 426 AND 445 and LocationName NOT IN ('DUE1','DUE2','DUE3','DUE4','DUE5','MET1','DUE5');",sep="")
+query_str         <- paste("SELECT * FROM Deployment WHERE SensorUnit_ID BETWEEN 426 AND 445 and LocationName NOT IN ('DUE1','DUE2','DUE3','DUE4','DUE5','MET1','DUE5','DUE6');",sep="")
 drv               <- dbDriver("MySQL")
 con <-carboutil::get_conn()
 res               <- dbSendQuery(con, query_str)
@@ -61,7 +61,8 @@ if(ANALYSE_WINDSIT){
 ### ----------------------------------------------------------------------------------------------------------------------------
 
 for(ith_depl in 1:dim(tbl_depl)[1]){
-  
+  print(paste("Deployment row", ith_depl))
+  print(paste("Processing deployment", paste(tbl_depl[ith_depl,])))
 
   # Compare CO2 measurements
   # ------------------------
@@ -138,16 +139,22 @@ for(ith_depl in 1:dim(tbl_depl)[1]){
     tbl_REF$date <- strptime("19700101000000","%Y%m%d%H%M%S",tz="UTC") + tbl_REF$timestamp
     
     #
-    
-    data <- merge(tbl_HPP,tbl_REF)
-    
-    
+    print("combining data with reference")
+    data <- dplyr::left_join(tbl_HPP,tbl_REF, by=c("timestamp","date"))
+    if(dim(data)[1]==0){
+      next()
+    }
+
     #
-    
+    print("Averaging")
     data <- timeAverage(mydata = data,avg.time = "10 min",statistic = "mean")
     
     #
-    
+    if(dim(data)[1]==0){
+      next()
+    }
+    if (T){
+
     id_ok   <- which(!is.na(data$CO2) & !is.na(data$HPP_CO2))
     n_id_ok <- length(id_ok)
     
@@ -514,6 +521,7 @@ for(ith_depl in 1:dim(tbl_depl)[1]){
       dev.off()
       par(def_par)
     }
+  }
   }
 }
 

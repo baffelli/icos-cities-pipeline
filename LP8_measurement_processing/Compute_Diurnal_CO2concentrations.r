@@ -136,6 +136,8 @@ if(!dir.exists(resultdir)){
 diurnalVariations     <- list()
 dV_cc                 <- 0
 
+if(FALSE){
+
 for(ith_depl in 1:dim(tbl_deployment)[1]){
   
   
@@ -153,12 +155,17 @@ for(ith_depl in 1:dim(tbl_deployment)[1]){
     next
   }
   
-  Height    <- tbl_location$h[which(tbl_location$LocationName==tbl_deployment$LocationName[ith_depl])]
-  X_LV03    <- tbl_location$X_LV03[which(tbl_location$LocationName==tbl_deployment$LocationName[ith_depl])]
-  Y_LV03    <- tbl_location$Y_LV03[which(tbl_location$LocationName==tbl_deployment$LocationName[ith_depl])]
-  LAT_WGS84 <- tbl_location$LAT_WGS84[which(tbl_location$LocationName==tbl_deployment$LocationName[ith_depl])]
-  LON_WGS84 <- tbl_location$LON_WGS84[which(tbl_location$LocationName==tbl_deployment$LocationName[ith_depl])]
-  Canton    <- tbl_location$Canton[which(tbl_location$LocationName==tbl_deployment$LocationName[ith_depl])]
+  loc_id <- which(tbl_location$LocationName==tbl_deployment$LocationName[ith_depl] & 
+  tbl_location$Date_UTC_from >= tbl_deployment$Date_UTC_from[ith_depl] &
+  tbl_location$Date_UTC_to <= tbl_deployment$Date_UTC_to[ith_depl] 
+  )
+
+  Height    <- tbl_location$h[loc_id]
+  X_LV03    <- tbl_location$X_LV03[loc_id]
+  Y_LV03    <- tbl_location$Y_LV03[loc_id]
+  LAT_WGS84 <- tbl_location$LAT_WGS84[loc_id]
+  LON_WGS84 <- tbl_location$LON_WGS84[loc_id]
+  Canton    <- tbl_location$Canton[loc_id]
   
   # import data
   query_str <- paste("SELECT timestamp, CO2, CO2_A, FLAG, O_FLAG FROM ",ProcMeasDBTableName," ",sep="")
@@ -309,7 +316,7 @@ for(ith_depl in 1:dim(tbl_deployment)[1]){
     par(def_par)
   }
 }
-
+}
 
 
 
@@ -326,22 +333,7 @@ table_names   <- c(paste("NABEL_",sites[1:4],sep=""),"UNIBE_BRM","EMPA_LAEG","UN
 for(ith_site in 1:n_sites){
   
   #
-  
-  id_loc_ref <- which(tbl_location$LocationName == sites[ith_site])
-  
-  if(sites[ith_site]=="DUE"){
-    id_loc_ref <- which(tbl_location$LocationName == "DUE1")
-  }
-  if(sites[ith_site]=="PAY"){
-    id_loc_ref <- which(tbl_location$LocationName == "PAYN")
-  }
-  
-  Height    <- tbl_location$h[id_loc_ref]
-  X_LV03    <- tbl_location$X_LV03[id_loc_ref]
-  Y_LV03    <- tbl_location$Y_LV03[id_loc_ref]
-  LAT_WGS84 <- tbl_location$LAT_WGS84[id_loc_ref]
-  LON_WGS84 <- tbl_location$LON_WGS84[id_loc_ref]
-  Canton    <- tbl_location$Canton[id_loc_ref]
+
   
   #
   
@@ -525,8 +517,33 @@ for(ith_site in 1:n_sites){
         mtext(text = "Number of measurements",side = 4,line = 2,cex=1.25)
         
         ##
-        
+          
+     
+
         if(species=="CO2"){
+          cur_dt <- min(data$date[which(data$year == yy & data$month == mm)])
+          id_loc_ref <- which(tbl_location$LocationName == sites[ith_site] & 
+          tbl_location$Date_UTC_from <= cur_dt &
+          tbl_location$Date_UTC_to >= cur_dt)
+         
+
+          if(sites[ith_site]=="DUE"){
+          id_loc_ref <- which(tbl_location$LocationName == "DUE1"  & tbl_location$Date_UTC_from <=  cur_dt &
+          tbl_location$Date_UTC_to >=  cur_dt)
+          }
+          if(sites[ith_site]=="PAY"){
+          id_loc_ref <- which(tbl_location$LocationName == "PAYN" & tbl_location$Date_UTC_from <=  cur_dt&
+          tbl_location$Date_UTC_to >=  cur_dt )
+          }
+          print(sites[ith_site])
+          print(id_loc_ref)
+          print(cur_dt)
+          Height    <- tbl_location$h[id_loc_ref]
+          X_LV03    <- tbl_location$X_LV03[id_loc_ref]
+          Y_LV03    <- tbl_location$Y_LV03[id_loc_ref]
+          LAT_WGS84 <- tbl_location$LAT_WGS84[id_loc_ref]
+          LON_WGS84 <- tbl_location$LON_WGS84[id_loc_ref]
+          Canton    <- tbl_location$Canton[id_loc_ref]
           dV_cc <- dV_cc + 1
           
           diurnalVariations[[dV_cc]] <- list(LocationName  = sites[ith_site],
@@ -688,7 +705,7 @@ pdf(file = figname, width=8, height=8, onefile=T, pointsize=12, colormodel="srgb
 par(mai=c(1,1,0.75,0.1),mfrow=c(1,1))
 
 
-for(year in c(2017,2018,2019)){
+for(year in c(2017,2018,2019,2020,2021)){
   for(month in 1:12){
     
     plot(NA,NA,xlim=c(0,24),ylim=c(350,550),main=paste(sprintf("%02.0f",month)," / ",year,sep=""),xlab="Time of day",ylab=expression(paste("CO"[2]*" [ppm]",sep="")),cex.main=1.25,cex.axis=1.25,cex.lab=1.25)
@@ -827,7 +844,8 @@ for(ith_cg in 1:9){
   #
   
   cg_sites <- NULL
-  
+  print(diurnalVariations)
+
   for(ith_dV in 1:length(diurnalVariations)){
     
     if((diurnalVariations[[ith_dV]]$Canton%in%cg_cantons | diurnalVariations[[ith_dV]]$LocationName%in%add_sites)
@@ -839,7 +857,7 @@ for(ith_cg in 1:9){
                                             stringsAsFactors = F))
     }
   }
-  
+  print(cg_sites)
   cg_sites     <- cg_sites[order(cg_sites$Height),]
   cg_sites     <- cg_sites[!duplicated(cg_sites$LocationName),]
   cg_sites$col <- rainbow(dim(cg_sites)[1])
