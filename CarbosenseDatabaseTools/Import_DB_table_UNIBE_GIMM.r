@@ -19,7 +19,8 @@ library(DBI)
 require(RMySQL)
 require(chron)
 library(MASS)
-
+library(dplyr)
+library(purrr)
 ## ----------------------------------------------------------------------------------------------------------------------
 
 ## DB information
@@ -46,10 +47,16 @@ RefMeasExclusionPeriods$timestamp_to   <- as.numeric(difftime(time1=RefMeasExclu
 
 ## ----------------------------------------------------------------------------------------------------------------------
 
+## Find latest measurement in GIMM
+  con <- carboutil::get_conn(group=DB_group_out)
+  last_meas <- collect(tbl(con, sql("SELECT MAX(timestamp) AS date FROM UNIBE_GIMM WHERE CO2_DRY <> -999")))$date
+  backfill_time <- last_meas - as.numeric(lubridate::days(20))
+  print(paste("Loading since", lubridate::as_datetime(backfill_time)))
 ## Read data from Database "empaGSN"
 
 
-query_str       <- paste("SELECT * from gimmiz_1min_cal WHERE timed >= 1483228800000;",sep="")
+query_str       <- paste(glue::glue_sql("SELECT * from gimmiz_1min_cal WHERE timed >= {backfill_time};"))
+print(query_str)
 drv             <- dbDriver("MySQL")
 con             <- carboutil::get_conn(group=DB_group_in)
 res             <- dbSendQuery(con, query_str)

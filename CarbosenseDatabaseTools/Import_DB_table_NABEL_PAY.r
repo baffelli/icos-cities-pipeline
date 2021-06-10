@@ -17,6 +17,8 @@ gc()
 library(DBI)
 require(RMySQL)
 require(chron)
+library(dplyr)
+library(purrr)
 
 ## ----------------------------------------------------------------------------------------------------------------------
 
@@ -61,6 +63,16 @@ if(T){
   files2  <- list.files(path=fdirectory,pattern = "NO NO2 O3 CO2 H2O MM1",full.names = T)
   files   <- c(files1,files2)
   n_files <- length(files)
+
+
+  #Find which data is already in db and compute set difference to determine which files to load
+  con <- carboutil::get_conn(group=DB_group)
+  dates_in_db <- collect(tbl(con, sql("SELECT DISTINCT DATE(FROM_UNIXTIME(timestamp)) AS date FROM NABEL_PAY WHERE CO2 <> -999")))$date
+  dates_in_files <- map(files, function(x) lubridate::as_date(stringr::str_extract(x,"\\d{6}")))
+  dbDisconnect(con)
+  files_to_load <-  match(setdiff(dates_in_files, dates_in_db), dates_in_files)
+
+  print(files_to_load)
   
   #  No flags for CO2 available; Calibration periods of the Picarro instrument every 25 hours)
   
@@ -76,7 +88,7 @@ if(T){
   
   #
   
-  for(ith_file in 1:n_files){
+  for(ith_file in files_to_load){
     
     data <- read.table(file = files[ith_file],header = F,sep = ";",skip = 4)
     

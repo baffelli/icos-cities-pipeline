@@ -17,7 +17,8 @@ gc()
 library(DBI)
 require(RMySQL)
 require(chron)
-
+library(dplyr)
+library(purrr)
 ## ----------------------------------------------------------------------------------------------------------------------
 
 ## DB information
@@ -39,14 +40,27 @@ fdirectory <- "/project/CarboSense/Win_K/Daten/Stationen/DUE/"
 # - data files contain one minute data [date, values of NABEL measurement programm at DUE plus respective flags]
 # - date refers to CET
 
+
+
+
 if(T){
-  
+  print("Loading NABEL files")
   files   <- list.files(path=fdirectory,pattern = "CarboSens_",full.names = T)
-  n_files <- length(files)
-  #
-  
-  for(ith_file in 1:n_files){
-    
+
+  #Get dates of data in DB
+  con <- carboutil::get_conn(group=DB_group)
+  dates_in_db <- collect(tbl(con, sql("SELECT DISTINCT DATE(FROM_UNIXTIME(timestamp)) AS date FROM NABEL_DUE")))$date
+
+  #Get dates of files
+  dates_in_files <- map(files, function(x) lubridate::as_date(stringr::str_extract(x,"\\d{6}")))
+
+  #Get dates to load
+  files_to_load <-  match(setdiff(dates_in_files, dates_in_db), dates_in_files)
+
+  n_files <- length(files_to_load)
+  print(paste("In total", n_files, " files must be loaded"))
+  for(ith_file in files_to_load){
+    print(paste("Loading NABEL file:", files[ith_file]))
     data <- read.table(file = files[ith_file],header = F,sep = ";",skip = 4)
     colnames(data) <- c("timestamp","O3","O3_F","NO2","NO2_F","NO","NO_F","CO","CO_F","PM10_kont","PM10_kont_F","BabsM_25","BabsM_25_F","T","T_F","RH","RH_F","STRGLO","STRGLO_F","rain","rain_F","pressure","pressure_F","WIRI1","WIRI1_F","WIGE1","WIGE1_F","WIGEM1","WIGEM1_F","WIRI2","WIRI2_F","WIGE2","WIGE2_F","WIGEM2","WIGEM2_F")
     
@@ -312,22 +326,20 @@ if(F){
 
 
 if(T){
-  
+  print("Loading picarro data")
+  con <- carboutil::get_conn(group=DB_group)
+  dates_in_db <- collect(tbl(con, sql("SELECT DISTINCT DATE(FROM_UNIXTIME(timestamp)) AS date FROM NABEL_DUE WHERE CO2 <> -999")))$date
   files    <- list.files(path = fdirectory, pattern = "DUE Test CO2",full.names = T)
-  n_files  <- length(files)
+
+  #Get dates of files
+  dates_in_files <- map(files, function(x) lubridate::as_date(stringr::str_extract(x,"\\d{6}")))
+
+  #Get dates to load
+  files_to_load <-  match(setdiff(dates_in_files, dates_in_db), dates_in_files)
+
+  files_ok <- unlist(map(files[files_to_load], function(x) file.size(x) > 5000))
   
-  files_ok <- rep(T,n_files)
-  
-  for(ith_file in 1:n_files){
-    
-    s <- file.size(files[ith_file])
-    
-    if(s<5000){
-      files_ok[ith_file] <- F
-    }
-  }
-  
-  files   <- files[files_ok]
+  files   <- files[files_to_load][files_ok]
   n_files <- length(files)
   
   rm(s,files_ok)
@@ -336,7 +348,7 @@ if(T){
   #  
   
   for(ith_file in 1:n_files){
-    
+    print(paste("Loading file", files[ith_file], ith_file, "out of", n_files))
     data_ref <- read.table(file = files[ith_file],sep=";",as.is=T,skip=4,header=F)
     
     # Type 1 file

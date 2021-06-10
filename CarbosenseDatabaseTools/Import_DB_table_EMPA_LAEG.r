@@ -27,7 +27,7 @@ args <- commandArgs(trailingOnly=TRUE)
 if(is.na(args[1]) | ! args[1] %in% c('T','F')){
   stop('First command line argument must be either F or T')
 } else{
-  partial <- args[1]
+  partial <- as.logical(args[1])
 }
 
 
@@ -61,7 +61,7 @@ RefMeasExclusionPeriods$timestamp_to   <- as.numeric(difftime(time1=RefMeasExclu
 
 ## Get last entry
 con   <- carboutil::get_conn(group=DB_group_out) 
-ld <- collect(tbl(con, sql("SELECT MAX(timestamp) AS last_date FROM EMPA_LAEG")))
+ld <- collect(tbl(con, sql("SELECT MAX(timestamp) AS last_date FROM EMPA_LAEG WHERE CO2 <> -999")))
 
 
 ## Compute backfill timestamp

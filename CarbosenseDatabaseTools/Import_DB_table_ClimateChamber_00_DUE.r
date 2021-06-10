@@ -19,21 +19,15 @@ library(DBI)
 require(RMySQL)
 require(chron)
 library(MASS)
-
+library(tibble)
 
 ## ----------------------------------------------------------------------------------------------------------------------
 
 ## Directories
 
-fdirectory <- "K:/Carbosense/Data/Klimakammer_Versuche_27022017_XXXXXXXX"
+fdirectory <- "/project/CarboSense/Win_CS/Data/Klimakammer_Versuche_27022017_XXXXXXXX/"
 
 ### ----------------------------------------------------------------------------------------------------------------------------
-
-# EMPA CarboSense DB information
-
-CS_DB_dbname <- "CarboSense"
-CS_DB_user   <- ""
-CS_DB_pass   <- ""
 
 ## ----------------------------------------------------------------------------------------------------------------------
 
@@ -46,6 +40,7 @@ CS_DB_pass   <- ""
 if(T){
   
   files   <- list.files(path=fdirectory,pattern = "_MM1.csv",full.names = T)
+  print(files)
   n_files <- length(files)
   
   #
@@ -110,7 +105,7 @@ if(T){
       
       
       drv             <- dbDriver("MySQL")
-      con<-carboutil::get_conn(group='CarboSense')
+      con<-carboutil::get_conn()
       res             <- dbSendQuery(con, query_str)
       dbClearResult(res)
       dbDisconnect(con)
@@ -134,18 +129,18 @@ if(T){
 
 if(T){
   
-  files   <- list.files(path=fdirectory,pattern = "Klimakammerdaten_",full.names = T)
+  files   <- list.files(path=fdirectory,pattern = "Klimakammerdaten_.+.csv",full.names = T)
   n_files <- length(files)
   
   #
   
   for(ith_file in 1:n_files){
+    print( files[ith_file])
     
     data <- read.table(file = files[ith_file], header = T,sep = ";",skip=3)
     data <- data[,1:5]
     colnames(data) <- c("timestamp","T_Soll","T","RH_Soll","RH")
     data <- as.data.frame(data,stringsAsFactors=F)
-    
     # Date (UTC; begin of interval)
     
     # Format with/without seconds
@@ -160,18 +155,27 @@ if(T){
     data$timestamp <- strptime(data$timestamp,"%d.%m.%Y %H:%M:%S",tz="UTC")
     
     # Daylight saving time
-    
+    # TODO : import transition from tz database
     df_daylightSavingTime   <- NULL
-    df_daylightSavingTime   <- rbind(df_daylightSavingTime,data.frame(from = strptime("26.03.2017 02:00","%d.%m.%Y %H:%M",tz="UTC"),
-                                                                      to   = strptime("29.10.2017 03:00","%d.%m.%Y %H:%M",tz="UTC"),
-                                                                      stringsAsFactors = F))
-    df_daylightSavingTime   <- rbind(df_daylightSavingTime,data.frame(from = strptime("25.03.2018 02:00","%d.%m.%Y %H:%M",tz="UTC"),
-                                                                      to   = strptime("28.10.2018 03:00","%d.%m.%Y %H:%M",tz="UTC"),
-                                                                      stringsAsFactors = F))
-    df_daylightSavingTime   <- rbind(df_daylightSavingTime,data.frame(from = strptime("30.03.2019 02:00","%d.%m.%Y %H:%M",tz="UTC"),
-                                                                      to   = strptime("26.10.2019 03:00","%d.%m.%Y %H:%M",tz="UTC"),
-                                                                      stringsAsFactors = F))
-    
+    fmt <- "%d.%m.%Y %H:%M"
+    # df_daylightSavingTime
+    # df_daylightSavingTime   <- rbind(df_daylightSavingTime,data.frame(from = strptime("26.03.2017 02:00",fmt,tz="UTC"),
+    #                                                                   to   = strptime("29.10.2017 03:00",fmt,tz="UTC"),
+    #                                                                   stringsAsFactors = F))
+    # df_daylightSavingTime   <- rbind(df_daylightSavingTime,data.frame(from = strptime("26.03.2017 02:00",fmt,tz="UTC"),
+    #                                                                   to   = strptime("28.10.2018 03:00",fmt,tz="UTC"),
+    #                                                                   stringsAsFactors = F))
+    # df_daylightSavingTime   <- rbind(df_daylightSavingTime,data.frame(from = strptime("30.03.2019 02:00",fmt,tz="UTC"),
+    #                                                                   to   = strptime("26.10.2019 03:00",fmt,tz="UTC"),
+    #                                                                   stringsAsFactors = F))
+    df_daylightSavingTime <- tribble(
+      ~from, ~to,
+      strptime("26.03.2017 02:00",fmt,tz="UTC"), strptime("29.10.2017 03:00",fmt,tz="UTC"),
+      strptime("26.03.2017 02:00",fmt,tz="UTC"), strptime("28.10.2018 03:00",fmt,tz="UTC"),
+      strptime("30.03.2019 02:00",fmt,tz="UTC"), strptime("26.10.2019 03:00",fmt,tz="UTC"),
+      strptime("29.03.2020 02:00",fmt,tz="UTC"), strptime("25.10.2019 03:00",fmt,tz="UTC"),
+      strptime("28.03.2021 02:00",fmt,tz="UTC"), strptime("31.10.2019 03:00",fmt,tz="UTC")
+      ) %>% tidyr::unnest(cols=c(from, to))
 
     for(ith_dst in 1:dim(df_daylightSavingTime)[1]){
       id_daylightSavingTime   <- which(data$timestamp>=df_daylightSavingTime$from[ith_dst] & data$timestamp<=df_daylightSavingTime$to[ith_dst])
@@ -223,7 +227,7 @@ if(T){
                        & !is.na(data$T_Soll)
                        & !is.na(data$RH)
                        & !is.na(data$RH_Soll))
-    
+    print(data[1:100,])
     if(length(id_insert)>0){
       
       query_str <- paste("INSERT INTO ClimateChamber_00_DUE (timestamp,T,T_F,T_Soll,RH,RH_F,RH_Soll)",sep="")
@@ -249,7 +253,7 @@ if(T){
       
       
       drv             <- dbDriver("MySQL")
-      con<-carboutil::get_conn(group="du-gsn1")
+      con<-carboutil::get_conn()
       res             <- dbSendQuery(con, query_str)
       dbClearResult(res)
       dbDisconnect(con)
@@ -309,7 +313,6 @@ if(T){
     
     id_insert <- which(data$pressure!=-999
                        & !is.na(data$pressure))
-    
     if(length(id_insert)>0){
       
       query_str <- paste("INSERT INTO ClimateChamber_00_DUE (timestamp,pressure,pressure_F)",sep="")
@@ -328,7 +331,7 @@ if(T){
       
       
       drv             <- dbDriver("MySQL")
-      con<-carboutil::get_conn( dbname=CS_DB_dbname, host="du-gsn1", port=3306, user=CS_DB_user, pass=CS_DB_pass)
+      con<-carboutil::get_conn()
       res             <- dbSendQuery(con, query_str)
       dbClearResult(res)
       dbDisconnect(con)
@@ -347,7 +350,7 @@ if(T){
 # - pressure data from NABEL DUE for specific time periods (failures of barometer in the NABEL calibration lab)
 
 
-if(T){
+if(F){
   
   periods <- NULL
   periods <- rbind(periods, data.frame(date_UTC_from_str = "2017-10-02 00:00:00",
@@ -368,7 +371,7 @@ if(T){
       
       query_str       <- paste("SELECT timestamp, pressure, pressure_F FROM NABEL_DUE WHERE timestamp >= ",periods$timestamp_from[ith_period]," and timestamp <= ",periods$timestamp_to[ith_period],";")
       drv             <- dbDriver("MySQL")
-      con<-carboutil::get_conn( dbname=CS_DB_dbname, host="du-gsn1", port=3306, user=CS_DB_user, pass=CS_DB_pass)
+      con<-carboutil::get_conn()
       res             <- dbSendQuery(con, query_str)
       data            <- dbFetch(res, n=-1)
       dbClearResult(res)
@@ -378,7 +381,6 @@ if(T){
       
       id_insert <- which(data$pressure!=-999
                          & !is.na(data$pressure))
-      
       if(length(id_insert)>0){
         
         query_str <- paste("INSERT INTO ClimateChamber_00_DUE (timestamp,pressure,pressure_F)",sep="")
@@ -392,9 +394,9 @@ if(T){
         
         query_str <- paste(query_str,paste("pressure=VALUES(pressure),",    sep=""))
         query_str <- paste(query_str,paste("pressure_F=VALUES(pressure_F);",sep=""))
-        
+        print(query_str)
         drv             <- dbDriver("MySQL")
-        con<-carboutil::get_conn( dbname=CS_DB_dbname, host="du-gsn1", port=3306, user=CS_DB_user, pass=CS_DB_pass)
+        con<-carboutil::get_conn()
         res             <- dbSendQuery(con, query_str)
         dbClearResult(res)
         dbDisconnect(con)
