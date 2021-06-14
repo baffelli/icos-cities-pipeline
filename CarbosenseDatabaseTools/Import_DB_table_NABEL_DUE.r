@@ -333,13 +333,13 @@ if(T){
 
   #Get dates of files
   dates_in_files <- map(files, function(x) lubridate::as_date(stringr::str_extract(x,"\\d{6}")))
-
   #Get dates to load
   files_to_load <-  match(setdiff(dates_in_files, dates_in_db), dates_in_files)
 
-  files_ok <- unlist(map(files[files_to_load], function(x) file.size(x) > 5000))
+  files_ok <- unlist(map(files[files_to_load], function(x) file.size(x) > 500))
   
-  files   <- files[files_to_load][files_ok]
+
+  files   <- files[files_to_load]
   n_files <- length(files)
   
   rm(s,files_ok)
