@@ -84,8 +84,6 @@ read_ms_csv <- function(path, old_format=T){
 
 
 load_and_copy_meteoswiss <- function(path, format, dst_table, conn){
-  str(path)
-  str(format)
   #Load meteoswiss data and copy  it to the DB
   data <- 
     mutate_if(
@@ -93,23 +91,15 @@ load_and_copy_meteoswiss <- function(path, format, dst_table, conn){
     function(x) is.numeric(x) & !lubridate::is.Date(x),
     function(x) ifelse(is.na(x), carboutil::carbosense_na, x)) %>%
     mutate(
-      #Align dates
+      #Align dates by 10 minuztes
       Date=Date  - lubridate::seconds(600),
       timestamp=as.numeric(Date))
   str(data)
+  #Write data chunk by chunck (to avoid large queries)
   carboutil::write_chuncks(
     conn,
     as.data.frame(data),
     dst_table)
-  # carboutil::write_chuncks(
-  #   conn = conn,
-  #   name = dst_table,
-  #   value = as.data.frame(data),
-  #   overwrite = FALSE,
-  #   append = TRUE,
-  #   temporary = FALSE,
-  #   row.names = FALSE
-  # )
 }
 
 
