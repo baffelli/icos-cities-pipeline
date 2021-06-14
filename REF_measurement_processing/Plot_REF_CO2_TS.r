@@ -37,6 +37,7 @@ INCLUDE_ANCHOR_EVENTS <- F
 
 tables   <- c("NABEL_HAE","NABEL_PAY","NABEL_DUE","NABEL_RIG","UNIBE_BRM","EMPA_LAEG","UNIBE_GIMM","nabelnrt_jun")
 tables   <- c("NABEL_HAE","NABEL_PAY","NABEL_DUE","NABEL_RIG","UNIBE_BRM","EMPA_LAEG","UNIBE_GIMM")
+tables   <- c("HAE", "PAY", "DUE1", "RIG", "BRM", "LAEG", "GIMM")
 n_tables <- length(tables)
 
 site_colors <- c("gray40","green4","red","cyan","blue","orange","magenta","green")
@@ -69,14 +70,14 @@ all_dates_yyyy <- as.numeric(strftime(all_dates,"%Y",tz="UTC"))
 #
 
 if(INCLUDE_ANCHOR_EVENTS){
-  anchor_events <- read.table(file = "/project/CarboSense/anchor_events.csv",header=T,as.is=T,sep=";")
-  anchor_events$Date_UTC_start <- strptime(anchor_events$Date_UTC_start_str,"%Y-%m-%d %H:%M:%S",tz="UTC")
-  anchor_events$Date_UTC_end   <- strptime(anchor_events$Date_UTC_end_str,  "%Y-%m-%d %H:%M:%S",tz="UTC")
+  anchor_events <- read.table(file = "/project/CarboSense/Carbosense_Network/LP8_PerformanceAnalysis_TEST00/anchor_events_SU_ALL.csv",header=T,as.is=T,sep=";")
+  anchor_events$Date_UTC_start <- strptime(anchor_events$Date_UTC_from,"%Y-%m-%d %H:%M:%S",tz="UTC")
+  anchor_events$Date_UTC_end   <- strptime(anchor_events$Date_UTC_to,  "%Y-%m-%d %H:%M:%S",tz="UTC")
 }
 
 #
 
-for(yyyy_plot in c(2020,2020)){
+for(yyyy_plot in seq(2019,2021)){
   
   figname <- paste(resultdir,"/ALL_REF_CO2_",yyyy_plot,"_TS.pdf",sep="")
   
@@ -108,6 +109,7 @@ for(yyyy_plot in c(2020,2020)){
     axis(side = 1,at = xlabTicks,labels = xlabTicksLab,cex.lab=1.25,cex.axis=1.25)
     
     if(INCLUDE_ANCHOR_EVENTS){
+      date_now <- all_dates[ith_date]
       id_anchor_events <- which(anchor_events$Date_UTC_end>=date_now & anchor_events$Date_UTC_start<date_to & anchor_events$WIND_SITUATION=="WIND_ZH")
       
       if(length(id_anchor_events)>0){
@@ -139,65 +141,73 @@ for(yyyy_plot in c(2020,2020)){
     
     
     for(ith_table in 1:n_tables){
-      
-      if(tables[ith_table]%in%c("NABEL_PAY","NABEL_RIG","NABEL_HAE","NABEL_DUE")){
-        query_str <- paste("SELECT timestamp, CO2_WET_COMP FROM ",tables[ith_table]," WHERE timestamp >= ",timestamp_from," and timestamp <= ",timestamp_to,";",sep="")
-        drv       <- dbDriver("MySQL")
         con<-carboutil::get_conn(group="CarboSense_MySQL")
-        res       <- dbSendQuery(con, query_str)
+        query_str <- "SELECT timestamp, CO2 FROM ref_data WHERE timestamp BETWEEN {timestamp_from} AND {timestamp_to} AND LocationName = {tables[ith_table]}"
+        query_interp <- glue::glue_sql(query_str, .con=con)
+        print(query_interp)
+        res       <- dbSendQuery(con, query_interp)
         data      <- dbFetch(res, n=-1)
         dbClearResult(res)
         dbDisconnect(con)
         
-        colnames(data)[which(colnames(data)=="CO2_WET_COMP")] <- "CO2"
-        data$CO2_F <- as.numeric(data$CO2 != -999)
-        data       <- data[,c(which(colnames(data)=="timestamp"),which(colnames(data)=="CO2"),which(colnames(data)=="CO2_F"))]
-      }
-      
-      if(tables[ith_table]=="UNIBE_BRM"){
-        query_str <- paste("SELECT timestamp, CO2, CO2_F FROM ",tables[ith_table]," WHERE MEAS_HEIGHT = 12 and CO2_DRY_N > 5 and CO2 != -999 and timestamp >= ",timestamp_from," and timestamp <= ",timestamp_to,";",sep="")
-        drv       <- dbDriver("MySQL")
-        con<-carboutil::get_conn(group="CarboSense_MySQL")
-        res       <- dbSendQuery(con, query_str)
-        data      <- dbFetch(res, n=-1)
-        dbClearResult(res)
-        dbDisconnect(con)
-      }
-      
-      if(tables[ith_table]=="EMPA_LAEG"){
-        query_str <- paste("SELECT timestamp, CO2, CO2_F FROM ",tables[ith_table]," WHERE VALVEPOS=0 and CO2_DRY_N > 1 and CO2 != -999 and timestamp >= ",timestamp_from," and timestamp <= ",timestamp_to,";",sep="")
-        drv       <- dbDriver("MySQL")
-        con<-carboutil::get_conn(group="CarboSense_MySQL")
-        res       <- dbSendQuery(con, query_str)
-        data      <- dbFetch(res, n=-1)
-        dbClearResult(res)
-        dbDisconnect(con)
-      }
-      
-      if(tables[ith_table]=="UNIBE_GIMM"){
-        query_str <- paste("SELECT timestamp, CO2, CO2_F FROM ",tables[ith_table]," WHERE VALVEPOS=5 and CO2_DRY_N > 12 and CO2 != -999 and timestamp >= ",timestamp_from," and timestamp <= ",timestamp_to,";",sep="")
-        drv       <- dbDriver("MySQL")
-        con<-carboutil::get_conn(group="CarboSense_MySQL")
-        res       <- dbSendQuery(con, query_str)
-        data      <- dbFetch(res, n=-1)
-        dbClearResult(res)
-        dbDisconnect(con)
-      }
-      
-      if(tables[ith_table]=="nabelnrt_jun"){
-        query_str <- paste("SELECT timed, CO2 FROM ",tables[ith_table]," WHERE CO2 IS NOT NULL and timed >= ",timestamp_from*1e3," and timed <= ",timestamp_to*1e3,";",sep="")
-        drv       <- dbDriver("MySQL")
-        con<-carboutil::get_conn(group="NabelGsn")
-        res       <- dbSendQuery(con, query_str)
-        data      <- dbFetch(res, n=-1)
-        dbClearResult(res)
-        dbDisconnect(con)
+      # if(tables[ith_table]%in%c("NABEL_PAY","NABEL_RIG","NABEL_HAE","NABEL_DUE")){
+      #   query_str <- paste("SELECT timestamp, CO2_DRY_CAL * (1 - H2O/100) FROM ",tables[ith_table]," WHERE timestamp >= ",timestamp_from," and timestamp <= ",timestamp_to,";",sep="")
+      #   drv       <- dbDriver("MySQL")
+      #   con<-carboutil::get_conn(group="CarboSense_MySQL")
+      #   res       <- dbSendQuery(con, query_str)
+      #   data      <- dbFetch(res, n=-1)
+      #   dbClearResult(res)
+      #   dbDisconnect(con)
         
-        data           <- data.frame(timestamp=data$timed/1e3,
-                                     CO2=data$CO2,
-                                     CO2_F=rep(1,dim(data)[1]),
-                                     stringsAsFactors = 1)
-      }
+      #   colnames(data)[which(colnames(data)=="CO2")] <- "CO2"
+      #   data$CO2_F <- as.numeric(data$CO2 != -999)
+      #   data       <- data[,c(which(colnames(data)=="timestamp"),which(colnames(data)=="CO2"),which(colnames(data)=="CO2_F"))]
+      # }
+      
+      # if(tables[ith_table]=="UNIBE_BRM"){
+      #   query_str <- paste("SELECT timestamp, CO2, CO2_F FROM ",tables[ith_table]," WHERE MEAS_HEIGHT = 12 and CO2_DRY_N > 5 and CO2 != -999 and timestamp >= ",timestamp_from," and timestamp <= ",timestamp_to,";",sep="")
+      #   drv       <- dbDriver("MySQL")
+      #   con<-carboutil::get_conn(group="CarboSense_MySQL")
+      #   res       <- dbSendQuery(con, query_str)
+      #   data      <- dbFetch(res, n=-1)
+      #   dbClearResult(res)
+      #   dbDisconnect(con)
+      # }
+      
+      # if(tables[ith_table]=="EMPA_LAEG"){
+      #   query_str <- paste("SELECT timestamp, CO2 , CO2_F FROM ",tables[ith_table]," WHERE VALVEPOS=0 and CO2_DRY_N > 1 and CO2 != -999 and timestamp >= ",timestamp_from," and timestamp <= ",timestamp_to,";",sep="")
+      #   drv       <- dbDriver("MySQL")
+      #   con<-carboutil::get_conn(group="CarboSense_MySQL")
+      #   res       <- dbSendQuery(con, query_str)
+      #   data      <- dbFetch(res, n=-1)
+      #   dbClearResult(res)
+      #   dbDisconnect(con)
+      # }
+      
+      # if(tables[ith_table]=="UNIBE_GIMM"){
+      #   query_str <- paste("SELECT timestamp, CO2, CO2_F FROM ",tables[ith_table]," WHERE VALVEPOS=5 and CO2_DRY_N > 12 and CO2 != -999 and timestamp >= ",timestamp_from," and timestamp <= ",timestamp_to,";",sep="")
+      #   drv       <- dbDriver("MySQL")
+      #   con<-carboutil::get_conn(group="CarboSense_MySQL")
+      #   res       <- dbSendQuery(con, query_str)
+      #   data      <- dbFetch(res, n=-1)
+      #   dbClearResult(res)
+      #   dbDisconnect(con)
+      # }
+      
+      # if(tables[ith_table]=="nabelnrt_jun"){
+      #   query_str <- paste("SELECT timed, CO2 FROM ",tables[ith_table]," WHERE CO2 IS NOT NULL and timed >= ",timestamp_from*1e3," and timed <= ",timestamp_to*1e3,";",sep="")
+      #   drv       <- dbDriver("MySQL")
+      #   con<-carboutil::get_conn(group="NabelGsn")
+      #   res       <- dbSendQuery(con, query_str)
+      #   data      <- dbFetch(res, n=-1)
+      #   dbClearResult(res)
+      #   dbDisconnect(con)
+        
+        # data           <- data.frame(timestamp=data$timed/1e3,
+        #                              CO2=data$CO2,
+        #                              CO2_F=rep(1,dim(data)[1]),
+        #                              stringsAsFactors = 1)
+      #}
       
       
       #
@@ -218,15 +228,15 @@ for(yyyy_plot in c(2020,2020)){
       
       #
       
-      id_fill <- which(diff(data$timestamp)>1200)
-      if(length(id_fill)>0){
-        data <- rbind(data,data.frame(timestamp = data$timestamp[id_fill]+60,
-                                      CO2       = rep(NA,length(id_fill)),
-                                      CO2_F     = rep(0,length(id_fill)),
-                                      stringsAsFactors = F))
+      # id_fill <- which(diff(data$timestamp)>1200)
+      # if(length(id_fill)>0){
+      #   data <- rbind(data,data.frame(timestamp = data$timestamp[id_fill]+60,
+      #                                 CO2       = rep(NA,length(id_fill)),
+      #                                 CO2_F     = rep(0,length(id_fill)),
+      #                                 stringsAsFactors = F))
         
-        data <- data[order(data$timestamp),]
-      }
+      #   data <- data[order(data$timestamp),]
+      # }
       
       data$date <- strptime("19700101000000","%Y%m%d%H%M%S",tz="UTC") + data$timestamp
       
@@ -250,218 +260,218 @@ for(yyyy_plot in c(2020,2020)){
 
 # Individual Plots
 
-for(ith_table in 1:n_tables){
+# for(ith_table in 1:n_tables){
   
-  if(tables[ith_table]%in%c("NABEL_PAY","NABEL_RIG","NABEL_HAE","NABEL_DUE")){
-    query_str <- paste("SELECT timestamp, CO2_WET_COMP FROM ",tables[ith_table]," WHERE CO2_WET_COMP != -999;",sep="")
-    drv       <- dbDriver("MySQL")
-    con<-carboutil::get_conn(group="CarboSense_MySQL")
-    res       <- dbSendQuery(con, query_str)
-    data      <- dbFetch(res, n=-1)
-    dbClearResult(res)
-    dbDisconnect(con)
+#   if(tables[ith_table]%in%c("NABEL_PAY","NABEL_RIG","NABEL_HAE","NABEL_DUE")){
+#     query_str <- paste("SELECT timestamp, CO2_WET_COMP FROM ",tables[ith_table]," WHERE CO2_WET_COMP != -999;",sep="")
+#     drv       <- dbDriver("MySQL")
+#     con<-carboutil::get_conn(group="CarboSense_MySQL")
+#     res       <- dbSendQuery(con, query_str)
+#     data      <- dbFetch(res, n=-1)
+#     dbClearResult(res)
+#     dbDisconnect(con)
     
-    colnames(data)[which(colnames(data)=="CO2_WET_COMP")] <- "CO2"
-    data$CO2_F <- as.numeric(data$CO2 != -999)
-    data       <- data[,c(which(colnames(data)=="timestamp"),which(colnames(data)=="CO2"),which(colnames(data)=="CO2_F"))]
-  }
+#     colnames(data)[which(colnames(data)=="CO2_WET_COMP")] <- "CO2"
+#     data$CO2_F <- as.numeric(data$CO2 != -999)
+#     data       <- data[,c(which(colnames(data)=="timestamp"),which(colnames(data)=="CO2"),which(colnames(data)=="CO2_F"))]
+#   }
   
-  if(tables[ith_table]=="UNIBE_BRM"){
-    query_str <- paste("SELECT timestamp, CO2,CO2_F FROM ",tables[ith_table]," WHERE MEAS_HEIGHT = 12 and CO2_DRY_N > 5 and CO2 != -999;",sep="")
-    drv       <- dbDriver("MySQL")
-    con<-carboutil::get_conn(group="CarboSense_MySQL")
-    res       <- dbSendQuery(con, query_str)
-    data      <- dbFetch(res, n=-1)
-    dbClearResult(res)
-    dbDisconnect(con)
-  }
-  if(tables[ith_table]=="EMPA_LAEG"){
-    query_str <- paste("SELECT timestamp, CO2,CO2_F FROM ",tables[ith_table]," WHERE VALVEPOS=0 and CO2_DRY_N > 5 and CO2 != -999;",sep="")
-    drv       <- dbDriver("MySQL")
-    con<-carboutil::get_conn(group="CarboSense_MySQL")
-    res       <- dbSendQuery(con, query_str)
-    data      <- dbFetch(res, n=-1)
-    dbClearResult(res)
-    dbDisconnect(con)
-  }
-  if(tables[ith_table]=="UNIBE_GIMM"){
-    query_str <- paste("SELECT timestamp, CO2,CO2_F FROM ",tables[ith_table]," WHERE VALVEPOS=5 and CO2_DRY_N > 12 and CO2 != -999;",sep="")
-    drv       <- dbDriver("MySQL")
-    con<-carboutil::get_conn(group="CarboSense_MySQL")
-    res       <- dbSendQuery(con, query_str)
-    data      <- dbFetch(res, n=-1)
-    dbClearResult(res)
-    dbDisconnect(con)
-  }
+#   if(tables[ith_table]=="UNIBE_BRM"){
+#     query_str <- paste("SELECT timestamp, CO2,CO2_F FROM ",tables[ith_table]," WHERE MEAS_HEIGHT = 12 and CO2_DRY_N > 5 and CO2 != -999;",sep="")
+#     drv       <- dbDriver("MySQL")
+#     con<-carboutil::get_conn(group="CarboSense_MySQL")
+#     res       <- dbSendQuery(con, query_str)
+#     data      <- dbFetch(res, n=-1)
+#     dbClearResult(res)
+#     dbDisconnect(con)
+#   }
+#   if(tables[ith_table]=="EMPA_LAEG"){
+#     query_str <- paste("SELECT timestamp, CO2,CO2_F FROM ",tables[ith_table]," WHERE VALVEPOS=0 and CO2_DRY_N > 5 and CO2 != -999;",sep="")
+#     drv       <- dbDriver("MySQL")
+#     con<-carboutil::get_conn(group="CarboSense_MySQL")
+#     res       <- dbSendQuery(con, query_str)
+#     data      <- dbFetch(res, n=-1)
+#     dbClearResult(res)
+#     dbDisconnect(con)
+#   }
+#   if(tables[ith_table]=="UNIBE_GIMM"){
+#     query_str <- paste("SELECT timestamp, CO2,CO2_F FROM ",tables[ith_table]," WHERE VALVEPOS=5 and CO2_DRY_N > 12 and CO2 != -999;",sep="")
+#     drv       <- dbDriver("MySQL")
+#     con<-carboutil::get_conn(group="CarboSense_MySQL")
+#     res       <- dbSendQuery(con, query_str)
+#     data      <- dbFetch(res, n=-1)
+#     dbClearResult(res)
+#     dbDisconnect(con)
+#   }
   
-  if(tables[ith_table]=="nabelnrt_jun"){
-    query_str <- paste("SELECT timed, CO2 FROM ",tables[ith_table]," WHERE CO2 IS NOT NULL;",sep="")
-    drv       <- dbDriver("MySQL")
-    con<-carboutil::get_conn(group="NabelGsn")
-    res       <- dbSendQuery(con, query_str)
-    data      <- dbFetch(res, n=-1)
-    dbClearResult(res)
-    dbDisconnect(con)
+#   if(tables[ith_table]=="nabelnrt_jun"){
+#     query_str <- paste("SELECT timed, CO2 FROM ",tables[ith_table]," WHERE CO2 IS NOT NULL;",sep="")
+#     drv       <- dbDriver("MySQL")
+#     con<-carboutil::get_conn(group="NabelGsn")
+#     res       <- dbSendQuery(con, query_str)
+#     data      <- dbFetch(res, n=-1)
+#     dbClearResult(res)
+#     dbDisconnect(con)
     
-    data           <- data.frame(timestamp=data$timed/1e3,
-                                 CO2=data$CO2,
-                                 CO2_F=rep(1,dim(data)[1]),
-                                 stringsAsFactors = 1)
-  }
+#     data           <- data.frame(timestamp=data$timed/1e3,
+#                                  CO2=data$CO2,
+#                                  CO2_F=rep(1,dim(data)[1]),
+#                                  stringsAsFactors = 1)
+#   }
   
   
   
   
-  # Daily minimum
+#   # Daily minimum
   
-  data_date <- strptime("19700101000000","%Y%m%d%H%M%S",tz="UTC") + data$timestamp
-  data_hour <- as.numeric(strftime(data_date,"%H",tz="UTC"))
+#   data_date <- strptime("19700101000000","%Y%m%d%H%M%S",tz="UTC") + data$timestamp
+#   data_hour <- as.numeric(strftime(data_date,"%H",tz="UTC"))
   
-  for(ith_dm in 1:2){
+#   for(ith_dm in 1:2){
     
-    if(ith_dm == 1){
-      id <- which(data$CO2!=-999 
-                  & data$CO2_F==1 
-                  & data_date>=strptime("20180101000000","%Y%m%d%H%M%S",tz="UTC")
-                  & data_date<=strptime("20190101000000","%Y%m%d%H%M%S",tz="UTC"))
-    }
-    if(ith_dm == 2){
-      id <- which(data$CO2!=-999 
-                  & data$CO2_F==1 
-                  & data_date>=strptime("20180101000000","%Y%m%d%H%M%S",tz="UTC")
-                  & data_date<=strptime("20190101000000","%Y%m%d%H%M%S",tz="UTC")
-                  & data_hour%in%c(12,13,14,15,16,17))
-    }
+#     if(ith_dm == 1){
+#       id <- which(data$CO2!=-999 
+#                   & data$CO2_F==1 
+#                   & data_date>=strptime("20180101000000","%Y%m%d%H%M%S",tz="UTC")
+#                   & data_date<=strptime("20190101000000","%Y%m%d%H%M%S",tz="UTC"))
+#     }
+#     if(ith_dm == 2){
+#       id <- which(data$CO2!=-999 
+#                   & data$CO2_F==1 
+#                   & data_date>=strptime("20180101000000","%Y%m%d%H%M%S",tz="UTC")
+#                   & data_date<=strptime("20190101000000","%Y%m%d%H%M%S",tz="UTC")
+#                   & data_hour%in%c(12,13,14,15,16,17))
+#     }
     
-    data_day_min <- timeAverage(mydata     = data.frame(date=as.POSIXct(data_date[id]),CO2=data$CO2[id],stringsAsFactors = F),
-                                statistic  = "min",avg.time = "day", 
-                                start.date = strptime(strftime(min(as.POSIXct(data_date[id])),"%Y%m%d000000",tz="UTC"),"%Y%m%d%H%M%S",tz="UTC"))
+#     data_day_min <- timeAverage(mydata     = data.frame(date=as.POSIXct(data_date[id]),CO2=data$CO2[id],stringsAsFactors = F),
+#                                 statistic  = "min",avg.time = "day", 
+#                                 start.date = strptime(strftime(min(as.POSIXct(data_date[id])),"%Y%m%d000000",tz="UTC"),"%Y%m%d%H%M%S",tz="UTC"))
     
-    figname <- paste(resultdir,"/",tables[ith_table],"_DAILY_MIN_",ith_dm,".pdf",sep="")
+#     figname <- paste(resultdir,"/",tables[ith_table],"_DAILY_MIN_",ith_dm,".pdf",sep="")
     
-    def_par <- par()
-    pdf(file = figname, width=16, height=8, onefile=T, pointsize=12, colormodel="srgb")
-    par(mai=c(1,1,0.1,0.1),mfrow=c(1,2))
+#     def_par <- par()
+#     pdf(file = figname, width=16, height=8, onefile=T, pointsize=12, colormodel="srgb")
+#     par(mai=c(1,1,0.1,0.1),mfrow=c(1,2))
     
-    leg_str_00 <- paste("Q000:",sprintf("%6.1f",quantile(data_day_min$CO2,probs=0.00,na.rm=T)))
-    leg_str_01 <- paste("Q005:",sprintf("%6.1f",quantile(data_day_min$CO2,probs=0.05,na.rm=T)))
-    leg_str_02 <- paste("Q050:",sprintf("%6.1f",quantile(data_day_min$CO2,probs=0.50,na.rm=T)))
-    leg_str_03 <- paste("Q095:",sprintf("%6.1f",quantile(data_day_min$CO2,probs=0.95,na.rm=T)))
-    leg_str_04 <- paste("Q100:",sprintf("%6.1f",quantile(data_day_min$CO2,probs=1.00,na.rm=T)))
-    leg_str_05 <- paste("N:   ",sprintf("%6.0f",sum(!is.na(data_day_min$CO2))))
+#     leg_str_00 <- paste("Q000:",sprintf("%6.1f",quantile(data_day_min$CO2,probs=0.00,na.rm=T)))
+#     leg_str_01 <- paste("Q005:",sprintf("%6.1f",quantile(data_day_min$CO2,probs=0.05,na.rm=T)))
+#     leg_str_02 <- paste("Q050:",sprintf("%6.1f",quantile(data_day_min$CO2,probs=0.50,na.rm=T)))
+#     leg_str_03 <- paste("Q095:",sprintf("%6.1f",quantile(data_day_min$CO2,probs=0.95,na.rm=T)))
+#     leg_str_04 <- paste("Q100:",sprintf("%6.1f",quantile(data_day_min$CO2,probs=1.00,na.rm=T)))
+#     leg_str_05 <- paste("N:   ",sprintf("%6.0f",sum(!is.na(data_day_min$CO2))))
     
-    data_min <- floor(  min(data_day_min$CO2-2.5,na.rm=T))
-    data_max <- ceiling(max(data_day_min$CO2+2.5,na.rm=T))
+#     data_min <- floor(  min(data_day_min$CO2-2.5,na.rm=T))
+#     data_max <- ceiling(max(data_day_min$CO2+2.5,na.rm=T))
     
-    hist(data_day_min$CO2,seq(data_min,data_max,2.5),col="slategray",xlab="Daily CO2 minimum [ppb]",main="",cex.axis=1.25,cex.lab=1.25,xlim=c(350,450))
+#     hist(data_day_min$CO2,seq(data_min,data_max,2.5),col="slategray",xlab="Daily CO2 minimum [ppb]",main="",cex.axis=1.25,cex.lab=1.25,xlim=c(350,450))
     
-    par(family="mono")
-    legend("topright",legend=c(leg_str_00,leg_str_01,leg_str_02,leg_str_03,leg_str_04,leg_str_05),bg="white",cex=1.25)
-    par(family="")
+#     par(family="mono")
+#     legend("topright",legend=c(leg_str_00,leg_str_01,leg_str_02,leg_str_03,leg_str_04,leg_str_05),bg="white",cex=1.25)
+#     par(family="")
     
-    #
+#     #
     
-    diff_data <- diff(data_day_min$CO2)
+#     diff_data <- diff(data_day_min$CO2)
     
-    data_min <- floor(  min(diff_data-2.5,na.rm=T))
-    data_max <- ceiling(max(diff_data+2.5,na.rm=T))
+#     data_min <- floor(  min(diff_data-2.5,na.rm=T))
+#     data_max <- ceiling(max(diff_data+2.5,na.rm=T))
     
-    leg_str_00 <- paste("Q000:",sprintf("%6.1f",quantile(diff_data,probs=0.00,na.rm=T)))
-    leg_str_01 <- paste("Q005:",sprintf("%6.1f",quantile(diff_data,probs=0.05,na.rm=T)))
-    leg_str_02 <- paste("Q050:",sprintf("%6.1f",quantile(diff_data,probs=0.50,na.rm=T)))
-    leg_str_03 <- paste("Q095:",sprintf("%6.1f",quantile(diff_data,probs=0.95,na.rm=T)))
-    leg_str_04 <- paste("Q100:",sprintf("%6.1f",quantile(diff_data,probs=1.00,na.rm=T)))
-    leg_str_05 <- paste("N:   ",sprintf("%6.0f",sum(!is.na(diff_data))))
+#     leg_str_00 <- paste("Q000:",sprintf("%6.1f",quantile(diff_data,probs=0.00,na.rm=T)))
+#     leg_str_01 <- paste("Q005:",sprintf("%6.1f",quantile(diff_data,probs=0.05,na.rm=T)))
+#     leg_str_02 <- paste("Q050:",sprintf("%6.1f",quantile(diff_data,probs=0.50,na.rm=T)))
+#     leg_str_03 <- paste("Q095:",sprintf("%6.1f",quantile(diff_data,probs=0.95,na.rm=T)))
+#     leg_str_04 <- paste("Q100:",sprintf("%6.1f",quantile(diff_data,probs=1.00,na.rm=T)))
+#     leg_str_05 <- paste("N:   ",sprintf("%6.0f",sum(!is.na(diff_data))))
     
-    hist(diff_data,seq(data_min,data_max,2.5),col="slategray",xlab="Difference of daily CO2 minimum [ppb]",main="",cex.axis=1.25,cex.lab=1.25,xlim=c(-30,30))
+#     hist(diff_data,seq(data_min,data_max,2.5),col="slategray",xlab="Difference of daily CO2 minimum [ppb]",main="",cex.axis=1.25,cex.lab=1.25,xlim=c(-30,30))
     
-    par(family="mono")
-    legend("topright",legend=c(leg_str_00,leg_str_01,leg_str_02,leg_str_03,leg_str_04,leg_str_05),bg="white",cex=1.25)
-    par(family="")
+#     par(family="mono")
+#     legend("topright",legend=c(leg_str_00,leg_str_01,leg_str_02,leg_str_03,leg_str_04,leg_str_05),bg="white",cex=1.25)
+#     par(family="")
     
-    dev.off()
-    par(def_par)
+#     dev.off()
+#     par(def_par)
     
-  }
+#   }
   
   
-  # ------------
+#   # ------------
   
-  id_fill <- which(diff(data$timestamp)>1200)
-  if(length(id_fill)>0){
-    data <- rbind(data,data.frame(timestamp = data$timestamp[id_fill]+60,
-                                  CO2       = rep(NA,length(id_fill)),
-                                  CO2_F     = rep(0,length(id_fill)),
-                                  stringsAsFactors = F))
+#   id_fill <- which(diff(data$timestamp)>1200)
+#   if(length(id_fill)>0){
+#     data <- rbind(data,data.frame(timestamp = data$timestamp[id_fill]+60,
+#                                   CO2       = rep(NA,length(id_fill)),
+#                                   CO2_F     = rep(0,length(id_fill)),
+#                                   stringsAsFactors = F))
     
-    data <- data[order(data$timestamp),]
-  }
+#     data <- data[order(data$timestamp),]
+#   }
   
-  data$date <- strptime("19700101000000","%Y%m%d%H%M%S",tz="UTC") + data$timestamp
+#   data$date <- strptime("19700101000000","%Y%m%d%H%M%S",tz="UTC") + data$timestamp
   
   
   
-  #
+#   #
   
-  figname <- paste(resultdir,"/",tables[ith_table],"_CO2_TS.pdf",sep="")
+#   figname <- paste(resultdir,"/",tables[ith_table],"_CO2_TS.pdf",sep="")
   
-  yyy     <- cbind(data$CO2,rep(400,dim(data)[1]),rep(420,dim(data)[1]),rep(380,dim(data)[1]))
-  yyy     <- data$CO2
+#   yyy     <- cbind(data$CO2,rep(400,dim(data)[1]),rep(420,dim(data)[1]),rep(380,dim(data)[1]))
+#   yyy     <- data$CO2
   
-  xlabString <- "Date" 
-  ylabString <- expression(paste("CO"[2]*" [ppm]"))
-  legend_str <- c("CO2")
-  plot_ts(figname,data$date,yyy,"all_day2day",NULL,c(350,650),xlabString,ylabString,legend_str)
+#   xlabString <- "Date" 
+#   ylabString <- expression(paste("CO"[2]*" [ppm]"))
+#   legend_str <- c("CO2")
+#   plot_ts(figname,data$date,yyy,"all_day2day",NULL,c(350,650),xlabString,ylabString,legend_str)
   
-  #
+#   #
   
-  figname <- paste(resultdir,"/",tables[ith_table],"_CO2_TS_YEAR.pdf",sep="")
+#   figname <- paste(resultdir,"/",tables[ith_table],"_CO2_TS_YEAR.pdf",sep="")
   
-  plot_ts(figname,data$date,yyy,"year",NULL,c(350,650),xlabString,ylabString,legend_str)
+#   plot_ts(figname,data$date,yyy,"year",NULL,c(350,650),xlabString,ylabString,legend_str)
   
-  #
+#   #
   
-  figname <- paste(resultdir,"/",tables[ith_table],"_CO2_TS_MONTH.pdf",sep="")
+#   figname <- paste(resultdir,"/",tables[ith_table],"_CO2_TS_MONTH.pdf",sep="")
   
-  plot_ts(figname,data$date,yyy,"month",NULL,c(350,650),xlabString,ylabString,legend_str)
+#   plot_ts(figname,data$date,yyy,"month",NULL,c(350,650),xlabString,ylabString,legend_str)
   
-  #
+#   #
   
-  figname <- paste(resultdir,"/",tables[ith_table],"_CO2_TS_WEEK.pdf",sep="")
+#   figname <- paste(resultdir,"/",tables[ith_table],"_CO2_TS_WEEK.pdf",sep="")
   
-  plot_ts(figname,data$date,yyy,"week",NULL,c(350,650),xlabString,ylabString,legend_str)
+#   plot_ts(figname,data$date,yyy,"week",NULL,c(350,650),xlabString,ylabString,legend_str)
   
-  #
+#   #
   
-  figname <- paste(resultdir,"/",tables[ith_table],"_CO2_TS_DAY.pdf",sep="")
+#   figname <- paste(resultdir,"/",tables[ith_table],"_CO2_TS_DAY.pdf",sep="")
   
-  plot_ts(figname,data$date,yyy,"day",NULL,c(350,650),xlabString,ylabString,legend_str)
+#   plot_ts(figname,data$date,yyy,"day",NULL,c(350,650),xlabString,ylabString,legend_str)
   
-  #
+#   #
   
-  # if(tables[ith_table]=="NABEL_DUE"){
-  #   
-  #   data <- data[which(data$date>=strptime("20180101000000","%Y%m%d%H%M%S",tz="UTC") & data$date<strptime("20190101000000","%Y%m%d%H%M%S",tz="UTC")),]
-  #   data <- data[,c(which(colnames(data)=="date"),which(colnames(data)=="CO2"))]
-  #   
-  #   #
-  #   
-  #   fn            <- paste(resultdir,"/CO2_DUE_2018_01min.csv",sep="")
-  #   data_exp      <- data
-  #   data_exp$date <- strftime(data_exp$date,"%Y-%m-%d %H:%M:%S",tz="UTC")
-  #   data_exp$CO2  <- round(x=data_exp$CO2,digits=1)
-  #   write.table(data_exp,file = fn,sep=";",row.names = F, col.names=T,quote = F)
-  #   
-  #   #
-  #   
-  #   data <- timeAverage(mydata = data,avg.time = "10 min", statistic = "mean",start.date = strptime("20171231230000","%Y%m%d%H%M%S",tz="UTC"))
-  # 
-  #   fn            <- paste(resultdir,"/CO2_DUE_2018_10min.csv",sep="")
-  #   data_exp      <- data
-  #   data_exp$date <- strftime(data_exp$date,"%Y-%m-%d %H:%M:%S",tz="UTC")
-  #   data_exp$CO2  <- round(x=data_exp$CO2,digits=1)
-  #   write.table(data_exp,file = fn,sep=";",row.names = F, col.names=T,quote = F)
-  #   
-  # }
+#   # if(tables[ith_table]=="NABEL_DUE"){
+#   #   
+#   #   data <- data[which(data$date>=strptime("20180101000000","%Y%m%d%H%M%S",tz="UTC") & data$date<strptime("20190101000000","%Y%m%d%H%M%S",tz="UTC")),]
+#   #   data <- data[,c(which(colnames(data)=="date"),which(colnames(data)=="CO2"))]
+#   #   
+#   #   #
+#   #   
+#   #   fn            <- paste(resultdir,"/CO2_DUE_2018_01min.csv",sep="")
+#   #   data_exp      <- data
+#   #   data_exp$date <- strftime(data_exp$date,"%Y-%m-%d %H:%M:%S",tz="UTC")
+#   #   data_exp$CO2  <- round(x=data_exp$CO2,digits=1)
+#   #   write.table(data_exp,file = fn,sep=";",row.names = F, col.names=T,quote = F)
+#   #   
+#   #   #
+#   #   
+#   #   data <- timeAverage(mydata = data,avg.time = "10 min", statistic = "mean",start.date = strptime("20171231230000","%Y%m%d%H%M%S",tz="UTC"))
+#   # 
+#   #   fn            <- paste(resultdir,"/CO2_DUE_2018_10min.csv",sep="")
+#   #   data_exp      <- data
+#   #   data_exp$date <- strftime(data_exp$date,"%Y-%m-%d %H:%M:%S",tz="UTC")
+#   #   data_exp$CO2  <- round(x=data_exp$CO2,digits=1)
+#   #   write.table(data_exp,file = fn,sep=";",row.names = F, col.names=T,quote = F)
+#   #   
+#   # }
   
-}
+# }
