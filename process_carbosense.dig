@@ -50,6 +50,10 @@ _export:
 +new_sensors:
     +import_raw_data:
         sh>: Rscript  ${base_folder}/new_sensors/import_raw_sensor_data.R
+    +k96:
+        +copy_k96:
+            sh>: rsync -a pi@10.2.5.238:/home/pi/data/*.csv /project/CarboSense/temp/K96_data
+
 
 +network_state:
     +deployment_km:
@@ -159,8 +163,8 @@ _export:
         #     sh>: Rscript ${base_folder}/LP8_measurement_processing/Comparison_CO2_LP8_HPP.r 0
         +upload_to_decentlab:
             sh>: ${base_folder}/UploadProcessedMeasurementsToDecentlabDB/Upload_LP8_Measurements_To_swiss_co2_live.sh
-        +upload_medatadata
-            sh:> python3  ${base_folder}/UploadProcessedMeasurementsToDecentlabDB/importer.py
+        +upload_medatadata:
+            sh>: python3  ${base_folder}/UploadProcessedMeasurementsToDecentlabDB/importer.py
 
 +calibration:
     #Only run weekly
