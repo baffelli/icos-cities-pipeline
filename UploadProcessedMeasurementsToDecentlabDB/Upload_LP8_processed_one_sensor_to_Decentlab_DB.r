@@ -58,7 +58,7 @@ completeUploadDayOfMonth <- 1
 ## Decentlab DB information
 
 DL_DB_domain  <- "swiss.co2.live"
-DL_DB_apiKey  <- "eyJrIjoiSFd4bWJhczJjclpaUnpHeXluck1WYlJ0MkdINWhneFciLCJuIjoibWljaGFlbC5tdWVsbGVyQGVtcGEuY2giLCJpZCI6MX0="
+DL_DB_apiKey  <- carboutil::get_decentlab_api_key()
 
 ### ----------------------------------------------------------------------------------------------------------------------------------------------
 
