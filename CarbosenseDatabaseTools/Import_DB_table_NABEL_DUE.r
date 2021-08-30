@@ -41,6 +41,7 @@ fdirectory <- "/project/CarboSense/Win_K/Daten/Stationen/DUE/"
 # - date refers to CET
 
 
+parse_nabel_date <- function(x) lubridate::as_date(stringr::str_extract(x,"\\d{6}"))
 
 
 if(T){
@@ -51,8 +52,8 @@ if(T){
   con <- carboutil::get_conn(group=DB_group)
   dates_in_db <- collect(tbl(con, sql("SELECT DISTINCT DATE(FROM_UNIXTIME(timestamp)) AS date FROM NABEL_DUE")))$date
 
-  #Get dates of files
-  dates_in_files <- map(files, function(x) lubridate::as_date(stringr::str_extract(x,"\\d{6}")))
+  #Get dates of files (subtract one day because NABEL is the previous day)
+  dates_in_files <- map(files, function(x)  parse_nabel_date(x) - lubridate::days(x=1))
 
   #Get dates to load
   files_to_load <-  match(setdiff(dates_in_files, dates_in_db), dates_in_files)
@@ -332,14 +333,17 @@ if(T){
   files    <- list.files(path = fdirectory, pattern = "DUE Test CO2",full.names = T)
 
   #Get dates of files
-  dates_in_files <- map(files, function(x) lubridate::as_date(stringr::str_extract(x,"\\d{6}")))
+  dates_in_files <- map(files, function(x)  parse_nabel_date(x) - lubridate::days(x=1))
+
   #Get dates to load
   files_to_load <-  match(setdiff(dates_in_files, dates_in_db), dates_in_files)
 
+  
   files_ok <- unlist(map(files[files_to_load], function(x) file.size(x) > 500))
   
 
-  files   <- files[files_to_load]
+
+  files   <- files[files_to_load][files_ok]
   n_files <- length(files)
   
   rm(s,files_ok)
@@ -350,7 +354,7 @@ if(T){
   for(ith_file in 1:n_files){
     print(paste("Loading file", files[ith_file], ith_file, "out of", n_files))
     data_ref <- read.table(file = files[ith_file],sep=";",as.is=T,skip=4,header=F)
-    
+    print(data_ref)
     # Type 1 file
     ok  <- F
     if(dim(data_ref)[2]==4){
@@ -514,19 +518,19 @@ if(T){
     
     # import into database
     
-    query_str <- "SELECT MAX(timestamp) AS MAX_timestamp FROM NABEL_DUE WHERE CO2 != -999;";
-    drv             <- dbDriver("MySQL")
-    con<-carboutil::get_conn(group=DB_group)
-    res             <- dbSendQuery(con, query_str)
-    MAX_timestamp   <- dbFetch(res, n=-1)
-    dbClearResult(res)
-    dbDisconnect(con)
+    # query_str <- "SELECT MAX(timestamp) AS MAX_timestamp FROM NABEL_DUE WHERE CO2 != -999;";
+    # drv             <- dbDriver("MySQL")
+    # con<-carboutil::get_conn(group=DB_group)
+    # res             <- dbSendQuery(con, query_str)
+    # MAX_timestamp   <- dbFetch(res, n=-1)
+    # dbClearResult(res)
+    # dbDisconnect(con)
     
-    MAX_timestamp <- as.integer(MAX_timestamp)
+    # MAX_timestamp <- as.integer(MAX_timestamp)
     
-    if(is.na(MAX_timestamp)){
-      MAX_timestamp <- 0
-    }
+    # if(is.na(MAX_timestamp)){
+    #   MAX_timestamp <- 0
+    # }
     
     
     id_insert <- which(!is.na(data_ref$timestamp)
@@ -538,7 +542,7 @@ if(T){
                        & !is.na(data_ref$CO2_DRY_F)
                        & !is.na(data_ref$H2O)
                        & !is.na(data_ref$H2O_F)
-                       & data_ref$timestamp>MAX_timestamp)
+                       )
     
     
     if(length(id_insert)>0){
