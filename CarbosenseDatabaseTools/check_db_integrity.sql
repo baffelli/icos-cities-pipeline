@@ -86,14 +86,14 @@ WITH A AS
 (
 SELECT
 *,
-LAG(Date_UTC_to,1) OVER (PARTITION BY SensorUnit_ID ORDER BY Date_UTC_from) AS Date_UTC_to_prev,
+LAG(Date_UTC_to,1) OVER (PARTITION BY SensorUnit_ID ORDER BY Date_UTC_from) AS Date_UTC_to_prev
 FROM Deployment 
 )
 
 SELECT
 *
 FROM A
-WHERE Date_UTC_from <= Date_UTC_to_prev;
+WHERE Date_UTC_from <= Date_UTC_to_prev OR Date_UTC_to < Date_UTC_to_prev;
 
 -- Check calibration entries where the end time is before the start time
 SELECT
@@ -103,8 +103,8 @@ WHERE Date_UTC_from > Date_UTC_to;
 
 
 
-
--- Check that calibration are in the right order
+-- Check that calibration are in the right order: for the same sensor the next calibration 
+-- must start after the previous
 
 WITH A AS
 (
@@ -117,7 +117,7 @@ FROM Calibration
 SELECT
 *
 FROM A
-WHERE Date_UTC_from <= Date_UTC_to_prev;
+WHERE Date_UTC_from < Date_UTC_to_prev OR Date_UTC_to_prev > Date_UTC_to ;
 
 
 -- Check that no sensor start time is after the end time
@@ -181,3 +181,53 @@ WHERE Date_UTC_from <= Date_UTC_to_prev;
 		AND dep.Date_UTC_from >= sens.Date_UTC_from AND dep.Date_UTC_to <= sens.Date_UTC_to
 ) AS a
 WHERE nd > 1;
+
+-- Check calibration gas: no entry in the deployment table with a non-existing cylinder
+Select
+*
+FROM RefGasCylinder_Deployment
+WHERE CylinderID NOT IN
+(
+	SELECT DISTINCT CylinderID FROM RefGasCylinder
+);
+
+-- Check calibration gas: no entry with from date newer than to date
+SELECT
+*
+FROM RefGasCylinder WHERE Date_UTC_from > Date_UTC_to;
+
+-- Check calibration gas: if the bottle was refilled no previous gas should be newer than current gas date
+WITH previous_cyl AS 
+(
+SELECT 
+	*,
+	LAG(Date_UTC_to,1) OVER (PARTITION BY CylinderID ORDER BY Date_UTC_from) AS Date_UTC_to_prev
+FROM RefGasCylinder
+)
+
+SELECT
+*
+FROM previous_cyl
+WHERE Date_UTC_to_prev > Date_UTC_from OR Date_UTC_to_prev > Date_UTC_to;
+
+-- Check calibration gas for deployment: end of deployment should be later than beginnig
+SELECT
+*
+FROM RefGasCylinder_Deployment WHERE Date_UTC_from > Date_UTC_to;
+
+-- Check calibration gas for deployment: the date of the previous installation should be before the current
+WITH previous_cyl_dep AS 
+(
+SELECT 
+	*,
+	LAG(Date_UTC_to,1) OVER (PARTITION BY CylinderID, SensorUnit_ID ORDER BY Date_UTC_from) AS Date_UTC_to_prev
+FROM RefGasCylinder_Deployment
+)
+
+SELECT
+*
+FROM previous_cyl_dep
+WHERE Date_UTC_to_prev > Date_UTC_from OR Date_UTC_to_prev > Date_UTC_to;
+
+
+-- Check calibration gas for deployment: 
