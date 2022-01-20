@@ -231,3 +231,6 @@ rsconnect/
 
 #Pdf
 **/*.pdf
+
+#Digdag 
+.digdag
