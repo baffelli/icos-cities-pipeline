@@ -1,0 +1,78 @@
+SHELL=/bin/tcsh
+#SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/newhome/muem/bin:/usr/local
+#LOGS=/home/muem/LOG
+MAILTO=""
+# Minute   Hour   Day of Month       Month          Day of Week        Command    
+# (0-59)  (0-23)     (1-31)    (1-12 or Jan-Dec)  (0-6 or Sun-Sat)
+#
+#
+# Copy Carbosense database to SDSC/Decentlab
+#
+30 2 * * * source /newhome/muem/.cshrc; perl /project/CarboSense/Software/UploadProcessedMeasurementsToDecentlabDB/Upload_Carbosense_MetaDBtables_to_DecentlabSFTP.pl
+#
+# Import NABEL data into Carbosense database / computation of ???_CAL and 10 Min averages / computation of CO2_COMP_WET  
+#
+27 8 * * * source /newhome/muem/.cshrc; Rscript /project/CarboSense/Software/CarbosenseDatabaseTools/Import_DB_table_NABEL_PAY.r
+#23 8 * * * source /newhome/muem/.cshrc; Rscript /project/CarboSense/Software/CarbosenseDatabaseTools/Import_DB_table_NABEL_HAE.r
+23 8 * * * source /newhome/muem/.cshrc; Rscript /project/CarboSense/Software/CarbosenseDatabaseTools/Import_DB_table_NABEL_HAE_PIC.r
+19 8 * * * source /newhome/muem/.cshrc; Rscript /project/CarboSense/Software/CarbosenseDatabaseTools/Import_DB_table_NABEL_RIG.r
+15 8 * * * source /newhome/muem/.cshrc; Rscript /project/CarboSense/Software/CarbosenseDatabaseTools/Import_DB_table_NABEL_DUE.r
+40 8 * * * source /newhome/muem/.cshrc; Rscript /project/CarboSense/Software/CarbosenseDatabaseTools/DB_REF_MEAS_Processing.r; Rscript /project/CarboSense/Software/CarbosenseDatabaseTools/Compute_NABEL_Picarro_CO2_WET.r
+#
+#
+# Import EMPA/UNIBE CO2 measurements from BRM, GIMM and LAEG into Carbosense database
+#
+0  3 * * * source /newhome/muem/.cshrc; Rscript /project/CarboSense/Software/CarbosenseDatabaseTools/Import_DB_table_EMPA_LAEG.r
+15 3 * * * source /newhome/muem/.cshrc; Rscript /project/CarboSense/Software/CarbosenseDatabaseTools/Import_DB_table_UNIBE_BRM.r
+25 3 * * * source /newhome/muem/.cshrc; Rscript /project/CarboSense/Software/CarbosenseDatabaseTools/Import_DB_table_UNIBE_GIMM.r
+#
+# Import pressure into Carbosense database, pressure interpolation for sensor locations
+#
+# REPLACED BY SCRIPT OF SIMONE 15 8 * * * source /newhome/muem/.cshrc; Rscript /project/CarboSense/Software/MeteoSwissData4Carbosense/Import_DB_table_METEOSWISS_Measurements.r
+25 8 * * * source /newhome/muem/.cshrc; Rscript /project/CarboSense/Software/MeteoSwissData4Carbosense/METEOSWISS_PressureInterpolation.r
+0 14 * * 0 source /newhome/muem/.cshrc; Rscript /project/CarboSense/Software/MeteoSwissData4Carbosense/MCH_MEAS_DiurnalVariationsPerMonth.r
+5 14 * * 0 source /newhome/muem/.cshrc; Rscript /project/CarboSense/Software/MeteoSwissData4Carbosense/MCH_MEAS_TimeSeries.r
+#
+# Carbosense network status 
+#
+0  2 * * * source /newhome/muem/.cshrc; Rscript /project/CarboSense/Software/CarbosenseNetworkStatus/CarboSenseDeployment2KML.r
+4  2 * * * source /newhome/muem/.cshrc; Rscript /project/CarboSense/Software/CarbosenseNetworkStatus/GEO_ADMIN_LINKS_for_active_deployments.r
+5  2 * * * source /newhome/muem/.cshrc; Rscript /project/CarboSense/Software/CarbosenseNetworkStatus/Check_CarboSense_SensorHealth.r
+6  2 * * * source /newhome/muem/.cshrc; Rscript /project/CarboSense/Software/CarbosenseNetworkStatus/MeteoSwissNetwork2KML.r
+#
+# Compute Carbosense LP8 CO2 values / upload processed measurements to Decentlab database
+#
+05 19 * * * source /newhome/muem/.cshrc; sh /project/CarboSense/Software/LP8_measurement_processing/Carbosense_LP8_DATA_PROCESSING.sh PROC_MODE02_NO_DUE
+10 19 * * * source /newhome/muem/.cshrc; sh /project/CarboSense/Software/LP8_measurement_processing/Carbosense_LP8_DATA_PROCESSING.sh PROC_MODE03_NO_DUE
+20 19 * * * source /newhome/muem/.cshrc; sh /project/CarboSense/Software/LP8_measurement_processing/Carbosense_LP8_DATA_PROCESSING.sh PROC_MODE02_DUE
+25 19 * * * source /newhome/muem/.cshrc; sh /project/CarboSense/Software/LP8_measurement_processing/Carbosense_LP8_DATA_PROCESSING.sh PROC_MODE03_DUE
+00 12 * * * source /newhome/muem/.cshrc; sh /project/CarboSense/Software/LP8_measurement_processing/Carbosense_LP8_DATA_PROCESSING.sh PROC_FINAL_NO_DUE; sh /project/CarboSense/Software/UploadProcessedMeasurementsToDecentlabDB/Upload_LP8_Measurements_To_swiss_co2_live.sh
+#
+# Compute Carbosense HPP CO2 values / upload processed measurements to Decentlab database / generation of time series / some data analyses and plausibility checks 
+#
+06 05 * * * source /newhome/muem/.cshrc; Rscript /project/CarboSense/Software/HPP_measurement_processing/Compute_CarboSense_HPP_CO2_values.r F; sh /project/CarboSense/Software/UploadProcessedMeasurementsToDecentlabDB/Upload_HPP_Measurements_To_swiss_co2_live.sh;  Rscript /project/CarboSense/Software/HPP_measurement_processing/Plot_HPP_CO2.r; Rscript /project/CarboSense/Software/HPP_measurement_processing/Comparison_CO2_HPP_REF.r;
+10 05 * * * source /newhome/muem/.cshrc; Rscript /project/CarboSense/Software/HPP_measurement_processing/Compute_CarboSense_HPP_CO2_values.r F DUE1
+11 05 * * 0 source /newhome/muem/.cshrc; Rscript /project/CarboSense/Software/HPP_measurement_processing/Comparison_H2O_HPP_MCH.r
+#
+# Generation of CO2 time series of Picarro/Licor measurements at BRM, DUE1, GIMM, HAE, LAEG, PAY and RIG
+#
+0 9 * * * source /newhome/muem/.cshrc; Rscript /project/CarboSense/Software/REF_measurement_processing/Plot_REF_CO2_TS.r 
+#
+# Sensor Calibrations
+#
+# Calibration / data analyses of first generation HPPs deployed at DUE1
+#
+00 12  * * 0 source /newhome/muem/.cshrc; Rscript /project/CarboSense/Software/HPP_sensor_calibration/CO2_HPP_SensorCalibration_LINUX_IR.r 7 "/project/CarboSense/Carbosense_Network/HPP_Calibration/HPP_1stGen_RESULTS_CV07/"; sh /project/CarboSense/Software/HPP_sensor_calibration/CONVERT_HPP_1stGENERATION_FIGURES.sh /project/CarboSense/Carbosense_Network/HPP_Calibration/HPP_1stGen_RESULTS_CV07/
+#
+# Calibration / data analyses of second generation HPPs deployed at DUE1
+#
+39 12 * * * source /newhome/muem/.cshrc; Rscript /project/CarboSense/Software/HPP_sensor_calibration/CO2_HPP_SensorCalibration_LINUX_IR_2S.r 4 "/project/CarboSense/Carbosense_Network/HPP_Calibration/HPP_2ndGen_RESULTS_CV04/"; sh /project/CarboSense/Software/HPP_sensor_calibration/CONVERT_HPP_2ndGENERATION_FIGURES.sh /project/CarboSense/Carbosense_Network/HPP_Calibration/HPP_2ndGen_RESULTS_CV04/
+#
+# Calibration / data analysis of LP8 at DUE1
+#
+00 12 * * 0 source /newhome/muem/.cshrc; Rscript /project/CarboSense/Software/LP8_sensor_calibration/CO2_LP8_SensorCalibration_LINUX_DRY.r "/project/CarboSense/Carbosense_Network/LP8_Calibration/LP8_CAL_02-June-2020_CV00_M/" 0 MEAN
+#
+# COVID-19
+#
+00 16 * * * source /newhome/muem/.cshrc; Rscript /project/CarboSense/Software/Statistical_Models/Covid-19_Traffic_Corona.r; Rscript /project/CarboSense/Software/Statistical_Models/Covid-19_TimeSeriesModelling.r; sh /project/CarboSense/Software/Statistical_Models/Covid-19_PDF2PNG.sh; /bin/cp -ar /project/CarboSense/Statistical_Models/Covid-19_ZH/Results /newhome/muem/mnt/Covid-19/Covid-19_ZH/.
