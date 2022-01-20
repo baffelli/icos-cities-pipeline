@@ -12,7 +12,7 @@ parser$add_argument("-b", "--backfill", action="store_true", default=FALSE, help
 args <- parser$parse_args()
 
 
-duration <- if_else(args$backfill, '30d', '2d')
+duration <- if_else(args$backfill, '90d', '2d')
 print(paste("Importing last", duration))
 
 
