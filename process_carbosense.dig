@@ -28,6 +28,8 @@ _export:
             sh>: Rscript ${base_folder}/CarbosenseDatabaseTools/Compute_NABEL_Picarro_CO2_WET.r
     +plot_ref_ts:
         sh>:  Rscript ${base_folder}/REF_measurement_processing/Plot_REF_CO2_TS.r
+    
+    #+import_calibration_data:
 
 +meteo:
     +copy_meteoswiss:
@@ -53,6 +55,8 @@ _export:
     +k96:
         +copy_k96:
             sh>: rsync -a pi@10.2.5.238:/home/pi/data/*.csv /project/CarboSense/temp/K96_data
+    +consolidate:
+        sh>: Rscript ${base_folder}/new_sensors/consolidate_sensor_data.R
 
 
 +network_state:
@@ -69,7 +73,7 @@ _export:
 
 +HPP:
     +process_hpp:
-        sh>: Rscript ${base_folder}/HPP_measurement_processing/Compute_CarboSense_HPP_CO2_values.r F
+        sh>: Rscript ${base_folder}/HPP_measurement_processing/Compute_CarboSense_HPP_CO2_values.r 
     +plot_hpp_ts:
         sh>: Rscript ${base_folder}/HPP_measurement_processing/Plot_HPP_CO2.r
     +comparison_hpp_ref:
