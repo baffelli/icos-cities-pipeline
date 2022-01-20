@@ -44,7 +44,7 @@ then
 		[ ! -d ${mounts[$ii]} ] && mkdir ${mounts[$ii]}
 
 		echo "Mounting: " ${shares[$ii]} "to" ${mounts[$ii]}
-		sudo mount.cifs --verbose  -o gid=${lin_group},uid=${lin_user},user=${win_user},password=${pass},noauto,noserverino  ${shares[$ii]} ${mounts[$ii]}
+		sudo -s -- "mount.cifs --verbose  -o gid=${lin_group},uid=${lin_user},user=${win_user},password=${pass},noauto,noserverino  ${shares[$ii]} ${mounts[$ii]}"
 		if [ $? -eq 0 ]; then 
 			echo "Success"
 		else  
