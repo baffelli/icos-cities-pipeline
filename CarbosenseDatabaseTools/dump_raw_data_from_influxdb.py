@@ -4,23 +4,15 @@ import pymysql
 import sqlalchemy.engine as eng
 import sqlalchemy as db 
 import itertools as ito
+import utils.decentlab as dl
+import utils.db as db_utils
+
 
 from datetime import datetime as dt
 from datetime import timedelta 
 
 #TODO move to module
-#Method to upsert
-def create_method(meta):
-	def method(table, conn, keys, data_iter):
-		sql_table = db.Table(table.name, meta, autoload=True)
-		insert_stmt = db.dialects.mysql.insert(sql_table).values([dict(zip(keys, data)) for data in data_iter])
-		upsert_stmt = insert_stmt.on_duplicate_key_update({x.name: x for x in insert_stmt.inserted})
-		try:
-			conn.execute(upsert_stmt)
-		except db.exc.SQLAlchemyError as e:
-			print(str(e)[1:1000])
-			import pdb; pdb.set_trace()
-	return method
+
 
 #TODO add parameters from argparse
 import_all = False
@@ -31,7 +23,7 @@ sensor_type = 'LP8'
 passw = "eyJrIjoiN2lSN1VJQjg1OUkwOWJyeTZUUFBiSVNDRjh5WGxGZTMiLCJuIjoic2ltb25lLmJhZmZlbGxpQGVtcGEuY2giLCJpZCI6MX0="
 
 #Create influxdb client
-client = influxdb.InfluxDBClient("swiss.co2.live",443,None,None,"main", path='/api/datasources/proxy/6',ssl=True,verify_ssl=True,headers={'Authorization': 'Bearer ' + passw})
+client = dl.decentlab_client(token=passw)
 engine = eng.create_engine('mysql+pymysql://emp-sql-cs1', connect_args={'read_default_file': '~/.my.cnf','read_default_group':'CarboSense_MySQL'})
 
 def check_sensor_type(sensor_type):
@@ -74,24 +66,15 @@ def get_sensors(con, sensor_type='LP8'):
 	sens = con.execute(qp, {'sens_type':sensor_type, 'min':table_mapping[sensor_type]['first_id']})
 	return sens, table_mapping[sensor_type]['table']
 
-def influx_db_query(client, current_sens, start_ts, sensor_type='LP8'):
-	check_sensor_type(sensor_type)
-	averaging_time = "10m" if sensor_type == 'LP8' else '1m'
-	start_ts_s = f'{dt.fromtimestamp(start_ts).isoformat()}Z'
-	data_query = f"""SELECT * FROM  (SELECT MEAN("value") AS value FROM "measurements" WHERE node=~ /{current_sens}/ AND sensor =~ /senseair*|sensirion*|battery|calibration/ AND "time" > $start_ts GROUP BY "node","sensor", time({averaging_time}))"""
-	return client.query(data_query, epoch='s', bind_params={"current_sens":current_sens, "start_ts":start_ts_s})
-
-def format_influxdb_timestamp(timestamp):
-	return f'{dt.fromtimestamp(timestamp).isoformat()}Z'
 
 def get_lp8_data(client, current_sens, start_ts, limit=200):
 	averaging_time = "10m" 
-	start_ts_s = format_influxdb_timestamp(start_ts)
+	start_ts_s = dl.format_influxdb_timestamp(start_ts)
 	data_query = f"""SELECT MEAN("value") AS value FROM "measurements" WHERE node=~ /{current_sens}/ AND sensor =~ /senseair*|sensirion*|battery|calibration/ AND "time" > $start_ts GROUP BY "node","sensor", time({averaging_time}) LIMIT {limit}"""
 	return client.query(data_query, epoch='s', bind_params={"current_sens":current_sens, "start_ts":start_ts_s})
 
 def get_hpp_data(client, current_sens, start_ts, limit=200):
-	start_ts_s = format_influxdb_timestamp(start_ts)
+	start_ts_s = dl.format_influxdb_timestamp(start_ts)
 	data_query = f"""SELECT value FROM "measurements" WHERE node =~ /{current_sens}/ AND sensor =~ /senseair|sensirion|battery|calibration/ AND "time" >= $start_ts GROUP BY sensor,node LIMIT {limit}"""
 	return client.query(data_query, epoch='s', bind_params={"current_sens":current_sens, "start_ts":start_ts_s})
 
@@ -110,9 +93,6 @@ def parse_result_set(result_set):
 	import pdb; pdb
 	df = pd.concat([pd.DataFrame(ms).assign(**tg).set_index('time') for (nm, tg),ms in result_set.items()], sort=True, axis=0, join='inner').pivot_table(index=['node', 'time'],values='value', columns='sensor')
 	return df.rename(columns=lambda x: x.replace("-","_"))
-
-def format_list_regex(codes):
-	return f"{ '|'.join(map(lambda x: str(x),codes))}"
 
 def get_last_influxdb_datapoint(client, nodes):
 	query = f"""SELECT * FROM (SELECT "sensor", LAST("value") FROM "measurements" WHERE "sensor" =~ /battery/ AND "node" =~ /{nodes}/ GROUP BY "node" )"""
@@ -133,5 +113,5 @@ with engine.connect() as con:
 			with con.begin() as cb:
 				meta = db.MetaData(con)
 				method = create_method(meta)
-				df.to_sql(out_table, con, schema="CarboSense", index=False, if_exists='append', method=method)
+				df.to_sql(out_table, con, schema="CarboSense", index=False, if_exists='append', method=db_utils.create_upsert_metod)
 
