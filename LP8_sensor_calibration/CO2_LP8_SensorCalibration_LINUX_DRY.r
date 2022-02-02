@@ -77,20 +77,19 @@ DL_DB_apiKey_EMPA <- "eyJrIjoiWkJaZjFDTEhUYm5sNmdWUG14a3NpdVcwTmZCaHloZVEiLCJuIj
 ### ----------------------------------------------------------------------------------------------------------------------------
 
 # Selection of sensorUnits to be calibrated
-
-SensorUnit_ID_2_cal   <- c(1007,1008)
-SensorUnit_ID_2_cal   <- c(1334:1010)
+SensorUnit_ID_2_cal   <- 1334:1010
 
 if(T){
-  
-  query_str  <- paste("SELECT SensorUnit_ID FROM Calibration WHERE LocationName='DUE1' AND Date_UTC_to='2100-01-01 00:00:00' AND SensorUnit_ID>1008;",sep="")
-  drv        <- dbDriver("MySQL")
-  con<-carboutil::get_conn(group="CarboSense_MySQL")
-  res        <- dbSendQuery(con, query_str)
-  tmp        <- dbFetch(res, n=-1)
-  dbClearResult(res)
+  ## Instead dplyr::collect(dplyr::tbl(con, dplyr::sql(your query here)))
+  query_str  <- "SELECT SensorUnit_ID FROM Calibration WHERE LocationName='DUE1' AND Date_UTC_to='2100-01-01 00:00:00' AND SensorUnit_ID>1008"
+  con <- carboutil::get_conn(group="CarboSense_MySQL")
+  # res        <- dbSendQuery(con, query_str)
+  # tmp        <- dbFetch(res, n=-1)
+  # dbClearResult(res)
+  tmp <- dplyr::collect(dplyr::tbl(con, dplyr::sql(query_str)))
+  #Do not forget to disconnect
   dbDisconnect(con)
-  
+  #Extract results
   SensorUnit_ID_2_cal <- as.numeric(tmp$SensorUnit_ID)
 }
 
@@ -108,7 +107,9 @@ if(F){
   SensorUnit_ID_2_cal <- as.numeric(tmp$SensorUnit_ID)
 }
 
-
+#Instead: change the query with "SELECT distinct SensorUnit_ID FROM Calibration 
+#WHERE LocationName='DUE1' AND Date_UTC_to='2100-01-01 00:00:00' AND SensorUnit_ID>1008
+#ORDER BY SensorUnit_ID"
 SensorUnit_ID_2_cal   <- sort(unique(SensorUnit_ID_2_cal))
 n_SensorUnit_ID_2_cal <- length(SensorUnit_ID_2_cal)
 
@@ -148,16 +149,23 @@ if(!dir.exists(plotdir_allModels)){
 #
 
 date_UTC_LP8_SU_upgrade_01  <- strptime("20170628000000","%Y%m%d%H%M%S",tz="UTC")
-
 timestamp_LP8_SU_upgrade_01 <- as.numeric(difftime(time1=date_UTC_LP8_SU_upgrade_01,time2=strptime("19700101000000","%Y%m%d%H%M%S",tz="UTC"),units="secs",tz="UTC"))
 
+#Very complex solution to compute timestamp.
+#Modern solution 
+date_UTC_LP8_SU_upgrade_01 <- lubridate::as_datetime("2017-06-28 00:00:00 UTC")
+timestamp_LP8_SU_upgrade_01 <- as.numeric(timestamp_LP8_SU_upgrade_01)
 ### ----------------------------------------------------------------------------------------------------------------------------
+
+
+#TODO make a nicer list
 
 # sensor model versions
 
 sensor_models   <- list()
 
 ## IR RAW
+
 
 ## Only Beer-Lambert without compensation terms
 
@@ -180,7 +188,9 @@ if(F){
 
 ## Beer-Lambert with compensation terms for temperature f(T), f(T,1/IR)
 
-if(F){
+#TODO: define a new t_abs variable instead of using 273.15 (Very dangerous)
+
+if(T){
   
   sensor_models[[length(sensor_models)+1]] <- list(name      ="CO2_MODEL_pLIN_c0_TIR_CONSTIR",
                                                    modelType ="LM_IR",
@@ -227,17 +237,23 @@ for(ith_SensorUnit_ID_2_cal in 1:n_SensorUnit_ID_2_cal){
   
   # calibration information (only CalMode "1","2","3")
   
+  #TODO use parametrised queries (see here https://db.rstudio.com/best-practices/run-queries-safely/)
+
   query_str       <- paste("SELECT * FROM Calibration where SensorUnit_ID=",SensorUnit_ID_2_cal[ith_SensorUnit_ID_2_cal]," and CalMode IN (1,2,3);",sep="")
+  query_str <- glue::glue_sql("SELECT * FROM Calibration where SensorUnit_ID = {SensorUnit_ID_2_cal[ith_SensorUnit_ID_2_cal]} and CalMode IN (1,2,3)")
+
+  
+  
   drv             <- dbDriver("MySQL")
   con <-carboutil::get_conn( group="CarboSense_MySQL")
   res             <- dbSendQuery(con, query_str)
   tbl_calibration <- dbFetch(res, n=-1)
   dbClearResult(res)
   dbDisconnect(con)
-  
+  # TODO do this in the database
   tbl_calibration$Date_UTC_from <- strptime(tbl_calibration$Date_UTC_from,"%Y-%m-%d %H:%M:%S",tz="UTC")
   tbl_calibration$Date_UTC_to   <- strptime(tbl_calibration$Date_UTC_to,  "%Y-%m-%d %H:%M:%S",tz="UTC")
-  
+  # Replace 2100-01-01 with current data (USE LEAST(Date_UTC_To, CURDATE()) directly in query instead)
   id <- which(tbl_calibration$Date_UTC_to == strptime("2100-01-01 00:00:00","%Y-%m-%d %H:%M:%S",tz="UTC"))
   
   if(length(id)>0){
@@ -249,6 +265,7 @@ for(ith_SensorUnit_ID_2_cal in 1:n_SensorUnit_ID_2_cal){
   
   # -----------
   
+  #Probably can be deleted
   ## Case "2017-12-12": Limitation of calibration period to 2017-12-12
   
   if(F){
