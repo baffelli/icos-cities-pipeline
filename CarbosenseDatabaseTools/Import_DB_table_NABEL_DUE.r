@@ -29,8 +29,7 @@ DB_group <- "CarboSense_MySQL"
 
 ## Directories
 
-fdirectory <- "K:/Nabel/Daten/Stationen/DUE/"
-fdirectory <- "/project/CarboSense/Win_K/Daten/Stationen/DUE/"
+fdirectory <- "/mnt/basi/Nabel/Daten/Stationen/DUE/"
 
 ## ----------------------------------------------------------------------------------------------------------------------
 
@@ -39,6 +38,9 @@ fdirectory <- "/project/CarboSense/Win_K/Daten/Stationen/DUE/"
 # - automatically downloaded data files [directory: "K:/Nabel/Daten/Stationen/DUE"]
 # - data files contain one minute data [date, values of NABEL measurement programm at DUE plus respective flags]
 # - date refers to CET
+ #Backfill for safety
+today <- lubridate::today() 
+backfill_start <- today - lubridate::days(x=10)
 
 
 parse_nabel_date <- function(x) lubridate::as_date(stringr::str_extract(x,"\\d{6}"))
@@ -55,9 +57,14 @@ if(T){
   #Get dates of files (subtract one day because NABEL is the previous day)
   dates_in_files <- map(files, function(x)  parse_nabel_date(x) - lubridate::days(x=1))
 
+ 
+  
+  #Compute valid date
+  valid_dates <- union(dates_in_files[dates_in_files > backfill_start], setdiff(dates_in_files, dates_in_db))
+  print(valid_dates)
   #Get dates to load
-  files_to_load <-  match(setdiff(dates_in_files, dates_in_db), dates_in_files)
-
+  files_to_load <-  match(valid_dates, dates_in_files) 
+  
   n_files <- length(files_to_load)
   print(paste("In total", n_files, " files must be loaded"))
   for(ith_file in files_to_load){
@@ -333,10 +340,16 @@ if(T){
   files    <- list.files(path = fdirectory, pattern = "DUE Test CO2",full.names = T)
 
   #Get dates of files
+
+
   dates_in_files <- map(files, function(x)  parse_nabel_date(x) - lubridate::days(x=1))
 
+  #Compute valid date
+  valid_dates <- union(dates_in_files[dates_in_files > backfill_start], setdiff(dates_in_files, dates_in_db))
   #Get dates to load
-  files_to_load <-  match(setdiff(dates_in_files, dates_in_db), dates_in_files)
+  files_to_load <-  match(valid_dates, dates_in_files) 
+  print(files[files_to_load])
+  #Get dates to load
 
   
   files_ok <- unlist(map(files[files_to_load], function(x) file.size(x) > 500))
@@ -354,7 +367,6 @@ if(T){
   for(ith_file in 1:n_files){
     print(paste("Loading file", files[ith_file], ith_file, "out of", n_files))
     data_ref <- read.table(file = files[ith_file],sep=";",as.is=T,skip=4,header=F)
-    print(data_ref)
     # Type 1 file
     ok  <- F
     if(dim(data_ref)[2]==4){

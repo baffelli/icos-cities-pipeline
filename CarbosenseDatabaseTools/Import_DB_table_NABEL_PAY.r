@@ -31,7 +31,7 @@ DB_group <- "CarboSense_MySQL"
 ## Directories
 
 fdirectory <- "K:/Nabel/Daten/Stationen/PAY/"
-fdirectory <- "/project/CarboSense/Win_K/Daten/Stationen/PAY/"
+fdirectory <- "/mnt/basi/Nabel/Daten/Stationen/PAY/"
 
 ## ----------------------------------------------------------------------------------------------------------------------
 
