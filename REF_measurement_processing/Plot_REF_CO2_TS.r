@@ -77,7 +77,7 @@ if(INCLUDE_ANCHOR_EVENTS){
 
 #
 
-for(yyyy_plot in seq(2019,2021)){
+for(yyyy_plot in seq(2019, lubridate::year(lubridate::now()))){
   
   figname <- paste(resultdir,"/ALL_REF_CO2_",yyyy_plot,"_TS.pdf",sep="")
   
@@ -142,7 +142,7 @@ for(yyyy_plot in seq(2019,2021)){
     
     for(ith_table in 1:n_tables){
         con<-carboutil::get_conn(group="CarboSense_MySQL")
-        query_str <- "SELECT timestamp, CO2 FROM ref_data WHERE timestamp BETWEEN {timestamp_from} AND {timestamp_to} AND LocationName = {tables[ith_table]}"
+        query_str <- "SELECT timestamp, CO2 FROM picarro_data WHERE timestamp BETWEEN {timestamp_from} AND {timestamp_to} AND LocationName = {tables[ith_table]}"
         query_interp <- glue::glue_sql(query_str, .con=con)
         print(query_interp)
         res       <- dbSendQuery(con, query_interp)
