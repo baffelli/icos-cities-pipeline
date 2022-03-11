@@ -1,4 +1,68 @@
-# CarboSenseUtilities
+# CarboSense/ICOS Cities Pipeline
+## Introduction
+This repository contains *almost* all the code, configurations and scripts needed to process the ICOS-Cities/CarboSense mid- and low-cost sensor data. Usually, the entry point in the processing is done through the DigDag [DAG](process_carbosense.dig). If you inspect this (yaml) file, you will see a list of all processes and their dependencies. To learn more about digdag DAG, see the documentation [here](http://docs.digdag.io/concepts.html).
+
+## Setup the Pipeline
+To setup a working pipeline, you need to follow the steps below. In case of problems, you can contact Simone Baffelli. In the following sections, we assume you work on a Linux system with python>=3.6 and with an working installation of conda/anaconda.
+### Install dependencies
+Using conda, install all the dependencies from [envrionment.yaml](config/environment.yaml):
+```bash
+conda env create -f config/environment.yml
+```
+The environment is called *carbosense-processing*. 
+### Configure database connections
+
+As the system relies heavily on database connections, we need to setup the database credentials such that you do not need to type them anywhere. Since the database is currently MariaDB, we will use a MySQL options file. For more informations on these files, see [here](https://mariadb.com/kb/en/configuring-mariadb-with-option-files/). 
+
+To get started, create a file `.my.cnf` in your home folder and insert the following lines:
+
+```
+[CarboSense_MySQL]
+user={insert your user here}
+password={insert your password here}
+host=emp-sql-cs1
+port=3306
+max_allowed_packet=128M
+database=CarboSense
+[NabelGsn]
+database=NabelGsn
+user={insert your user here}
+password={insert your password here}
+host=du-gsn1
+port=3306
+[empaGSN]
+database=empaGSN
+user={insert your user here}
+password={insert your password here}
+host=du-gsn1
+port=3306
+[client]
+socket=/var/lib/mysql/mysql.sock
+```
+
+At the moment, there are three databases that are necessary for the pipeline, as you can see in this file:
+- CarboSense_MySQL
+  - This is the metadata and raw data database which is used to store processed data and raw data. To obtain a password, ask Simone Baffelli or Patrick Burkhalter
+- NabelGsn, empaGSN
+  - These databases contain some of the sensor data from NABLE and EMPA. To obtain access, ask Stephan Henne
+### Install DigDag
+Follow the instructions [here](http://docs.digdag.io/getting_started.html#downloading-the-latest-version) to install the latest version of digdag.
+
+## Running the pipeline
+### Manual run
+To manually run the pipeline, use the following commands:
+```bash
+conda activate carbosense-processing
+digdag -r process_carbosense.dig
+```
+### Automated run
+So far, the pipeline run are scheduled to run once per day using a crontab file calling the script [start_processing.sh](start_processing.sh). 
+
+In the future, it would be desireable to install digdag as a service, so that the pipeline runs can be scheduled directly with digdag and their operation can be verified more robustly. For this, consult the digdag documentation [here](http://docs.digdag.io/command_reference.html#server-mode-commands).
+
+
+
+## CarboSenseUtilities
 - CarboSenseFunctions.r
   - Collection of plot functions, etc.
 - api-v1.3.r
@@ -229,3 +293,9 @@ Contacts related to "swiss.co2.live": Khash-Erdene Jalsan (khash.jalsan@decentla
   - Download LP8 measurements from the Decentlab database, measurement processing (e.g. adjusting of timestamp, removal of duplicates, status), export in Carbosense database
 - Carbosense_data_release_2019-10.r
   - Script that created the files for the ICOS data release in October 2019  
+
+# sensorutils
+This is a python package containing utilities used in all other scripts. To install it in the project, run the following command from the main repository directory:
+```
+pip install -e ./sensorutils
+```
