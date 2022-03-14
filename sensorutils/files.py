@@ -1,4 +1,5 @@
 #from CarbosenseDatabaseTools.import_picarro_data import read_nabel_csv
+from argparse import ArgumentError
 from sys import intern
 import pandas as pd
 import getpass as gp
@@ -6,7 +7,7 @@ import pathlib as pl
 import datetime as dt
 from parsimonious.grammar import Grammar
 from parsimonious.nodes import NodeVisitor
-from typing import Union, List, Optional, Pattern
+from typing import Union, List, Optional, Pattern, Dict
 from dataclasses import dataclass
 from abc import ABC, abstractmethod
 import re as re
@@ -15,10 +16,14 @@ import json
 import sqlalchemy as sqa
 from sqlalchemy.orm import sessionmaker
 import platform
+import sqlite3
+import yaml
 
 """
 This module contains functions used to interact with files and read and write specific file formats used in this 
 project
+
+
 """
 
 def get_user() -> str: 
@@ -193,8 +198,11 @@ def parse_nabel_headers(text: str) -> Grammar:
     ----------
     text: str
         The text to parse
-    Returns:
-        parsimonious.
+    Returns
+    -------
+    parsimonious.Grammar
+        The parsed grammar tree for the NABEL data file
+
     """
     grammar = Grammar(
         r"""
@@ -218,30 +226,47 @@ def parse_nabel_headers(text: str) -> Grammar:
     return grammar.parse(text)
 
 
-
+"""
+Mapping between numeric codes in NABEL export files and textual description of these flags.
+For more information on the mapping, ask the NABEL team
+"""
 nabel_flags = {
     5: 'AV',
-    7: 'VALID',
-    8: 'VALID_text',
+    7: 'VALID_num',
+    8: 'VALID',
     10: 'MIN',
     11: 'MIN_time',
     12: 'MAX',
     13: 'MAX_time',
     14: 'agg_duration_min',
     15: 'agg_duration_hour',
-    18: 'F',
-    19: 'F_text'
+    18: 'F_num',
+    19: 'F'
 }
 
 
-def read_nabel_csv(path: Union[pl.Path, str]) -> pd.DataFrame:
-    nabel_encoding = 'latin-1'
+def read_nabel_csv(path: Union[pl.Path, str], encoding:str='latin-1') -> pd.DataFrame:
+    """
+    Reads a NABEL csv export file considering the special headers and returns a :obj:`pandas.DataFrame` with the data.
+    Be careful with datetime operations: NABEL data is exported as CET by default.
+
+    Parameters
+    ----------
+    path: pathlib.Path or str
+        The path to read the file from
+
+    Returns
+    -------
+    pandas.DataFrame
+        The parsed data
+    """
+    nabel_encoding = encoding
     nabel_sep = ';'
     skip = 4
-    #Read row names
+    #Read headers text
     with open(path, 'r', encoding=nabel_encoding) as inf:
         text = [inf.readline() for l in range(skip)]
-    #Get headers
+    #Parse headers
     headers, rest = extract_nabel_headers(''.join(text))
     #Import data
     data = pd.read_csv(path, encoding=nabel_encoding, header=0, names=headers,  skiprows=skip, keep_default_na=True, sep=nabel_sep, index_col=False,  na_values=['',])
@@ -249,6 +274,11 @@ def read_nabel_csv(path: Union[pl.Path, str]) -> pd.DataFrame:
     return data.rename(lambda x: x.replace('_AV',''), axis='columns')
 
 class NabelVisitor(NodeVisitor):
+    """
+    This class implements a :obj:`parsimonious.nodes.NodeVisitor`
+    used to parse a NABEL file header and return the correct columsn and flags
+    The various `visit_*` functions implement visiting functions for the different elements of the grammar.
+    """
 
     def __init__(self):
         self.df = pd.DataFrame()
@@ -308,36 +338,89 @@ class NabelVisitor(NodeVisitor):
             
 
 def extract_nabel_headers(text: str) -> pd.DataFrame:
+    """
+    Parses an input text into NABEL headers using the grammar specified in :func:`parse_nabel_headers`
+    
+    Arguments
+    ---------
+    text: str
+        The input text to parse
+    """
     tree = parse_nabel_headers(text)
-    import pdb; pdb.set_trace()
     visitor = NabelVisitor()
     return visitor.visit(tree)
  
 @dataclass
 class DataSource(ABC):
+    """
+    Abstract base class to represent a generic data source which is used to list datasets or create and read
+    existing datasets (grouped by date). This is an helper class to assist with incremental import of reference (picarro CRDS) data
+    from NABEL exports or from other database sources.
+    The data is assumed to be grouped by station and date and one instance of this class represents all available
+    datasets from a specific station, which is represented by the attribute `path`.
+
+    Attributes
+    ----------
+    path: str
+        The "path" of the datasource
+    """
     path: str
 
     @abstractmethod
-    def list_files(self, rexp: Union[str, Pattern]) -> pd.DataFrame:
+    def list_files(self) -> pd.DataFrame:
         pass
 
     @abstractmethod 
-    def read_file(date) -> pd.DataFrame:
+    def read_file(self, date: str) -> pd.DataFrame:
         pass
 
     @abstractmethod 
-    def write_file(input: pd.DataFrame) -> None:
+    def write_file(self, input: pd.DataFrame) -> None:
         pass
+
 @dataclass
 class DBSource(DataSource):
+    """
+    This subclass of :obj:`DataSource`represents a datasource located on a relational database.
+    It is assumed that the datasource represents data from a single measurement station and that the data is 
+    stored in a single table identified by the attribute :obj:`path`. One *file* in this datasource is represented
+    by all measurement for a single date. This is meant to help with incremental loading of data from other sources (e.g NABEL exports), where
+    the data is exported by daily files.
+    In order to identify the numerber of *files*,  the class methods use SQL queries on the table, therefore the date column
+    is specified at the class initalisation time as the :obj:`date_column` parameter.
+
+    Attributes
+    ----------
+    db_prefix: str
+        The group of the mariadb options files used to connect to the specific DB. See :obj:`db.connect_to_metadata_db` for more information.
+    date_column: str
+        The database column representing the date (as a unix timestamp)
+    date_mult: float
+        A multiplier for the date column in order for the SQL backend to be able to parse bigints as  unix timestamp correclty
+    """
     db_prefix: str
     date_column: str
     date_mult: float
 
     def list_files(self) -> pd.DataFrame:
+        """
+        Lists all available *files* on the data source. One *file* is assumed to be the set of all measurements sharing the same date.
+        
+        Returns
+        -------
+        pandas.DataFrame
+            A dataframe with the available files
+        """
         return get_available_measurements_on_db(self.path, date_mult=self.date_mult, date_column=self.date_column, db_group=self.db_prefix)
 
-    def read_file(self, date):
+    def read_file(self, date: str):
+        """
+        Reads one file from the database source with a given date
+        Parameters
+        ----------
+
+        """
+
         eng = db_utils.connect_to_metadata_db(group=self.db_prefix)
         metadata = sqa.MetaData(bind=eng)
         table = sqa.Table(self.path, metadata, autoload=True)
@@ -349,18 +432,43 @@ class DBSource(DataSource):
         return pd.read_sql(str(qs), eng).drop("group_date", axis=1)
     
     def write_file(self, input: pd.DataFrame) -> None:
-        return super().write_file()
+        """
+        Writes one file
+        """
+        return super().write_file(input)
 
 @dataclass
 class CsvSource(DataSource):
+    """
+    This subclass of :obj:`DataSource`represents a datasource located in a CSV file. One *file* 
+    in this dataset corresponds to a day of measurements for that station.
+    """
     re: str
 
     def list_files(self) -> pd.DataFrame:
+        """
+        Lists all the available files in the :obj:`path` with the specified regex.
+        """
         return get_available_files(self.path, rexp = self.re)
 
-    def read_file(self, date) -> pd.DataFrame:
-        #path = pl.Path(get_nabel_station_data_path(self.path), )
-        return read_nabel_csv(date)
+    def read_file(self, date:str) -> pd.DataFrame:
+        """
+        Read a file with the given date from the datasource.
+        If there are multiple files with the same date these are (outer)joined on the date key
+        Parameters
+        ----------
+        date: str
+            The date to read
+        Returns
+        -------
+        pandas.DataFrame
+            The dataframe with all measurements
+        """
+        fl = self.list_files()
+        fl_to_read = fl[fl['date'] == date]
+        ds = pd.concat([read_nabel_csv(f).set_index('date') for f in fl_to_read['path']], axis=1, join='outer')
+        return ds
+    
         
     def write_file(self, data):
         pass
@@ -368,38 +476,94 @@ class CsvSource(DataSource):
 
 @dataclass
 class SourceMapping():
+    """
+    Represents the mapping between
+    two datasources. Also stores the column mapping 
+
+    Attributes
+    ----------
+    source: DataSource
+        The source DataSource object
+    source: DataSource
+        The destination DataSource object
+    columns:
+        A mapping between source and destination columns. The dictionary key represent
+        the destination column name, the value the source column name (or a SQL expression 
+        if the column is derived from multiple source columns).
+    """
     source: DataSource
     dest: DataSource
+    columns: Dict[str, str]
 
     def list_files_missing_in_dest(self) -> pd.DataFrame:
+        """
+        Lists the files available in the source that are missing in the destination
+        Returns
+        -------
+        pandas.DataFrame   
+            A :obj:`pandas.DataFrame` object with dates and paths of the missing files
+        """
         sf = self.source.list_files()
         df = self.dest.list_files()
         merged_data = pd.merge(sf, df, on='date', how='outer', indicator=True)
         missing_data = merged_data[merged_data['_merge']=='left_only']
         return missing_data
 
+    def mapping_to_query(self) -> List[sqa.sql.text]:
+        q = [sqa.sql.text(f"{expr} AS {name}") for name, expr in self.columns.items()]
+        return q
+
+    def map_file(self, file: pd.DataFrame) -> pd.DataFrame:
+        """
+        Map one file from source to destination using :obj:`columns` 
+        and returns a :obj:`pandas.DataFrame`.
+        """
+        #Connect to a in-memory SQLlite database
+        # and write to a table
+        engine = sqa.engine.create_engine('sqlite://',echo=True)
+        #Store in engine
+        file.to_sql("source", engine)
+        #Represent the source as sqlalchemy object
+        md = sqa.MetaData(bind=engine)
+        md.reflect()
+        #Create mappping query
+        cols = self.mapping_to_query()
+        #Apply mapping
+        sq = sqa.select([q for q in cols]).select_from(md.tables["source"])
+        return pd.read_sql(sq, engine)
+
+
 
 
 
 class DataMappingFactory():
+    """
+
+    Factory class to implement creation of data SourceMapping objects
+    from dictionaries or configuration files
+    """
 
     @staticmethod
-    def create_data_source(source: dict) -> DataSource:
+    def create_data_source(source: dict) -> Union[DBSource, CsvSource]:
         source_type = source.pop('type')
         if source_type == 'file':
-            source = CsvSource(**source) 
+            source_obj = CsvSource(**source) 
         elif source_type == 'DB':
-            source = DBSource(**source) 
-        return source
-    @staticmethod
-    def create_mapping(source: dict, dest:dict):
-        source = DataMappingFactory.create_data_source(source)
-        dest = DataMappingFactory.create_data_source(dest)
-        return SourceMapping(source=source, dest=dest)
+            source_obj = DBSource(**source) 
+        return source_obj
 
     @staticmethod
-    def read_json(path: Union[pl.Path, str]) -> List[SourceMapping]:
+    def create_mapping(source: dict, dest:dict, coulmns:dict):
+        source = DataMappingFactory.create_data_source(source)
+        dest = DataMappingFactory.create_data_source(dest)
+        return SourceMapping(source=source, dest=dest, columns=coulmns)
+
+    @staticmethod
+    def read_config(path: Union[pl.Path, str], type='yaml') -> List[SourceMapping]:
+        if type not in ('yaml', 'json'):
+            raise ArgumentError("`type` must be in ('yaml', 'json')")
+        loaders = {'yaml':yaml.load, 'json':json.load}
         with open(path, 'r') as js:
-            configs = json.load(js)
-            mappings = [DataMappingFactory.create_mapping(it['source'], it['dest'])  for k, it in configs.items()]
+            configs = loaders[type](js)
+            mappings = [DataMappingFactory.create_mapping(it['source'], it['dest'], it['columns'])  for k, it in configs.items()]
             return mappings
