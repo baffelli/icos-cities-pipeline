@@ -13,43 +13,44 @@ DUE:
   columns:
     timestamp: CAST(strftime('%s', date) as integer)
     O3: O3
-    O3_F: O3_F
+    O3_F: CASE WHEN O3_F IS NULL THEN 1 ELSE 0 END
     NO2: NO2
-    NO2_F: NO2_F
+    NO2_F: CASE WHEN NO2_F IS NULL THEN 1 ELSE 0 END
     NO: NO
-    NO_F: NO_F
+    NO_F: CASE WHEN NO_F IS NULL THEN 1 ELSE 0 END
     CO: CO
     CO_F: CO
     PM10_kont: PM10kont
-    PM10_kont_F: PM10kont_F
+    PM10_kont_F: CASE WHEN PM10kont_F IS NULL THEN 1 ELSE 0 END
     BabsM_25: BabsM_25
-    BabsM_25_F: BabsM_25_F
+    BabsM_25_F:  CASE WHEN BabsM_25_F IS NULL THEN 1 ELSE 0 END
     T: TEMP
-    T_F: TEMP_F
+    T_F: CASE WHEN TEMP_F IS NULL THEN 1 ELSE 0 END
     RH: FEUCHT
-    RH_F: FEUCHT_F
+    RH_F: CASE WHEN FEUCHT_F IS NULL THEN 1 ELSE 0 END
     STRGLO: STRGLO
-    STRGLO_F: STRGLO_F
+    STRGLO_F: CASE WHEN STRGLO_F IS NULL THEN 1 ELSE 0 END
     rain: REGEN
-    rain_F: REGEN_F
+    rain_F: CASE WHEN REGEN_F IS NULL THEN 1 ELSE 0 END
     pressure: DRUCK
-    pressure_F: DRUCK_F
+    pressure_F: CASE WHEN DRUCK_F IS NULL THEN 1 ELSE 0 END
     WIRI1: WIRI1
-    WIRI1_F: WIRI1_F
+    WIRI1_F: CASE WHEN WIRI1_F IS NULL THEN 1 ELSE 0 END
     WIGE1: WIGE1
-    WIGE1_F: WIGE1_F
+    WIGE1_F: CASE WHEN WIGE1_F IS NULL THEN 1 ELSE 0 END
     WIRI2: WIRI2
-    WIRI2_F: WIRI2_F
+    WIRI2_F: CASE WHEN WIRI2_F IS NULL THEN 1 ELSE 0 END
     WIGE2: WIGE2
-    WIGE2_F: WIGE2_F
+    WIGE2_F: CASE WHEN WIGE2_F IS NULL THEN 1 ELSE 0 END
     WIGEM2: WIGEM2
-    WIGEM2_F: WIGEM2_F
+    WIGEM2_F: CASE WHEN WIGEM2_F IS NULL THEN 1 ELSE 0 END
     CO2_MIN: CO2_MIN
     CO2_MAX: CO2_MAX
     CO2_DRY: CO2_dry
     CO2_F: CO2_F
-    CO2_DRY_F: CO2_dry_F
-    H2O: H2O_F
+    CO2_DRY_F: CASE WHEN CO2_dry_F IS NULL THEN 1 ELSE 0 END
+    H2O: H2O
+    H2O_F: CASE WHEN CO2_F IS NULL THEN 1 ELSE 0 END
 RIG:
   source:
     type: file
@@ -64,23 +65,23 @@ RIG:
   columns:
     timestamp: CAST(strftime('%s', date) as integer)
     NO: NO
-    NO_F: NO_F
+    NO_F: CASE WHEN NO_F IS NULL THEN 1 ELSE 0 END
     O3: O3
-    O3_F: O3_F
+    O3_F: CASE WHEN O3_F IS NULL THEN 1 ELSE 0 END
     CO2: CO2
-    CO2_F: CO2_F
-    CO2_DRY: CO2_dry_F
-    CO2_DRY_F: CO2_dry_F
+    CO2_F: CASE WHEN CO2_F IS NULL THEN 1 ELSE 0 END
+    CO2_DRY: CO2_dry
+    CO2_DRY_F: CASE WHEN CO2_dry_F IS NULL THEN 1 ELSE 0 END
     H2O: H2O
-    H2O_F: H2O_F
+    H2O_F: CASE WHEN CO2_F IS NULL THEN 1 ELSE 0 END
     RH: FEUCHT
-    RH_F: FEUCHT_F
+    RH_F: CASE WHEN FEUCHT_F IS NULL THEN 1 ELSE 0 END
     CO: CO
-    CO_F: CO_F
+    CO_F: CASE WHEN CO_F IS NULL THEN 1 ELSE 0 END
     T: TEMP
-    T_F: TEMP_F
+    T_F: CASE WHEN TEMP_F IS NULL THEN 1 ELSE 0 END
     pressure: DRUCK
-    pressure_F: DRUCK_F
+    pressure_F:  CASE WHEN DRUCK_F IS NULL THEN 1 ELSE 0 END
 HAE:
   source:
     type: file
@@ -95,25 +96,25 @@ HAE:
   columns:
     timestamp: CAST(strftime('%s', date) as integer)
     NO: NO
-    NO_F: NO_F
+    NO_F: CASE WHEN NO_F IS NULL THEN 1 ELSE 0 END
     NO2: NO2
-    NO2_F: NO2_F
+    NO2_F: CASE WHEN NO2_F IS NULL THEN 1 ELSE 0 END
     O3: O3
-    O3_F: O3_F
+    O3_F: CASE WHEN O3_F IS NULL THEN 1 ELSE 0 END
     CO2: CO2
-    CO2_F: CO2_F
+    CO2_F: CASE WHEN CO2_F IS NULL THEN 1 ELSE 0 END
     CO2_DRY: CO2_dry_F
-    CO2_DRY_F: CO2_dry_F
+    CO2_DRY_F: CASE WHEN CO2_dry_F IS NULL THEN 1 ELSE 0 END
     H2O: H2O
-    H2O_F: H2O_F
+    H2O_F: CASE WHEN H2O_F IS NULL THEN 1 ELSE 0 END
     RH: FEUCHT
-    RH_F: FEUCHT_F
+    RH_F: CASE WHEN FEUCHT_F IS NULL THEN 1 ELSE 0 END
     CO: CO
-    CO_F: CO_F
+    CO_F: CASE WHEN CO_F IS NULL THEN 1 ELSE 0 END
     T: TEMP
-    T_F: TEMP_F
+    T_F: CASE WHEN TEMP_F IS NULL THEN 1 ELSE 0 END
     pressure: DRUCK
-    pressure_F: DRUCK_F
+    pressure_F: CASE WHEN DRUCK_F IS NULL THEN 1 ELSE 0 END
 PAY:
   source:
     type: file
@@ -128,19 +129,19 @@ PAY:
   columns:
     timestamp: CAST(strftime('%s', date) as integer)
     NO: NO
-    NO_F: NO_F
+    NO_F: CASE WHEN NO_F IS NULL THEN 1 ELSE 0 END
     NO2: NO2
-    NO2_F: NO2_F
+    NO2_F: CASE WHEN NO2_F IS NULL THEN 1 ELSE 0 END
     O3: O3
-    O3_F: O3_F
+    O3_F: CASE WHEN O3_F IS NULL THEN 1 ELSE 0 END
     CO2: CO2
-    CO2_F: CO2_F
-    CO2_DRY: CO2_dry_F
-    CO2_DRY_F: CO2_dry_F
+    CO2_F: CASE WHEN CO2_F IS NULL THEN 1 ELSE 0 END
+    CO2_DRY: CO2_dry
+    CO2_DRY_F: CASE WHEN CO2_dry_F IS NULL THEN 1 ELSE 0 END
     H2O: H2O
-    H2O_F: H2O_F
+    H2O_F: CASE WHEN H2O_F IS NULL THEN 1 ELSE 0 END
     CO: CO
-    CO_F: CO_F
+    CO_F: CASE WHEN CO_F IS NULL THEN 1 ELSE 0 END
 BRM:
   source:
     type: DB
@@ -175,9 +176,9 @@ GIMM:
   columns:
     timestamp: timed / 1000
     CO2:  CO2_DRY * (1 - H2O/100)
-    CO2_F: CO2_DRY_N
+    CO2_F: IIF(VALVEPOS = 5, 1,0)
     CO2_DRY: CO2_DRY
-    CO2_DRY_F: CO2_DRY_N
+    CO2_DRY_F: IIF(VALVEPOS = 5, 1,0)
     CO: CO
     CO_F: CO_FLAG
     H2O: H2O
