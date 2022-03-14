@@ -30,7 +30,7 @@ def create_upsert_metod(meta: db.MetaData) -> Callable:
 		try:
 			conn.execute(upsert_stmt)
 		except db.exc.SQLAlchemyError as e:
-			raise db.exc.SQLAlchemyError(print(str(e)[1:1000]))
+			raise db.exc.SQLAlchemyError((str(e)[1:1000]))
 	return method
 
 
