@@ -1,0 +1,205 @@
+---
+DUE:
+  source:
+    type: file
+    re: "((DUE Test .*)|(CarboSens.*)|(DUE O3 .*))\\.(csv|CSV)"
+    path: DUE
+    date_from: 2018-01-01 00:00:00
+  dest:
+    type: DB
+    path: NABEL_DUE
+    db_prefix: CarboSense_MySQL
+    date_from: 2018-01-01 00:00:00
+  columns:
+    timestamp: CAST(strftime('%s', date) as integer)
+    O3: O3
+    O3_F: O3_F
+    NO2: NO2
+    NO2_F: NO2_F
+    NO: NO
+    NO_F: NO_F
+    CO: CO
+    CO_F: CO
+    PM10_kont: PM10kont
+    PM10_kont_F: PM10kont_F
+    BabsM_25: BabsM_25
+    BabsM_25_F: BabsM_25_F
+    T: TEMP
+    T_F: TEMP_F
+    RH: FEUCHT
+    RH_F: FEUCHT_F
+    STRGLO: STRGLO
+    STRGLO_F: STRGLO_F
+    rain: REGEN
+    rain_F: REGEN_F
+    pressure: DRUCK
+    pressure_F: DRUCK_F
+    WIRI1: WIRI1
+    WIRI1_F: WIRI1_F
+    WIGE1: WIGE1
+    WIGE1_F: WIGE1_F
+    WIRI2: WIRI2
+    WIRI2_F: WIRI2_F
+    WIGE2: WIGE2
+    WIGE2_F: WIGE2_F
+    WIGEM2: WIGEM2
+    WIGEM2_F: WIGEM2_F
+    CO2_MIN: CO2_MIN
+    CO2_MAX: CO2_MAX
+    CO2_DRY: CO2_dry
+    CO2_F: CO2_F
+    CO2_DRY_F: CO2_dry_F
+    H2O: H2O_F
+RIG:
+  source:
+    type: file
+    re: RIG Gase .*\.csv
+    path: RIG
+    date_from: 2018-01-01 00:00:00
+  dest:
+    type: DB
+    path: NABEL_RIG
+    db_prefix: CarboSense_MySQL
+    date_from: 2018-01-01 00:00:00
+  columns:
+    timestamp: CAST(strftime('%s', date) as integer)
+    NO: NO
+    NO_F: NO_F
+    O3: O3
+    O3_F: O3_F
+    CO2: CO2
+    CO2_F: CO2_F
+    CO2_DRY: CO2_dry_F
+    CO2_DRY_F: CO2_dry_F
+    H2O: H2O
+    H2O_F: H2O_F
+    RH: FEUCHT
+    RH_F: FEUCHT_F
+    CO: CO
+    CO_F: CO_F
+    T: TEMP
+    T_F: TEMP_F
+    pressure: DRUCK
+    pressure_F: DRUCK_F
+HAE:
+  source:
+    type: file
+    re: HAE Gase .*\.csv
+    path: HAE
+    date_from: 2018-01-01 00:00:00
+  dest:
+    type: DB
+    path: NABEL_HAE
+    db_prefix: CarboSense_MySQL
+    date_from: 2018-01-01 00:00:00
+  columns:
+    timestamp: CAST(strftime('%s', date) as integer)
+    NO: NO
+    NO_F: NO_F
+    NO2: NO2
+    NO2_F: NO2_F
+    O3: O3
+    O3_F: O3_F
+    CO2: CO2
+    CO2_F: CO2_F
+    CO2_DRY: CO2_dry_F
+    CO2_DRY_F: CO2_dry_F
+    H2O: H2O
+    H2O_F: H2O_F
+    RH: FEUCHT
+    RH_F: FEUCHT_F
+    CO: CO
+    CO_F: CO_F
+    T: TEMP
+    T_F: TEMP_F
+    pressure: DRUCK
+    pressure_F: DRUCK_F
+PAY:
+  source:
+    type: file
+    re: NO NO2 O3 CO2 H2O .*\.csv
+    path: PAY
+    date_from: 2018-01-01 00:00:00
+  dest:
+    type: DB
+    path: NABEL_PAY
+    db_prefix: CarboSense_MySQL
+    date_from: 2018-01-01 00:00:00
+  columns:
+    timestamp: CAST(strftime('%s', date) as integer)
+    NO: NO
+    NO_F: NO_F
+    NO2: NO2
+    NO2_F: NO2_F
+    O3: O3
+    O3_F: O3_F
+    CO2: CO2
+    CO2_F: CO2_F
+    CO2_DRY: CO2_dry_F
+    CO2_DRY_F: CO2_dry_F
+    H2O: H2O
+    H2O_F: H2O_F
+    CO: CO
+    CO_F: CO_F
+BRM:
+  source:
+    type: DB
+    db_prefix: empaGSN
+    path: beromuenster_12m_1min_cal
+    date_from: 2018-01-01 00:00:00
+  dest:
+    type: DB
+    path: UNIBE_BRM
+    db_prefix: CarboSense_MySQL
+    date_from: 2018-01-01 00:00:00
+  columns:
+    timestamp: timed / 1000
+    CO2:  CO2 * (1 - H2O/100)
+    CO2_F: CO2_FLAG
+    CO2_DRY: CO2
+    CO: CO
+    CO_F: CO_F
+    H2O: H2O
+    H2O_F: H2O_FLAG
+GIMM:
+  source:
+    type: DB
+    db_prefix: empaGSN
+    path: gimmiz_1min_cal
+    date_from: 2018-01-01 00:00:00
+  dest:
+    type: DB
+    path: UNIBE_GIMM
+    db_prefix: CarboSense_MySQL
+    date_from: 2018-01-01 00:00:00
+  columns:
+    timestamp: timed / 1000
+    CO2:  CO2_DRY * (1 - H2O/100)
+    CO2_F: CO2_DRY_N
+    CO2_DRY: CO2_DRY
+    CO2_DRY_F: CO2_DRY_N
+    CO: CO
+    CO_F: CO_FLAG
+    H2O: H2O
+    H2O_F: H2O_FLAG
+LAEG:
+  source:
+    type: DB
+    db_prefix: empaGSN
+    path: laegern_1min_cal
+    date_from: 2018-01-01 00:00:00
+  dest:
+    type: DB
+    path: EMPA_LAEG
+    db_prefix: CarboSense_MySQL
+    date_from: 2018-01-01 00:00:00
+  columns:
+    timestamp: timed / 1000
+    CO2:  CO2 * (1 - H2O/100)
+    CO2_F: CO2_FLAG
+    CO2_DRY: CO2
+    CO2_DRY_F: CO2_F
+    CO: CO
+    CO_F: CO_F
+    H2O: H2O
+    H2O_F: H2O_FLAG

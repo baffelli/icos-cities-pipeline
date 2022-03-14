@@ -14,10 +14,11 @@ import re as re
 from . import db as db_utils
 import json
 import sqlalchemy as sqa
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import sessionmaker, Session
 import platform
 import sqlite3
 import yaml
+import numpy as np
 
 """
 This module contains functions used to interact with files and read and write specific file formats used in this 
@@ -105,7 +106,7 @@ def parse_nabel_datetime(date: str) -> dt.datetime:
     datetime.datetime
         Parsed date
     """
-    return dt.datetime.strptime(date, '%d.%m.%Y %H:%M')
+    return dt.datetime.strptime(date, nabel_format)
 
 def format_nabel_date(date: dt.datetime) -> str:
     """
@@ -244,6 +245,8 @@ nabel_flags = {
     19: 'F'
 }
 
+nabel_format = "%d.%m.%Y %H:%M"
+
 
 def read_nabel_csv(path: Union[pl.Path, str], encoding:str='latin-1') -> pd.DataFrame:
     """
@@ -270,7 +273,7 @@ def read_nabel_csv(path: Union[pl.Path, str], encoding:str='latin-1') -> pd.Data
     headers, rest = extract_nabel_headers(''.join(text))
     #Import data
     data = pd.read_csv(path, encoding=nabel_encoding, header=0, names=headers,  skiprows=skip, keep_default_na=True, sep=nabel_sep, index_col=False,  na_values=['',])
-    data['date'] = pd.to_datetime(data['date']).dt.tz_localize('CET')
+    data['date'] = pd.to_datetime(data['date'], format=nabel_format).dt.tz_localize('CET')
     return data.rename(lambda x: x.replace('_AV',''), axis='columns')
 
 class NabelVisitor(NodeVisitor):
@@ -363,8 +366,14 @@ class DataSource(ABC):
     ----------
     path: str
         The "path" of the datasource
+    date_from: 
+        The first date available on the datasource. Used to filter older datasets out
+    na:
+        A string representing missing values (used when storing the data)
     """
     path: str
+    date_from: dt.datetime
+    na: Union[str, float]
 
     @abstractmethod
     def list_files(self) -> pd.DataFrame:
@@ -397,6 +406,8 @@ class DBSource(DataSource):
         The database column representing the date (as a unix timestamp)
     date_mult: float
         A multiplier for the date column in order for the SQL backend to be able to parse bigints as  unix timestamp correclty
+    na: str
+        A string representing missing values
     """
     db_prefix: str
     date_column: str
@@ -411,9 +422,10 @@ class DBSource(DataSource):
         pandas.DataFrame
             A dataframe with the available files
         """
-        return get_available_measurements_on_db(self.path, date_mult=self.date_mult, date_column=self.date_column, db_group=self.db_prefix)
+        meas =  get_available_measurements_on_db(self.path, date_mult=self.date_mult, date_column=self.date_column, db_group=self.db_prefix)
+        return meas[meas['date'] > self.date_from]
 
-    def read_file(self, date: str):
+    def read_file(self, date: dt.datetime):
         """
         Reads one file from the database source with a given date
         Parameters
@@ -427,15 +439,55 @@ class DBSource(DataSource):
         Session = sessionmaker(eng)
         session = Session()
         dq = session.query(*table.columns, sqa.cast(sqa.func.from_unixtime(table.columns[self.date_column] * self.date_mult), sqa.DATE).label('group_date')).subquery()
-        fq = session.query(dq).filter(dq.c.group_date==date)
+        fq = session.query(dq).filter(dq.c.group_date==date.strftime('%Y-%m-%d'))
         qs = fq.statement.compile(compile_kwargs={"literal_binds": True})
-        return pd.read_sql(str(qs), eng).drop("group_date", axis=1)
+        return pd.read_sql(str(qs), eng).drop("group_date", axis=1).replace(self.na, np.NaN)
     
-    def write_file(self, input: pd.DataFrame) -> None:
+    def write_file(self, input: pd.DataFrame, temporary:bool=False) -> pd.DataFrame:
         """
-        Writes one file
+        Writes one file to the database. If the keys are duplicated,
+        the data are upserted using :obj:`sensorutils.db.create_upsert_metod`
+
+        Parameters
+        ----------
+        input: pandas.DataFrame
+            The input dataset to write. It should have the same columns as contained in the database
+        temporary: bool
+            If set to `True` only perform insert in a temporary uncommited transaction. Useful when testing import
+        Returns
+        -------
+        pd.DataFrame
+            The affected rows in database format
         """
-        return super().write_file(input)
+        #Connect to the database
+        eng = db_utils.connect_to_metadata_db(group=self.db_prefix)
+        metadata = sqa.MetaData(bind=eng)
+        metadata.reflect()
+        #Create an upsert method
+        method  = db_utils.create_upsert_metod(metadata)
+        #Fill na with the na value
+        input_filled = input.fillna(self.na)
+        Session = sessionmaker(bind=eng)
+        session = Session()
+        output_table = metadata.tables[self.path]
+        with eng.connect() as con:
+            tran = con.begin()
+            input_filled.to_sql(self.path, con, method=method,  index=False, if_exists='append')
+            new_data = session.query(output_table).filter(output_table.columns.timestamp.between(input['timestamp'].min(), input['timestamp'].max())).statement.compile(compile_kwargs={"literal_binds": True})
+            affected = pd.read_sql(new_data, con)
+            print(f"Affected rows {affected}")
+            if temporary:
+                print("Rolling back as the temporary flag was set")
+                tran.rollback()
+                return affected
+            else:
+                tran.commit()
+                print("Commiting affected rows")
+                return affected            
+
+
+
+        
 
 @dataclass
 class CsvSource(DataSource):
@@ -449,9 +501,10 @@ class CsvSource(DataSource):
         """
         Lists all the available files in the :obj:`path` with the specified regex.
         """
-        return get_available_files(self.path, rexp = self.re)
+        files = get_available_files(self.path, rexp = self.re)
+        return files[files['date']  > self.date_from]
 
-    def read_file(self, date:str) -> pd.DataFrame:
+    def read_file(self, date:dt.datetime) -> Optional[pd.DataFrame]:
         """
         Read a file with the given date from the datasource.
         If there are multiple files with the same date these are (outer)joined on the date key
@@ -466,7 +519,9 @@ class CsvSource(DataSource):
         """
         fl = self.list_files()
         fl_to_read = fl[fl['date'] == date]
-        ds = pd.concat([read_nabel_csv(f).set_index('date') for f in fl_to_read['path']], axis=1, join='outer')
+        if len(fl_to_read) < 2:
+            import pdb; pdb.set_trace()
+        ds = pd.concat([read_nabel_csv(f) for f in fl_to_read['path']], axis=1, join='outer')
         return ds
     
         
@@ -520,7 +575,7 @@ class SourceMapping():
         """
         #Connect to a in-memory SQLlite database
         # and write to a table
-        engine = sqa.engine.create_engine('sqlite://',echo=True)
+        engine = sqa.engine.create_engine('sqlite://',echo=False)
         #Store in engine
         file.to_sql("source", engine)
         #Represent the source as sqlalchemy object
@@ -546,6 +601,7 @@ class DataMappingFactory():
     @staticmethod
     def create_data_source(source: dict) -> Union[DBSource, CsvSource]:
         source_type = source.pop('type')
+        source['date_from'] = dt.datetime.strptime(source['date_from'], '%Y-%m-%d %H:%M:%S')
         if source_type == 'file':
             source_obj = CsvSource(**source) 
         elif source_type == 'DB':
