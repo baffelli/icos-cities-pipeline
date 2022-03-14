@@ -4,12 +4,23 @@ This repository contains *almost* all the code, configurations and scripts neede
 
 ## Setup the Pipeline
 To setup a working pipeline, you need to follow the steps below. In case of problems, you can contact Simone Baffelli. In the following sections, we assume you work on a Linux system with python>=3.6 and with an working installation of conda/anaconda.
-### Install dependencies
+### Install dependencies with conda
 Using conda, install all the dependencies from [envrionment.yaml](config/environment.yaml):
 ```bash
 conda env create -f config/environment.yml
 ```
 The environment is called *carbosense-processing*. 
+To activate the environment, use:
+```bash
+conda activate carbosense-processing
+```
+
+### Install sensorutils manually
+This is a python package containing utilities used in all other scripts. To install it in the project, run the following command from the main repository directory:
+```
+pip install -e ./sensorutils
+```
+
 ### Configure database connections
 
 As the system relies heavily on database connections, we need to setup the database credentials such that you do not need to type them anywhere. Since the database is currently MariaDB, we will use a MySQL options file. For more informations on these files, see [here](https://mariadb.com/kb/en/configuring-mariadb-with-option-files/). 
@@ -45,6 +56,13 @@ At the moment, there are three databases that are necessary for the pipeline, as
   - This is the metadata and raw data database which is used to store processed data and raw data. To obtain a password, ask Simone Baffelli or Patrick Burkhalter
 - NabelGsn, empaGSN
   - These databases contain some of the sensor data from NABLE and EMPA. To obtain access, ask Stephan Henne
+
+### Configure network shares
+Using automount, configure the following (Windows) network shares to be mounted on `/mnt/{username}/` in the following way:
+- `K:/Projects/` 
+  - One folder per project, e.g  `K:/Projects/Nabel`  mapped on  `/mnt/{username}/Nabel`
+- `G:/`
+  - On `/mnt/{username}/G`
 ### Install DigDag
 Follow the instructions [here](http://docs.digdag.io/getting_started.html#downloading-the-latest-version) to install the latest version of digdag.
 
@@ -60,7 +78,8 @@ So far, the pipeline run are scheduled to run once per day using a crontab file 
 
 In the future, it would be desireable to install digdag as a service, so that the pipeline runs can be scheduled directly with digdag and their operation can be verified more robustly. For this, consult the digdag documentation [here](http://docs.digdag.io/command_reference.html#server-mode-commands).
 
-
+# Structure of the repository
+The repository is structured in directories containing group of scripts performing related tasks. These are listed below
 
 ## CarboSenseUtilities
 - CarboSenseFunctions.r
@@ -70,7 +89,7 @@ In the future, it would be desireable to install digdag as a service, so that th
 - api-v1.3_2019-09-03.r
   - Decentlab API for data retrieval/data upload used in various scripts
 
-# LP8_measurement_processing
+## LP8_measurement_processing
 
 The LP8 measurement processing is applied for two model versions:
 - version [3]: full model -> database table: **CarboSense_CO2_TEST01**
@@ -140,7 +159,7 @@ Miscellaneous:
   - Creation of maps with SHT21 / MeteoSwiss temperatures around the city of Zurich  
 
 
-# HPP_measurement_processing
+## HPP_measurement_processing
 - Compute_CarboSense_HPP_CO2_values.r **CronJob**
   - Required input variables: par1: partial/complete processing [T/F]; optional_par2: LocationName (if omitted only operational sites are processed)
   - Tasks:
@@ -157,12 +176,12 @@ Miscellaneous:
   - Tasks:
     - Comparison of computed HPP H2O values with H2O values computed from MeteoSwiss measurements
 
-# REF_measurement_processing
+## REF_measurement_processing
 - Plot_REF_CO2.r **CronJob**
   - Tasks:
     - Generation of CO2 time series for sites equipped with Picarro or Licor instrument (CO2_WET_COMP or CO2 depending on measurement site)
 
-# HPP_sensor_calibration
+## HPP_sensor_calibration
 - CO2_HPP_SensorCalibration_LINUX_IR_2S.r **WorkingScript** 
   - Determination of HPP calibration model parameters (HPP 426-445)
     - Option to select / define different models
@@ -176,13 +195,13 @@ Miscellaneous:
 - CO2_HPP_SensorCalibration_LINUX_IR.r **WorkingScript**
   - Determination of HPP calibration model parameters (HPP 342+390)
 
-# LP8_sensor_calibration
+## LP8_sensor_calibration
 - CO2_LP8_SensorCalibration_LINUX_DRY.r **WorkingScript** 
   - Determination of LP8 calibration model parameters
     - Option to select / define different models
     - Export of model parameters CarboSense.CalibrationParameters
 
-# MeteoSwissData4Carbosense
+## MeteoSwissData4Carbosense
 - Import_DB_table_METEOSWISS_Measurements.r **CronJob**
   - Imports daily files from "/project/CarboSense/Data/METEO/MCH_DAILY_DATA_DUMP" and write it into database table "METEOSWISS\_Measurements"
   - Contacts: Stephan Henne (data from MeteoSwiss: m2m.empa.ch)
@@ -194,7 +213,7 @@ Miscellaneous:
 - [ *METEOSWISS_PressureInterpolation_CV.r* ]
   - Same as "METEOSWISS_PressureInterpolation.r", used for accuracy estimation computation
 
-# CarbosenseNetworkStatus
+## CarbosenseNetworkStatus
 - Check_CarboSense_SensorHealth.r **CronJob**
   - Reports for each sensor: Number of LP8 and SHT measurements, status, battery, range of values for the preceding 24 hours 
   - Results in directory: /project/CarboSense/Carbosense_Network/CarboSense_SensorHealth
@@ -206,7 +225,7 @@ Miscellaneous:
 - [ *MeteoSwissNetwork2KML.r* ]
   - Generates a KML-file that includes the availability of P,T and wind measurements from MeteoSwiss (table: METEOSWISS_Measurements)
 
-# CarbosenseDatabaseTools
+## CarbosenseDatabaseTools
 - Import_DB_table_NABEL_DUE.r **CronJob** [1]
   - Imports data files (Picarro, Gases, Meteo) from directory "K:/Nabel/Daten/Stationen/DUE/" ("/newhome/muem/mnt/Win_K/Daten/Stationen/DUE/") into database table "NABEL_DUE"
   - Exclusion periods accounted in the script
@@ -271,7 +290,7 @@ Miscellaneous:
 - AddCantonNameToTableLocation.r
   - Determines for each location in CarboSense.Locations in which canton it is located and fills canton abbreviation in CarboSense.Locations
 
-# UploadProcessedMeasurementsToDecentlabDB
+## UploadProcessedMeasurementsToDecentlabDB
 Contacts related to "swiss.co2.live": Khash-Erdene Jalsan (khash.jalsan@decentlab.com), Reinhard Bischoff (reinhard.bischoff@decentlab.com)
 
 - Upload_LP8_Measurements_To_swiss_co2_live.sh **CronJob**
@@ -288,14 +307,15 @@ Contacts related to "swiss.co2.live": Khash-Erdene Jalsan (khash.jalsan@decentla
 - Upload_Carbosense_MetaDBtables_to_DecentlabSFTP.pl
   - Uploads Carbosense meta-database table dump to Decentlab's FTP server
 
-# ICOS_Carbosense_T_RH_Data_Release_October_2019
+## ICOS_Carbosense_T_RH_Data_Release_October_2019
 - Compute_CarboSense_T_RH_values_Version_October_2019.r
   - Download LP8 measurements from the Decentlab database, measurement processing (e.g. adjusting of timestamp, removal of duplicates, status), export in Carbosense database
 - Carbosense_data_release_2019-10.r
   - Script that created the files for the ICOS data release in October 2019  
 
-# sensorutils
+## sensorutils
 This is a python package containing utilities used in all other scripts. To install it in the project, run the following command from the main repository directory:
 ```
 pip install -e ./sensorutils
 ```
+
