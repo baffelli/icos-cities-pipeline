@@ -428,8 +428,11 @@ class DBSource(DataSource):
     def read_file(self, date: dt.datetime):
         """
         Reads one file from the database source with a given date
+
         Parameters
         ----------
+        date: datetime.datetime
+            The date of the dataset to read
 
         """
 
@@ -454,10 +457,13 @@ class DBSource(DataSource):
             The input dataset to write. It should have the same columns as contained in the database
         temporary: bool
             If set to `True` only perform insert in a temporary uncommited transaction. Useful when testing import
+
         Returns
         -------
         pd.DataFrame
-            The affected rows in database format
+            The affected rows in database format. The rows are taken from the database by filtering the date column on the dates available
+            in the source file. In combination with ``temporary=True`` this facilitates the testing of data loading as the data is copied with a database
+            transaction that is rolled back after returning the affected rows.
         """
         #Connect to the database
         eng = db_utils.connect_to_metadata_db(group=self.db_prefix)
@@ -507,11 +513,13 @@ class CsvSource(DataSource):
     def read_file(self, date:dt.datetime) -> Optional[pd.DataFrame]:
         """
         Read a file with the given date from the datasource.
-        If there are multiple files with the same date these are (outer)joined on the date key
+        If there are multiple files with the same date these are (outer) joined on the date key.
+
         Parameters
         ----------
         date: str
             The date to read
+
         Returns
         -------
         pandas.DataFrame
@@ -553,6 +561,7 @@ class SourceMapping():
     def list_files_missing_in_dest(self) -> pd.DataFrame:
         """
         Lists the files available in the source that are missing in the destination
+
         Returns
         -------
         pandas.DataFrame   
@@ -565,6 +574,11 @@ class SourceMapping():
         return missing_data
 
     def mapping_to_query(self) -> List[sqa.sql.text]:
+        """
+        Transform the mapping specified in the objects `columns` attribute into a
+        list of :obj:`sqlalchemy.sql.text` expression. These are then combined
+        to prepare a query in 
+        """
         q = [sqa.sql.text(f"{expr} AS {name}") for name, expr in self.columns.items()]
         return q
 
@@ -572,6 +586,18 @@ class SourceMapping():
         """
         Map one file from source to destination using :obj:`columns` 
         and returns a :obj:`pandas.DataFrame`.
+        The mapping is done using an in-memory SQLlite database to allow SQL-like expression in the datasource
+        configuration.
+
+        Parameters
+        ----------
+        file: pandas.DataFrame
+            The dataset to write
+        
+        Returns
+        -------
+        pandas.DataFrame
+            A dataframe with mapped columns and names.
         """
         #Connect to a in-memory SQLlite database
         # and write to a table
@@ -587,6 +613,20 @@ class SourceMapping():
         sq = sqa.select([q for q in cols]).select_from(md.tables["source"])
         return pd.read_sql(sq, engine)
 
+    def transfer_file(self, date:dt.datetime, temporary:bool=False) -> pd.DataFrame:
+        """
+        Transfers the file identified by the date `date` from the source to the
+        destination. 
+
+        Parameters
+        ----------
+        date: datetime.datetime
+            The date of the file
+        Returns
+        -------
+        pandas.DataFrame
+            A dataframe of the affected rows. Useful for testing / debugging. 
+        """
 
 
 
