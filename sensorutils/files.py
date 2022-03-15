@@ -1,13 +1,15 @@
 #from CarbosenseDatabaseTools.import_picarro_data import read_nabel_csv
 from argparse import ArgumentError
+import imp
 from sys import intern
+from turtle import st
 import pandas as pd
 import getpass as gp
 import pathlib as pl
 import datetime as dt
 from parsimonious.grammar import Grammar
 from parsimonious.nodes import NodeVisitor
-from typing import Union, List, Optional, Pattern, Dict
+from typing import Union, List, Optional, Pattern, Dict, Set
 from dataclasses import dataclass
 from abc import ABC, abstractmethod
 import re as re
@@ -114,7 +116,7 @@ def format_nabel_date(date: dt.datetime) -> str:
     """
     return dt.datetime.strftime(date, '%y%m%d')
  
-def get_available_measurements_on_db(station: str, date_column:str='timestamp', date_mult:float=1, db_group='CarboSense_MySQL') -> pd.DataFrame:
+def get_available_measurements_on_db(station: str, date_column:sqa.orm.Query, db_group='CarboSense_MySQL') -> pd.DataFrame:
     """
     List all available datasets (grouped by date) on the database for the (NABEL) station with the ID `station`.
     To determine the available files, the following query is used:
@@ -129,8 +131,8 @@ def get_available_measurements_on_db(station: str, date_column:str='timestamp', 
     ----------
     station: str
         The name of the station, which corresponds to the database table of interest
-    date_column: str
-        Column name containing the time information (as numeric timestamp)
+    date_column: sqlalchemy.orm.Query
+        Column name containing the time information (as numeric timestamp) or a select expression to generate the date
     date_mult: float
         Multiplier for the timestamp, used to deal with table where the timestamp is stored as bigint and
         therefore would cause an  overflow when converting to a datetime object using MariaDB
@@ -143,7 +145,7 @@ def get_available_measurements_on_db(station: str, date_column:str='timestamp', 
     table = sqa.Table(station, metadata, autoload=True)
     Session = sessionmaker(eng)
     session = Session()
-    dq = session.query(sqa.cast(sqa.func.from_unixtime(table.columns[date_column] * date_mult), sqa.DATE).label('date')).distinct()
+    dq = date_column.select_from(table).distinct().with_session(session)
     qs = dq.statement.compile(compile_kwargs={"literal_binds": True})
     return pd.read_sql_query(str(qs), eng, parse_dates =['date'])
 
@@ -369,7 +371,7 @@ class DataSource(ABC):
     date_from: 
         The first date available on the datasource. Used to filter older datasets out
     na:
-        A string representing missing values (used when storing the data)
+        A dict representing missing values (used when storing the data). 
     """
     path: str
     date_from: dt.datetime
@@ -396,22 +398,40 @@ class DBSource(DataSource):
     by all measurement for a single date. This is meant to help with incremental loading of data from other sources (e.g NABEL exports), where
     the data is exported by daily files.
     In order to identify the numerber of *files*,  the class methods use SQL queries on the table, therefore the date column
-    is specified at the class initalisation time as the :obj:`date_column` parameter.
+    is specified at the class initalisation time as the :obj:`date_column` parameter as a sql select statement generating the unix time stamp of
+    the date group.
 
     Attributes
     ----------
     db_prefix: str
         The group of the mariadb options files used to connect to the specific DB. See :obj:`db.connect_to_metadata_db` for more information.
     date_column: str
-        The database column representing the date (as a unix timestamp)
-    date_mult: float
-        A multiplier for the date column in order for the SQL backend to be able to parse bigints as  unix timestamp correclty
+        The database column representing the date (as a unix timestamp) or a SQL expression returning the unix timestamp of the date
     na: str
         A string representing missing values
     """
     db_prefix: str
     date_column: str
-    date_mult: float
+    na: str
+
+    def date_expression(self) -> sqa.sql.text:
+        """
+        Safely transforms the :obj:`date_column` expression into
+        a SQL statement for sqlalchemy. Used to construct the query in `list_files`
+        """
+        return sqa.sql.text(f"{self.date_column}")
+    
+    def date_group_query(self, label='date') -> sqa.orm.Query:
+        """
+        Creates a :obj:`sqlalchem.orm.Query` representation of 
+        the query used to identify the files in the database backend
+
+        Parameters
+        ----------
+        label: str
+            An optional label to rename the column of the date group
+        """
+        return sqa.orm.Query(sqa.cast(sqa.func.from_unixtime(self.date_expression()), sqa.DATE).label(label))
 
     def list_files(self) -> pd.DataFrame:
         """
@@ -422,7 +442,7 @@ class DBSource(DataSource):
         pandas.DataFrame
             A dataframe with the available files
         """
-        meas =  get_available_measurements_on_db(self.path, date_mult=self.date_mult, date_column=self.date_column, db_group=self.db_prefix)
+        meas =  get_available_measurements_on_db(self.path, date_column=self.date_group_query(), db_group=self.db_prefix)
         return meas[meas['date'] > self.date_from]
 
     def read_file(self, date: dt.datetime):
@@ -441,10 +461,11 @@ class DBSource(DataSource):
         table = sqa.Table(self.path, metadata, autoload=True)
         Session = sessionmaker(eng)
         session = Session()
-        dq = session.query(*table.columns, sqa.cast(sqa.func.from_unixtime(table.columns[self.date_column] * self.date_mult), sqa.DATE).label('group_date')).subquery()
-        fq = session.query(dq).filter(dq.c.group_date==date.strftime('%Y-%m-%d'))
+        lb = 'date_group'
+        dq = self.date_group_query(label=lb).with_session(session).select_from(table).add_columns(*table.columns).subquery()
+        fq = session.query(dq).filter(dq.c[lb]==date.strftime('%Y-%m-%d'))
         qs = fq.statement.compile(compile_kwargs={"literal_binds": True})
-        return pd.read_sql(str(qs), eng).drop("group_date", axis=1).replace(self.na, np.NaN)
+        return pd.read_sql(qs, eng).drop(lb, axis=1).replace(self.na, np.NaN)
     
     def write_file(self, input: pd.DataFrame, temporary:bool=False) -> pd.DataFrame:
         """
@@ -527,14 +548,33 @@ class CsvSource(DataSource):
         """
         fl = self.list_files()
         fl_to_read = fl[fl['date'] == date]
-        if len(fl_to_read) < 2:
-            import pdb; pdb.set_trace()
+        # if len(fl_to_read) < 2:
+        #     import pdb; pdb.set_trace()
         ds = pd.concat([read_nabel_csv(f) for f in fl_to_read['path']], axis=1, join='outer')
         return ds
     
         
     def write_file(self, data):
         pass
+
+
+@dataclass
+class ColumnMapping():
+    """
+    Represents the mapping between columns in two systems
+    as a sql statement
+    """
+    name: str
+    query: str
+    datatype: str
+    na: Union[str, float, int]
+
+    def make_query(self) -> sqa.sql.text:
+        """
+        Returns the column transformation as a :obj:`sqlalchemy.sql.text` element
+        """
+        return sqa.sql.text(f"{self.query} AS {self.name}")
+    
 
 
 @dataclass
@@ -556,11 +596,12 @@ class SourceMapping():
     """
     source: DataSource
     dest: DataSource
-    columns: Dict[str, str]
+    columns: List[ColumnMapping]
 
-    def list_files_missing_in_dest(self) -> pd.DataFrame:
+    def list_files_missing_in_dest(self, backfill:int=3) -> Set:
         """
-        Lists the files available in the source that are missing in the destination
+        Lists the files available in the source that are missing in the destination. Using the `backfill` parameter,
+        a certain number of files in the past (with respect to current date) is added to the list
 
         Returns
         -------
@@ -569,9 +610,15 @@ class SourceMapping():
         """
         sf = self.source.list_files()
         df = self.dest.list_files()
+        source_dates = (sf['date'].astype(object).unique())
+        dest_dates = (sf['date'].astype(object).unique())
+        #Find dates to backfill
+        backfill_dates = set(source_dates[(dt.datetime.now() - source_dates) < dt.timedelta(days=backfill)])
+        #Find dates missing in dest
+        missing_dates = (set(source_dates) -  set(dest_dates)).union(backfill_dates)
         merged_data = pd.merge(sf, df, on='date', how='outer', indicator=True)
         missing_data = merged_data[merged_data['_merge']=='left_only']
-        return missing_data
+        return missing_dates
 
     def mapping_to_query(self) -> List[sqa.sql.text]:
         """
@@ -579,7 +626,7 @@ class SourceMapping():
         list of :obj:`sqlalchemy.sql.text` expression. These are then combined
         to prepare a query in 
         """
-        q = [sqa.sql.text(f"{expr} AS {name}") for name, expr in self.columns.items()]
+        q = [expr.make_query() for  expr in self.columns]
         return q
 
     def map_file(self, file: pd.DataFrame) -> pd.DataFrame:
@@ -611,7 +658,10 @@ class SourceMapping():
         cols = self.mapping_to_query()
         #Apply mapping
         sq = sqa.select([q for q in cols]).select_from(md.tables["source"])
-        return pd.read_sql(sq, engine)
+        mapped  = pd.read_sql(sq, engine)
+        # Replace nas and convert columns to proper type
+        import pdb; pdb.set_trace()
+        return mapped.astype({c.name:c.datatype for c in self.columns}).fillna({c.name:c.na for c in self.columns})
 
     def transfer_file(self, date:dt.datetime, temporary:bool=False) -> pd.DataFrame:
         """
@@ -627,6 +677,24 @@ class SourceMapping():
         pandas.DataFrame
             A dataframe of the affected rows. Useful for testing / debugging. 
         """
+        data = self.source.read_file(date)
+        data_mapped = self.map_file(data)
+        affected = self.dest.write_file(data_mapped, temporary=temporary)
+        return affected
+
+
+def try_parse(in_dt: Union[str, dt.datetime], fmt:str):
+    """
+    Tries parsin a string as a date, unless
+    the passed object is already a date object
+    """
+    if isinstance(in_dt, str):
+        out = dt.datetime.strptime(in_dt, fmt)
+    elif isinstance(in_dt, dt.datetime):
+        out = in_dt
+    else:
+        raise TypeError("Input is neither date nor striny")
+    return out
 
 
 
@@ -639,9 +707,18 @@ class DataMappingFactory():
     """
 
     @staticmethod
+    def create_column_mapping(d:dict) -> ColumnMapping:
+        try:
+            return ColumnMapping(**d)
+        except TypeError as e:
+            import pdb
+            raise TypeError(f"The input {d} is not a valid configuration of a ColumnMapping")
+            
+
+    @staticmethod
     def create_data_source(source: dict) -> Union[DBSource, CsvSource]:
         source_type = source.pop('type')
-        source['date_from'] = dt.datetime.strptime(source['date_from'], '%Y-%m-%d %H:%M:%S')
+        source['date_from'] = try_parse(source['date_from'], '%Y-%m-%d %H:%M:%S')
         if source_type == 'file':
             source_obj = CsvSource(**source) 
         elif source_type == 'DB':
@@ -661,5 +738,5 @@ class DataMappingFactory():
         loaders = {'yaml':yaml.load, 'json':json.load}
         with open(path, 'r') as js:
             configs = loaders[type](js)
-            mappings = [DataMappingFactory.create_mapping(it['source'], it['dest'], it['columns'])  for k, it in configs.items()]
+            mappings = [DataMappingFactory.create_mapping(it['source'], it['dest'], [DataMappingFactory.create_column_mapping(i) for i  in it['columns']])  for k, it in configs.items()]
             return mappings
