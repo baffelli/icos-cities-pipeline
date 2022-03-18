@@ -1,4 +1,3 @@
-#from CarbosenseDatabaseTools.import_picarro_data import read_nabel_csv
 from argparse import ArgumentError
 import imp
 from sys import intern
@@ -53,6 +52,18 @@ def get_k_drive() -> pl.PurePath:
         return pl.Path('K:/')
     else:
         return pl.Path('/mnt', get_user())
+
+def get_g_drive() -> pl.Path:
+    """
+    Get the the path of the G: drive, where several directories
+    of department-wide data (including some NABEL files) are stored.
+    To use it, consult the documentation of :obj:`get_k_drive`
+    """
+    if platform.system() == 'Windows':
+        return pl.Path('G:/')
+    else:
+        return pl.Path('/mnt', get_user(), 'G')
+
 
 def get_nabel_dir() -> pl.PurePath: 
     """
@@ -253,12 +264,15 @@ nabel_format = "%d.%m.%Y %H:%M"
 def read_nabel_csv(path: Union[pl.Path, str], encoding:str='latin-1') -> pd.DataFrame:
     """
     Reads a NABEL csv export file considering the special headers and returns a :obj:`pandas.DataFrame` with the data.
-    Be careful with datetime operations: NABEL data is exported as CET by default.
+    Be careful with datetime operations: NABEL data is exported as CET by default. The output timestamp corresponds to the input timestamp
+    minus one minute (because NABEL uses a different convention)
 
     Parameters
     ----------
     path: pathlib.Path or str
         The path to read the file from
+    encoding: str
+        A string to define the data encoding
 
     Returns
     -------
@@ -275,7 +289,7 @@ def read_nabel_csv(path: Union[pl.Path, str], encoding:str='latin-1') -> pd.Data
     headers, rest = extract_nabel_headers(''.join(text))
     #Import data
     data = pd.read_csv(path, encoding=nabel_encoding, header=0, names=headers,  skiprows=skip, keep_default_na=True, sep=nabel_sep, index_col=False,  na_values=['',])
-    data['date'] = pd.to_datetime(data['date'], format=nabel_format).dt.tz_localize('CET')
+    data['date'] = pd.to_datetime(data['date'], format=nabel_format).dt.tz_localize('CET') - dt.timedelta(minutes=1)
     return data.rename(lambda x: x.replace('_AV',''), axis='columns')
 
 class NabelVisitor(NodeVisitor):
@@ -548,8 +562,7 @@ class CsvSource(DataSource):
         """
         fl = self.list_files()
         fl_to_read = fl[fl['date'] == date]
-        # if len(fl_to_read) < 2:
-        #     import pdb; pdb.set_trace()
+
         ds = pd.concat([read_nabel_csv(f) for f in fl_to_read['path']], axis=1, join='outer')
         return ds
     
@@ -562,7 +575,18 @@ class CsvSource(DataSource):
 class ColumnMapping():
     """
     Represents the mapping between columns in two systems
-    as a sql statement
+    as a SQL statement
+
+    Attributes
+    ----------
+    name: str
+        The output column name
+    query: str
+        A SQL query used to generated the output column
+    datatype: str
+        The datatype of the output column
+    na: str or float or int
+        The value used to represen NaN / Null in the destination system
     """
     name: str
     query: str
@@ -598,11 +622,17 @@ class SourceMapping():
     dest: DataSource
     columns: List[ColumnMapping]
 
-    def list_files_missing_in_dest(self, backfill:int=3) -> Set:
+    def list_files_missing_in_dest(self, all:bool=False, backfill:int=3) -> Set:
         """
         Lists the files available in the source that are missing in the destination. Using the `backfill` parameter,
         a certain number of files in the past (with respect to current date) is added to the list
 
+        Parameters
+        ----------
+        backfill: int
+            The number of days to backfill from today
+        all: bool
+            If set to `True`, list all files as missing. Useful for reimporting all data
         Returns
         -------
         pandas.DataFrame   
@@ -615,9 +645,7 @@ class SourceMapping():
         #Find dates to backfill
         backfill_dates = set(source_dates[(dt.datetime.now() - source_dates) < dt.timedelta(days=backfill)])
         #Find dates missing in dest
-        missing_dates = (set(source_dates) -  set(dest_dates)).union(backfill_dates)
-        merged_data = pd.merge(sf, df, on='date', how='outer', indicator=True)
-        missing_data = merged_data[merged_data['_merge']=='left_only']
+        missing_dates = (set(source_dates) -  set(dest_dates)).union(backfill_dates) if not all else source_dates
         return missing_dates
 
     def mapping_to_query(self) -> List[sqa.sql.text]:
@@ -660,7 +688,6 @@ class SourceMapping():
         sq = sqa.select([q for q in cols]).select_from(md.tables["source"])
         mapped  = pd.read_sql(sq, engine)
         # Replace nas and convert columns to proper type
-        import pdb; pdb.set_trace()
         return mapped.astype({c.name:c.datatype for c in self.columns}).fillna({c.name:c.na for c in self.columns})
 
     def transfer_file(self, date:dt.datetime, temporary:bool=False) -> pd.DataFrame:
@@ -708,10 +735,12 @@ class DataMappingFactory():
 
     @staticmethod
     def create_column_mapping(d:dict) -> ColumnMapping:
+        """
+        Creates a new :obj:`sensorutils.files.ColumnMapping` object from a dict.
+        """
         try:
             return ColumnMapping(**d)
         except TypeError as e:
-            import pdb
             raise TypeError(f"The input {d} is not a valid configuration of a ColumnMapping")
             
 
@@ -733,6 +762,11 @@ class DataMappingFactory():
 
     @staticmethod
     def read_config(path: Union[pl.Path, str], type='yaml') -> List[SourceMapping]:
+        """
+        Reads a YAML/JSON configuration file representing a group of SourceMapping object
+        and returns a list. The validation of the file is delegated to the constructors 
+        of the various objects
+        """
         if type not in ('yaml', 'json'):
             raise ArgumentError("`type` must be in ('yaml', 'json')")
         loaders = {'yaml':yaml.load, 'json':json.load}

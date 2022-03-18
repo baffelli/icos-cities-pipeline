@@ -20,22 +20,21 @@ class TestDataSourceMapping(unittest.TestCase):
             "type": "DB",
             "path": "NABEL_DUE",
             "date_column":"timestamp",
-            "date_mult": 1,
             "db_prefix":"CarboSense_MySQL",
             "date_from":"2018-01-01 00:00:00",
             "na":-999
         },
-        "columns": {
-            "O3":"O3",
-            "timestamp":"CAST(strftime('%s', date) as integer)"
-        }
+        "columns": [
+            {"name":"O3", "query":"O3", "datatype":"float", "na":-999}, 
+            {"name":"O3_F", "query":"CASE WHEN O3_F IS NOT NULL THEN 1 ELSE 0 END", "datatype":"int", "na":0},
+            {"name":"timestamp", "query":"CAST(strftime('%s', date) as integer)", "datatype":"int", "na":0}
+            ]
         },
         "GIMM": {
         "source": {
             "type":"DB",
             "db_prefix":"empaGSN",
-            "date_column":"timed",
-            "date_mult": 1e-3 ,
+            "date_column":"timed / 1e3",
             "path":"gimmiz_1min_cal",
             "date_from":"2018-01-01 00:00:00",
             "na":""
@@ -44,16 +43,15 @@ class TestDataSourceMapping(unittest.TestCase):
             "type": "DB",
             "path": "UNIBE_GIMM",
             "date_column":"timestamp",
-            "date_mult": 1,
             "db_prefix":"CarboSense_MySQL",
             "date_from":"2018-01-01 00:00:00",
             "na":-999
         },
-        "columns": {
-            "CO2_DRY":"CO2_DRY",
-            "CO2":"CO2_DRY * (1 - H2O/100)",
-            "timestamp":"timed / 1000"
-        }
+        "columns": [
+            {"name":"CO2_DRY", "query":"CO2_DRY", "datatype":"float", "na":-999}, 
+            {"name": "CO2_DRY_F", "query":  "1 - (((VALVEPOS = 5) OR (CO2_DRY IS NULL)))", "datatype": "int", "na": 0},
+            {"name":"timestamp", "query":"timed / 1000", "datatype":"int", "na":0}
+            ]
         }}
     
     def temp_mapping(self, type='json'):
@@ -74,6 +72,16 @@ class TestDataSourceMapping(unittest.TestCase):
         query = mapping[1].mapping_to_query()
         self.assertEqual(str(query[0]), "CO2_DRY AS CO2_DRY") 
         self.assertEqual(str(query[2]), "timed / 1000 AS timestamp") 
+    
+    def test_list_files(self):
+        mapping = self.temp_mapping()
+        fl = mapping[0].source.list_files()
+        self.assertIsInstance(fl, pd.DataFrame)
+    
+    def test_list_db_files(self):
+        mapping = self.temp_mapping()
+        fl = mapping[1].source.list_files()
+        self.assertTrue(len(fl) > 0)
 
     def test_map_file(self):
         mapping = self.temp_mapping()
@@ -81,12 +89,20 @@ class TestDataSourceMapping(unittest.TestCase):
         mf = source.list_files()
         data = source.read_file(mf.iloc[0].date)
         mapped_data = mapping[1].map_file(data)
+        
         self.assertTrue(len(set(mapped_data.columns).intersection(['CO2_DRY','timestamp'])) !=0)
 
-    def test_list_files(self):
+
+    def test_map_file_flag(self):
         mapping = self.temp_mapping()
-        fl = mapping[0].source.list_files()
-        self.assertIsInstance(fl, pd.DataFrame)
+        source = mapping[0].source
+        mf = source.list_files()
+        data = source.read_file(mf.iloc[0].date)
+        mapped_data = mapping[0].map_file(data)
+        self.assertTrue(len(set(mapped_data.columns).intersection(['CO2_DRY','timestamp'])) !=0)
+
+
+
 
     def test_list_files_from_db(self):
         mapping = self.temp_mapping()
@@ -109,7 +125,7 @@ class TestDataSourceMapping(unittest.TestCase):
     def test_missing_files(self):
         mapping = self.temp_mapping()
         mf = mapping[0].list_files_missing_in_dest()
-        self.assertIsInstance(mf, pd.DataFrame)
+        self.assertIsInstance(mf, set)
 
     def test_write_file(self):
         mapping = self.temp_mapping()
@@ -120,6 +136,9 @@ class TestDataSourceMapping(unittest.TestCase):
         data_mapped = mapping[0].map_file(data)
         affected = dest.write_file(data_mapped, temporary=True)
         self.assertTrue((data_mapped['timestamp']==affected['timestamp']).all())
+
+
+
 
 if __name__ == '__main__':
     unittest.main()
