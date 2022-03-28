@@ -1,0 +1,2 @@
+- {drive: 'K', source_path: "Nabel/Daten/Stationen/Kalibrierwerte Picarro G1301 DUE Test.xlsx", reader: new, location: 'DUT', device: 176-CFADS-050}
+- {drive: 'G', source_path: "503_Themen/CarboSense/Kalibrationen Picarros_clean.xlsx", reader: old, location: Null, device: Null}
