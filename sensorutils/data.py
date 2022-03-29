@@ -28,7 +28,8 @@ from sqlalchemy import Float
 from sqlalchemy import DateTime
 from sqlalchemy.orm import relationship
 from sqlalchemy.ext.declarative import declarative_base
-
+from sqlalchemy import engine 
+import sqlalchemy as sqa
 
 import sqlite3 as sqllite
 
@@ -36,6 +37,9 @@ from enum import Enum
 
 import yaml
 
+import numpy as np
+
+import itertools
 
 """
 Represents the missing (or unset) time in ICOS-cities database
@@ -318,3 +322,74 @@ def read_calibration_config(pt: pl.Path) -> List[CalibrationConfiguration]:
     for e in configs:
         e['reader'] = cal_readers[e['reader']]
     return [CalibrationConfiguration(**c) for c in configs]
+
+def get_calibration_parameters(device: str, metadata: sqa.MetaData, eng: Union[engine.Engine, engine.Connection]) -> pd.DataFrame:
+    """
+    Get the sensor calibration parameters for a given device id
+    """
+    cp = sqa.Table('calibration_parameters', metadata, autoload_with=eng)
+    mp = sqa.Table('model_parameter', metadata, autoload_with=eng)
+    dep = sqa.Table('Deployment', metadata, autoload_with=eng)
+    sens = sqa.Table('Sensors', metadata, autoload_with=eng)
+
+def apply_calibration_parameters(table:sqa.Table, session:sqa.orm.Session, compound:str, target_compound:str, zero:float, span:float, valid_from:dt.datetime, valid_to:dt.datetime, temp:bool=True) -> None:
+    """
+    Apply two point calibration parameters to the table specified by the `table` parameters. The calibration is applied to the column
+    with the name `compound`, producing (corresponds to SQL column updating!) the column `target_compound`
+
+    Parameters
+    ----------
+    table:  sqlalchemy.Table
+        A sqlalchemy Table object to which the calibration should be applied
+    session:  sqlachemy.orm.Session
+        The sqlalchemy session where the processing is applied
+    compound: str
+        The name of the column where the calibration should be applied
+    zero: float
+        The intercept of the calibration
+    span: float
+        The slope of the calibration
+    valid_from: datetime
+        The calibration validity start
+    valid_to: datetime
+        The calibration validity end
+    temp: boolean
+        If set to true, the update is rolled back after application
+    """
+    # Generate the update expression
+    ud = {target_compound: table.columns[compound]  * span + zero}
+    ic = 'timestamp'
+    cs = [compound, target_compound]
+
+    od = session.query(table).filter(table.columns.timestamp.between(valid_from.timestamp(), valid_to.timestamp()))
+    orig_data = pd.read_sql(od.statement, session)
+
+    us = table.update().values(**ud).where(table.columns.timestamp.between(valid_from.timestamp(), valid_to.timestamp()))
+    res = us.execute()
+    modif_data = pd.read_sql(od.statement, session)
+    print(orig_data[cs] - modif_data[cs])
+    if temp:
+        session.rollback()
+
+
+
+def average_df(dt: pd.DataFrame, funs:Dict[str, Callable]={'max':np.max, 'min':np.min, 'mean':np.mean, 'std':np.std}, date_col:str='date', av:str='1 min') -> pd.DataFrame:
+    """
+    Averages a dataframe to the given time interval and applies
+    a set of aggregation functions specified by the dictionary `funs` to all columns in the dataframe
+    """
+    cols = set(dt.columns) - set([date_col])
+    fns_name = {col: [(name, fn) for name, fn in funs.items()] for  col in cols}
+    dt_agg = dt.set_index(date_col).resample(av).agg(fns_name)
+    new_names = ["_".join(c) for c in dt_agg.columns]
+    dt_agg.columns = new_names
+
+    return dt_agg
+
+def date_to_timestamp(dt: pd.DataFrame, dt_col:str, target_name:str='timestamp') -> pd.DataFrame:
+    """
+    Create a new dataframe where the date column specified in `dt_col`
+    is replaced by a unix timestamp column with the name "timestamp"
+    """
+    dt[dt_col] = pd.to_datetime(dt[dt_col]).apply(lambda x: x.timestamp())
+    return dt.rename(columns={dt_col:target_name})

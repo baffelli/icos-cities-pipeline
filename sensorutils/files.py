@@ -35,6 +35,18 @@ def get_user() -> str:
     """
     return gp.getuser()
 
+
+def get_drive(drv: str) -> pl.Path:
+    """
+    Get the path to the drive with the letter `drv`. 
+    For unix, this assumes that the drives are mapped using ``automount``
+    """
+    if platform.system() == 'Windows':
+        return pl.Path(f'{drv}:/')
+    else:
+        return pl.Path('/mnt/', get_user(), drv)
+
+
 def get_k_drive() -> pl.PurePath: 
     """
     Get the path to the K: drive, where the project folders are stored.
@@ -49,9 +61,9 @@ def get_k_drive() -> pl.PurePath:
         the path of the K: drive 
     """
     if platform.system() == 'Windows':
-        return pl.Path('K:/')
+        return get_drive('K')
     else:
-        return pl.Path('/mnt', get_user())
+        return get_drive('')
 
 def get_g_drive() -> pl.Path:
     """
@@ -59,10 +71,7 @@ def get_g_drive() -> pl.Path:
     of department-wide data (including some NABEL files) are stored.
     To use it, consult the documentation of :obj:`get_k_drive`
     """
-    if platform.system() == 'Windows':
-        return pl.Path('G:/')
-    else:
-        return pl.Path('/mnt', get_user(), 'G')
+    return get_drive('G')
 
 
 def get_nabel_dir() -> pl.PurePath: 
@@ -203,6 +212,7 @@ def get_available_files(station, rexp='*.csv') -> pd.DataFrame:
         A regular expression to filter the file types
     """
     return pd.DataFrame([(get_date_from_filename(f), f, station) for f in get_all_picarro_files(station, rexp=rexp)], columns=['date', 'path', 'station'])
+
 
 def parse_nabel_headers(text: str) -> Grammar:
     """
@@ -774,3 +784,73 @@ class DataMappingFactory():
             configs = loaders[type](js)
             mappings = [DataMappingFactory.create_mapping(it['source'], it['dest'], [DataMappingFactory.create_column_mapping(i) for i  in it['columns']])  for k, it in configs.items()]
             return mappings
+
+@dataclass
+class RefProcessingConfiguration():
+    """
+    Class to configure the processing of reference data (from picarro or licor instrument)
+
+    Attributes
+    ----------
+    source: str
+        the source table of the data
+    location: str
+        the name of the location (used to lookup the sensor in the deployment table)
+    sensor: str
+        The string corresponding to the `Type` column in the `Sensors` table in the metadata DB. Usually *picarro* for
+        Picarro CRDS instruments
+    valid_from: date
+        The beginning of validity period for this configuration
+    valid_to: date
+        The ending of validity period for this configuration
+    species: str
+        The column containing the species value
+    species_cal: str 
+        The column or sql expression giving the calibrated species value
+    calibrated: boolean
+        If set to true, the data is assumed to be already calibrated
+
+    """
+    source: str
+    location: str
+    sensor: str
+    valid_from: dt.datetime
+    valid_to: dt.datetime
+    species: str
+    species_cal: str
+    calibrated: bool
+
+def read_picarro_processing_configuration(path: Union[str, pl.Path]) -> List[RefProcessingConfiguration]:
+    with open(path, 'r') as content:
+        configs = yaml.load(content)
+    return [RefProcessingConfiguration(**c) for c in configs]
+
+
+def read_picarro_data(path: Union[str, pl.Path], tz='CET') -> pd.DataFrame:
+    """
+    Reads the data in the picarro `.dat` format into
+    a :obj:`pandas.DataFrame`. 
+    Assumes that the date is in CET, returns a date column in UTC. 
+    For another timezone, use the `tz` argument
+    """
+    data = pd.read_csv(path, delimiter=r"\s+", parse_dates=[['DATE','TIME']])
+    col_map = {\
+        'DATE_TIME':'date', 
+        'CO2_sync':'CO2',
+        'CO2_dry_sync':'CO2_DRY',
+        'H2O_sync':'H2O'
+        }
+    
+    data_map = data.rename(columns = col_map)[[l for l in col_map.values()]]
+    data_map['date'] = data_map['date'].dt.tz_localize(tz).dt.tz_convert('UTC')
+    return data_map
+
+def read_climate_chamber_data(path:  Union[str, pl.Path], tz='CET') -> pd.DataFrame:
+    """
+    Reads the climate chamber data from the given path and return a pandas dataframe
+    The date and time is supposed to be in CET for the input data, returns UTC data.
+    """
+    cols = ['date', 'target_temperature', 'temperature', 'target_RH', 'RH']
+    dt = pd.read_csv(path, sep=';', encoding='latin1', skiprows=3, header=0, names=cols, usecols=[i for i in range(len(cols))])
+    dt['date'] = pd.to_datetime(dt['date']).dt.tz_localize(tz).dt.tz_convert('UTC')
+    return dt
