@@ -25,6 +25,8 @@ import numpy as np
 This module contains functions used to interact with files and read and write specific file formats used in this 
 project
 
+Attributes
+----------
 
 """
 
@@ -269,6 +271,7 @@ nabel_flags = {
 }
 
 nabel_format = "%d.%m.%Y %H:%M"
+nabel_format_full = "%d.%m.%Y %H:%M:%S"
 
 
 def read_nabel_csv(path: Union[pl.Path, str], encoding:str='latin-1') -> pd.DataFrame:
@@ -851,6 +854,18 @@ def read_climate_chamber_data(path:  Union[str, pl.Path], tz='CET') -> pd.DataFr
     The date and time is supposed to be in CET for the input data, returns UTC data.
     """
     cols = ['date', 'target_temperature', 'temperature', 'target_RH', 'RH']
-    dt = pd.read_csv(path, sep=';', encoding='latin1', skiprows=3, header=0, names=cols, usecols=[i for i in range(len(cols))])
-    dt['date'] = pd.to_datetime(dt['date']).dt.tz_localize(tz).dt.tz_convert('UTC')
-    return dt
+    date_parser = lambda s: dt.datetime.strptime(s.strip(), nabel_format_full)
+    data = pd.read_csv(path, sep=';', encoding='latin1', skiprows=3, header=0, date_parser=date_parser, parse_dates=[0], names=cols, usecols=[i for i in range(len(cols))])
+    data['date'] = pd.to_datetime(data['date']).dt.tz_localize(tz).dt.tz_convert('UTC')
+    return data
+
+def read_pressure_data(path: Union[str, pl.Path], tz='CET'):
+    """
+    Reads the exported pressure measurements from the NABEL calibration laboratory
+    and stores them in a pandas dataframe. The date is assumed to be in CET, the output in UTC
+    """
+    cols = ['date', 'pressure']
+    date_parser = lambda s: dt.datetime.strptime(s.strip(), '%d.%m.%y %H:%M')
+    data = pd.read_csv(path, sep=';', encoding='latin1', skiprows=3, header=0, date_parser=date_parser, parse_dates=[0], names=cols, usecols=[i for i in range(len(cols))])
+    data['date'] = pd.to_datetime(data['date']).dt.tz_localize(tz).dt.tz_convert('UTC')
+    return data
