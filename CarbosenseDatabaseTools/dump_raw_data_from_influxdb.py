@@ -1,30 +1,54 @@
+"""
+This script dumps the raw data from the decentlab DB into a database table
+"""
 import influxdb
 import pandas as pd
 import pymysql
 import sqlalchemy.engine as eng
 import sqlalchemy as db 
 import itertools as ito
-import utils.decentlab as dl
-import utils.db as db_utils
 
+import sensorutils.decentlab as dl
+import sensorutils.db as db_utils
+import sensorutils.secrets as sec
+import sensorutils.files as fu
 
 from datetime import datetime as dt
 from datetime import timedelta 
+import argparse as ap
 
-#TODO move to module
+parser = ap.ArgumentParser(description='Import raw data from decentlab into database')
+
+
 
 
 #TODO add parameters from argparse
 import_all = False
-sensor_type = 'LP8'
+sensor_type = 'HPP'
 
 
-#TODO handle secrets / tokens for influxdb
-passw = "eyJrIjoiN2lSN1VJQjg1OUkwOWJyeTZUUFBiSVNDRjh5WGxGZTMiLCJuIjoic2ltb25lLmJhZmZlbGxpQGVtcGEuY2giLCJpZCI6MX0="
+#Get API key from secrets
+passw = sec.get_key('decentlab')
 
 #Create influxdb client
 client = dl.decentlab_client(token=passw)
-engine = eng.create_engine('mysql+pymysql://emp-sql-cs1', connect_args={'read_default_file': '~/.my.cnf','read_default_group':'CarboSense_MySQL'})
+#Connect to database
+engine = db_utils.connect_to_metadata_db()
+db_metadata = db.MetaData(bind=engine, reflect=True)
+
+#List all ids
+ids = db_utils.list_all_sensor_ids('LP8', engine)
+for row in ids.itertuples():
+	default_date = dt.strptime('2017-01-01 00:00:00', '%Y-%m-%d %H:%M:%S')
+	src = fu.InfluxdbSource(path='a', date_from=default_date, node=row.SensorUnit_ID, client=client, na=None)
+	dest = fu.DBSource(path='lp8_data', date_from=default_date, db_prefix='CarboSense_MySQL', date_column='time', na=-999, group=row.SensorUnit_ID, grouping_key='SensorUnit_ID')
+	ad = dest.list_files()
+	mapping = fu.SourceMapping(source=src, dest=dest, columns=None)
+	print(mapping.list_files_missing_in_dest())
+
+
+
+
 
 def check_sensor_type(sensor_type):
 	st =  ['LP8', 'HPP']
@@ -112,6 +136,6 @@ with engine.connect() as con:
 			print(f"Writing data for sensor {current_sens} between {df['time'].min()} and {df['time'].max()}")
 			with con.begin() as cb:
 				meta = db.MetaData(con)
-				method = create_method(meta)
-				df.to_sql(out_table, con, schema="CarboSense", index=False, if_exists='append', method=db_utils.create_upsert_metod)
+				method = db_utils.create_upsert_metod(meta)
+				df.to_sql(out_table, con, schema="CarboSense", index=False, if_exists='append', method=method)
 

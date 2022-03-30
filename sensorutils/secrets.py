@@ -3,8 +3,9 @@ Module to manage secrets (API keys, etc)
 used to access different locations
 """
 import yaml
+from . import files as fu
 
-def get_key(service: str, user:str=None, file:str='~/secrets.yml') -> str:
+def get_key(service: str, user:str=None, file:str=f'/newhome/{fu.get_user()}/secrets.yml') -> str:
     with open(file) as input:
         config = yaml.load(input)
     try:
