@@ -2,13 +2,14 @@ from argparse import ArgumentError
 import imp
 from sys import intern
 from turtle import st
+import influxdb
 import pandas as pd
 import getpass as gp
 import pathlib as pl
 import datetime as dt
 from parsimonious.grammar import Grammar
 from parsimonious.nodes import NodeVisitor
-from typing import Union, List, Optional, Pattern, Dict, Set
+from typing import Callable, Union, List, Optional, Pattern, Dict, Set, Any, Tuple
 from dataclasses import dataclass
 from abc import ABC, abstractmethod
 import re as re
@@ -30,7 +31,8 @@ Attributes
 
 """
 
-def get_user() -> str: 
+
+def get_user() -> str:
     """
     Get the current user as string.
     This is used to generate user specific path to project folders.
@@ -49,7 +51,7 @@ def get_drive(drv: str) -> pl.Path:
         return pl.Path('/mnt/', get_user(), drv)
 
 
-def get_k_drive() -> pl.PurePath: 
+def get_k_drive() -> pl.PurePath:
     """
     Get the path to the K: drive, where the project folders are stored.
     For unix, this assumes that the folders in K: are mapped using ``automount``
@@ -67,6 +69,7 @@ def get_k_drive() -> pl.PurePath:
     else:
         return get_drive('')
 
+
 def get_g_drive() -> pl.Path:
     """
     Get the the path of the G: drive, where several directories
@@ -76,11 +79,12 @@ def get_g_drive() -> pl.Path:
     return get_drive('G')
 
 
-def get_nabel_dir() -> pl.PurePath: 
+def get_nabel_dir() -> pl.PurePath:
     """
     Get path to the NABEL project folder
     """
     return pl.Path(get_k_drive(), 'Nabel')
+
 
 def get_nabel_station_data_path(station_name: str) -> pl.Path:
     """
@@ -96,7 +100,8 @@ def get_nabel_station_data_path(station_name: str) -> pl.Path:
     pl.Path
         The full path of the nabel data
     """
-    return pl.Path(get_nabel_dir(),'Daten','Stationen', station_name)
+    return pl.Path(get_nabel_dir(), 'Daten', 'Stationen', station_name)
+
 
 def parse_nabel_date(date: str) -> dt.datetime:
     """
@@ -116,6 +121,7 @@ def parse_nabel_date(date: str) -> dt.datetime:
     """
     return dt.datetime.strptime(date, '%y%m%d')
 
+
 def parse_nabel_datetime(date: str) -> dt.datetime:
     """
     Parses the datetime string in NABEL exports into a datetime object
@@ -132,13 +138,19 @@ def parse_nabel_datetime(date: str) -> dt.datetime:
     """
     return dt.datetime.strptime(date, nabel_format)
 
+
 def format_nabel_date(date: dt.datetime) -> str:
     """
     Formats a datetime object into the date format used by NABEL exports
     """
     return dt.datetime.strftime(date, '%y%m%d')
- 
-def get_available_measurements_on_db(station: str, date_column:sqa.orm.Query, db_group='CarboSense_MySQL') -> pd.DataFrame:
+
+
+def get_available_measurements_on_db(station: str,
+                                     date_column: sqa.orm.Query, 
+                                     grouping_column: Optional[str] = None,
+                                     group_id: Optional[Union[str, int]]=None,
+                                     db_group='CarboSense_MySQL') -> pd.DataFrame:
     """
     List all available datasets (grouped by date) on the database for the (NABEL) station with the ID `station`.
     To determine the available files, the following query is used:
@@ -146,7 +158,9 @@ def get_available_measurements_on_db(station: str, date_column:sqa.orm.Query, db
     SELECT DISTINCT
     CAST(FROM_UNIXTIME({date_column} * %date_mult)) AS date
     FROM {station}
+    (WHERE {grouping_column} = %group_id )
     ```
+    Where the last part is optional and is used to only select a subgroup from the table.
     To connect to the database, this function assumes that a file called ``.my.cnf`` exists in the user home 
     directory. For more information, see :obj:`db`
     Parameters
@@ -158,6 +172,10 @@ def get_available_measurements_on_db(station: str, date_column:sqa.orm.Query, db
     date_mult: float
         Multiplier for the timestamp, used to deal with table where the timestamp is stored as bigint and
         therefore would cause an  overflow when converting to a datetime object using MariaDB
+    group_column: str 
+        An optional column name. Specify the name of a column used to filter the data if only a subgroup is needed
+    group_id: str or int
+        If `grouping_column` is specified, specifiy the value of the group of interest
     db_group: str
         The name of the options group used to get the database connection. 
 
@@ -167,11 +185,16 @@ def get_available_measurements_on_db(station: str, date_column:sqa.orm.Query, db
     table = sqa.Table(station, metadata, autoload=True)
     Session = sessionmaker(eng)
     session = Session()
-    dq = date_column.select_from(table).distinct().with_session(session)
-    qs = dq.statement.compile(compile_kwargs={"literal_binds": True})
-    return pd.read_sql_query(str(qs), eng, parse_dates =['date'])
+    dq = date_column.select_from(table).distinct()
+    if group_id:
+        stmt = dq.filter(table.columns[grouping_column]==group_id)
+    else:
+        stmt = dq
+    qs = stmt.with_session(session).statement.compile(compile_kwargs={"literal_binds": True})
+    return pd.read_sql_query(str(qs), eng, parse_dates=['date'])
 
-def get_all_picarro_files(station: str, rexp:str='.*\.(csv|CSV)') -> List[pl.Path]:
+
+def get_all_picarro_files(station: str, rexp: str = '.*\.(csv|CSV)') -> List[pl.Path]:
     """
     Lists all (csv) files in the NABEL export folder of the station `station`. This
     path is determined using :func:`get_nabel_dir`
@@ -187,10 +210,11 @@ def get_all_picarro_files(station: str, rexp:str='.*\.(csv|CSV)') -> List[pl.Pat
     rg = re.compile(rexp)
     return [f for f in get_nabel_station_data_path(station).iterdir() if re.match(rg, f.name)]
 
+
 def get_date_from_filename(filename: pl.Path) -> Optional[dt.datetime]:
     """
     Parses a NABEL export filename to extract the date. This is done using :fun:`parse_nabel_date`
-    
+
     Parameters
     ----------
     filename: pathlib.Path
@@ -199,6 +223,7 @@ def get_date_from_filename(filename: pl.Path) -> Optional[dt.datetime]:
     m = re.search('(\d){6}', filename.name)
     res = parse_nabel_date(m.group()) if m else None
     return res
+
 
 def get_available_files(station, rexp='*.csv') -> pd.DataFrame:
     """
@@ -219,7 +244,7 @@ def get_available_files(station, rexp='*.csv') -> pd.DataFrame:
 def parse_nabel_headers(text: str) -> Grammar:
     """
     A :obj:`parsimonious` grammar definition used to correctly parse NABEL CSV exports
-    
+
     Parameters
     ----------
     text: str
@@ -274,7 +299,7 @@ nabel_format = "%d.%m.%Y %H:%M"
 nabel_format_full = "%d.%m.%Y %H:%M:%S"
 
 
-def read_nabel_csv(path: Union[pl.Path, str], encoding:str='latin-1') -> pd.DataFrame:
+def read_nabel_csv(path: Union[pl.Path, str], encoding: str = 'latin-1') -> pd.DataFrame:
     """
     Reads a NABEL csv export file considering the special headers and returns a :obj:`pandas.DataFrame` with the data.
     Be careful with datetime operations: NABEL data is exported as CET by default. The output timestamp corresponds to the input timestamp
@@ -295,15 +320,18 @@ def read_nabel_csv(path: Union[pl.Path, str], encoding:str='latin-1') -> pd.Data
     nabel_encoding = encoding
     nabel_sep = ';'
     skip = 4
-    #Read headers text
+    # Read headers text
     with open(path, 'r', encoding=nabel_encoding) as inf:
         text = [inf.readline() for l in range(skip)]
-    #Parse headers
+    # Parse headers
     headers, rest = extract_nabel_headers(''.join(text))
-    #Import data
-    data = pd.read_csv(path, encoding=nabel_encoding, header=0, names=headers,  skiprows=skip, keep_default_na=True, sep=nabel_sep, index_col=False,  na_values=['',])
-    data['date'] = pd.to_datetime(data['date'], format=nabel_format).dt.tz_localize('CET') - dt.timedelta(minutes=1)
-    return data.rename(lambda x: x.replace('_AV',''), axis='columns')
+    # Import data
+    data = pd.read_csv(path, encoding=nabel_encoding, header=0, names=headers,  skiprows=skip,
+                       keep_default_na=True, sep=nabel_sep, index_col=False,  na_values=['', ])
+    data['date'] = pd.to_datetime(data['date'], format=nabel_format).dt.tz_localize(
+        'CET') - dt.timedelta(minutes=1)
+    return data.rename(lambda x: x.replace('_AV', ''), axis='columns')
+
 
 class NabelVisitor(NodeVisitor):
     """
@@ -320,27 +348,27 @@ class NabelVisitor(NodeVisitor):
         return visited_children or node
 
     def visit_header(self, node, visited_children):
-        headers  = pd.concat([pd.DataFrame.from_dict(f) for f in visited_children], axis=1).dropna()
-        self.headers 
-        return  headers
-
+        headers = pd.concat([pd.DataFrame.from_dict(f)
+                            for f in visited_children], axis=1).dropna()
+        self.headers
+        return headers
 
     def visit_grouping_row(self, node, visited_children):
         kw, sep, groups, nl = visited_children
         group_nm = pd.Series([int(e) for e in groups if e != ''])
         group_indices = (group_nm.diff() < -1).cumsum()
         return group_indices, group_nm
-    
+
     def visit_data(self, node, visited_children):
         return pd.DataFrame(visited_children)
 
     def visit_metadata_row(self, node, visited_children):
         kw, entry, nl = visited_children
         return {kw: entry}
-    
+
     def visit_kw(self, node, visited_children):
         kw, _ = visited_children
-        return kw 
+        return kw
 
     def visit_kw_word(self, node, visited_children):
         return node.text
@@ -359,20 +387,22 @@ class NabelVisitor(NodeVisitor):
     def visit_data_file(self, node, visited_children):
         headers, (group, group_code), data, *rest = visited_children
         group_name = group_code.replace(nabel_flags)
-        headers_full = headers.assign(group=group, flags=group_name).groupby('group').apply(lambda x: x.mask(x == '')).dropna(how='all').ffill()
-        colnames = ['date', *(headers_full['Kanal'] + '_' + headers_full['flags'])]
-        dt = data[0].set_axis(colnames, axis=1, inplace=False) if not data[0].empty else pd.DataFrame()
+        headers_full = headers.assign(group=group, flags=group_name).groupby(
+            'group').apply(lambda x: x.mask(x == '')).dropna(how='all').ffill()
+        colnames = ['date', *(headers_full['Kanal'] +
+                              '_' + headers_full['flags'])]
+        dt = data[0].set_axis(
+            colnames, axis=1, inplace=False) if not data[0].empty else pd.DataFrame()
         return colnames, dt
 
     def visit_date(self, node, visited_children):
         return parse_nabel_datetime(node.text)
-    
-            
+
 
 def extract_nabel_headers(text: str) -> pd.DataFrame:
     """
     Parses an input text into NABEL headers using the grammar specified in :func:`parse_nabel_headers`
-    
+
     Arguments
     ---------
     text: str
@@ -381,7 +411,8 @@ def extract_nabel_headers(text: str) -> pd.DataFrame:
     tree = parse_nabel_headers(text)
     visitor = NabelVisitor()
     return visitor.visit(tree)
- 
+
+
 @dataclass
 class DataSource(ABC):
     """
@@ -405,16 +436,17 @@ class DataSource(ABC):
     na: Union[str, float]
 
     @abstractmethod
-    def list_files(self) -> pd.DataFrame:
+    def list_files(self, *args) -> pd.DataFrame:
         pass
 
-    @abstractmethod 
-    def read_file(self, date: str) -> pd.DataFrame:
+    @abstractmethod
+    def read_file(self, date: dt.datetime) -> pd.DataFrame:
         pass
 
-    @abstractmethod 
-    def write_file(self, input: pd.DataFrame) -> None:
+    @abstractmethod
+    def write_file(self, input: pd.DataFrame, temporary: bool = False) -> None:
         pass
+
 
 @dataclass
 class DBSource(DataSource):
@@ -436,9 +468,15 @@ class DBSource(DataSource):
         The database column representing the date (as a unix timestamp) or a SQL expression returning the unix timestamp of the date
     na: str
         A string representing missing values
+    group: str
+        A group id (to handle tables with multiple "files", e.g multiple sensors in a single table)
+    grouping_key: str
+        The column name used to generate the grouping key
     """
     db_prefix: str
     date_column: str
+    group: Optional[str] = None
+    grouping_key: Optional[str] = None
     na: str
 
     def date_expression(self) -> sqa.sql.text:
@@ -447,7 +485,7 @@ class DBSource(DataSource):
         a SQL statement for sqlalchemy. Used to construct the query in `list_files`
         """
         return sqa.sql.text(f"{self.date_column}")
-    
+
     def date_group_query(self, label='date') -> sqa.orm.Query:
         """
         Creates a :obj:`sqlalchem.orm.Query` representation of 
@@ -460,16 +498,17 @@ class DBSource(DataSource):
         """
         return sqa.orm.Query(sqa.cast(sqa.func.from_unixtime(self.date_expression()), sqa.DATE).label(label))
 
-    def list_files(self) -> pd.DataFrame:
+    def list_files(self, *args) -> pd.DataFrame:
         """
         Lists all available *files* on the data source. One *file* is assumed to be the set of all measurements sharing the same date.
-        
+
         Returns
         -------
         pandas.DataFrame
             A dataframe with the available files
         """
-        meas =  get_available_measurements_on_db(self.path, date_column=self.date_group_query(), db_group=self.db_prefix)
+        meas = get_available_measurements_on_db(
+            self.path, date_column=self.date_group_query(), grouping_column=self.grouping_key, group_id=self.group, db_group=self.db_prefix)
         return meas[meas['date'] > self.date_from]
 
     def read_file(self, date: dt.datetime):
@@ -489,12 +528,13 @@ class DBSource(DataSource):
         Session = sessionmaker(eng)
         session = Session()
         lb = 'date_group'
-        dq = self.date_group_query(label=lb).with_session(session).select_from(table).add_columns(*table.columns).subquery()
-        fq = session.query(dq).filter(dq.c[lb]==date.strftime('%Y-%m-%d'))
+        dq = self.date_group_query(label=lb).with_session(
+            session).select_from(table).add_columns(*table.columns).subquery()
+        fq = session.query(dq).filter(dq.c[lb] == date.strftime('%Y-%m-%d'))
         qs = fq.statement.compile(compile_kwargs={"literal_binds": True})
         return pd.read_sql(qs, eng).drop(lb, axis=1).replace(self.na, np.NaN)
-    
-    def write_file(self, input: pd.DataFrame, temporary:bool=False) -> pd.DataFrame:
+
+    def write_file(self, input: pd.DataFrame, temporary: bool = False) -> pd.DataFrame:
         """
         Writes one file to the database. If the keys are duplicated,
         the data are upserted using :obj:`sensorutils.db.create_upsert_metod`
@@ -513,21 +553,23 @@ class DBSource(DataSource):
             in the source file. In combination with ``temporary=True`` this facilitates the testing of data loading as the data is copied with a database
             transaction that is rolled back after returning the affected rows.
         """
-        #Connect to the database
+        # Connect to the database
         eng = db_utils.connect_to_metadata_db(group=self.db_prefix)
         metadata = sqa.MetaData(bind=eng)
         metadata.reflect()
-        #Create an upsert method
-        method  = db_utils.create_upsert_metod(metadata)
-        #Fill na with the na value
+        # Create an upsert method
+        method = db_utils.create_upsert_metod(metadata)
+        # Fill na with the na value
         input_filled = input.fillna(self.na)
         Session = sessionmaker(bind=eng)
         session = Session()
         output_table = metadata.tables[self.path]
         with eng.connect() as con:
             tran = con.begin()
-            input_filled.to_sql(self.path, con, method=method,  index=False, if_exists='append')
-            new_data = session.query(output_table).filter(output_table.columns.timestamp.between(input['timestamp'].min(), input['timestamp'].max())).statement.compile(compile_kwargs={"literal_binds": True})
+            input_filled.to_sql(self.path, con, method=method,
+                                index=False, if_exists='append')
+            new_data = session.query(output_table).filter(output_table.columns.timestamp.between(
+                input['timestamp'].min(), input['timestamp'].max())).statement.compile(compile_kwargs={"literal_binds": True})
             affected = pd.read_sql(new_data, con)
             print(f"Affected rows {affected}")
             if temporary:
@@ -537,11 +579,55 @@ class DBSource(DataSource):
             else:
                 tran.commit()
                 print("Commiting affected rows")
-                return affected            
+                return affected
 
 
+@dataclass
+class InfluxdbSource(DataSource):
+    """
+    This subclass of :obj:`DataSource`represents a datasource located in an influxdb data. One *file* 
+    in this dataset corresponds to a day of measurements for a specific sensor node.
+    To set the sensor, the object uses the 'node' attribute
+    """
+    client: influxdb.InfluxDBClient
+    node: str
 
-        
+    def list_files(self, *args) -> pd.DataFrame:
+        q = f"""
+        SELECT
+        *
+        FROM
+        (
+        SELECT COUNT("value") FROM "measurements" WHERE node =~ /{self.node}/ AND sensor =~ /senseair|sensirion|battery|calibration/ AND time > '2017-01-01 00:00:00' GROUP BY time(1d)
+        )
+        WHERE count > 0
+        """
+        # Send query
+        fs = self.client.query(q, epoch='s', params={"node": self.node})
+        # Make datafame
+        if len(fs) >0:
+            available_data = pd.DataFrame([a for a in fs['measurements']]) 
+            available_data['date'] = pd.to_datetime(
+                available_data['time'], unit='s')
+            available_data['path'] = self.path
+            available_data['node'] = self.node
+        else:
+            available_data = pd.DataFrame(columns=['date'])
+        return available_data
+
+    def read_file(self, date: dt.datetime) -> pd.DataFrame:
+        min_ts, max_ts = day_ts(date)
+        import pdb
+        pdb.set_trace()
+        return min_ts
+
+    def write_file(self, input: pd.DataFrame, temporary: bool = False) -> None:
+        pass
+
+
+def day_ts(day: dt.datetime) -> Tuple[float, float]:
+    return (day.replace(hour=0, minute=0, second=0).timestamp(), day.replace(hour=23, minute=59, second=59).timestamp())
+
 
 @dataclass
 class CsvSource(DataSource):
@@ -551,14 +637,14 @@ class CsvSource(DataSource):
     """
     re: str
 
-    def list_files(self) -> pd.DataFrame:
+    def list_files(self, *args) -> pd.DataFrame:
         """
         Lists all the available files in the :obj:`path` with the specified regex.
         """
-        files = get_available_files(self.path, rexp = self.re)
-        return files[files['date']  > self.date_from]
+        files = get_available_files(self.path, rexp=self.re)
+        return files[files['date'] > self.date_from]
 
-    def read_file(self, date:dt.datetime) -> Optional[pd.DataFrame]:
+    def read_file(self, date: dt.datetime) -> Optional[pd.DataFrame]:
         """
         Read a file with the given date from the datasource.
         If there are multiple files with the same date these are (outer) joined on the date key.
@@ -576,11 +662,11 @@ class CsvSource(DataSource):
         fl = self.list_files()
         fl_to_read = fl[fl['date'] == date]
 
-        ds = pd.concat([read_nabel_csv(f) for f in fl_to_read['path']], axis=1, join='outer')
+        ds = pd.concat([read_nabel_csv(f)
+                       for f in fl_to_read['path']], axis=1, join='outer')
         return ds
-    
-        
-    def write_file(self, data):
+
+    def write_file(self, data, temporary: bool = False):
         pass
 
 
@@ -611,7 +697,6 @@ class ColumnMapping():
         Returns the column transformation as a :obj:`sqlalchemy.sql.text` element
         """
         return sqa.sql.text(f"{self.query} AS {self.name}")
-    
 
 
 @dataclass
@@ -635,7 +720,7 @@ class SourceMapping():
     dest: DataSource
     columns: List[ColumnMapping]
 
-    def list_files_missing_in_dest(self, all:bool=False, backfill:int=3) -> Set:
+    def list_files_missing_in_dest(self, all: bool = False, backfill: int = 3) -> Set:
         """
         Lists the files available in the source that are missing in the destination. Using the `backfill` parameter,
         a certain number of files in the past (with respect to current date) is added to the list
@@ -654,11 +739,13 @@ class SourceMapping():
         sf = self.source.list_files()
         df = self.dest.list_files()
         source_dates = (sf['date'].astype(object).unique())
-        dest_dates = (sf['date'].astype(object).unique())
-        #Find dates to backfill
-        backfill_dates = set(source_dates[(dt.datetime.now() - source_dates) < dt.timedelta(days=backfill)])
-        #Find dates missing in dest
-        missing_dates = (set(source_dates) -  set(dest_dates)).union(backfill_dates) if not all else source_dates
+        dest_dates = (df['date'].astype(object).unique())
+        # Find dates to backfill
+        backfill_dates = set(
+            source_dates[(dt.datetime.now() - source_dates) < dt.timedelta(days=backfill)])
+        # Find dates missing in dest
+        missing_dates = (set(source_dates) - set(dest_dates)
+                         ).union(backfill_dates) if not all else source_dates
         return missing_dates
 
     def mapping_to_query(self) -> List[sqa.sql.text]:
@@ -667,7 +754,7 @@ class SourceMapping():
         list of :obj:`sqlalchemy.sql.text` expression. These are then combined
         to prepare a query in 
         """
-        q = [expr.make_query() for  expr in self.columns]
+        q = [expr.make_query() for expr in self.columns]
         return q
 
     def map_file(self, file: pd.DataFrame) -> pd.DataFrame:
@@ -681,29 +768,29 @@ class SourceMapping():
         ----------
         file: pandas.DataFrame
             The dataset to write
-        
+
         Returns
         -------
         pandas.DataFrame
             A dataframe with mapped columns and names.
         """
-        #Connect to a in-memory SQLlite database
+        # Connect to a in-memory SQLlite database
         # and write to a table
-        engine = sqa.engine.create_engine('sqlite://',echo=False)
+        engine = sqa.engine.create_engine('sqlite://', echo=False)
         #Store in engine
         file.to_sql("source", engine)
-        #Represent the source as sqlalchemy object
+        # Represent the source as sqlalchemy object
         md = sqa.MetaData(bind=engine)
         md.reflect()
-        #Create mappping query
+        # Create mappping query
         cols = self.mapping_to_query()
-        #Apply mapping
+        # Apply mapping
         sq = sqa.select([q for q in cols]).select_from(md.tables["source"])
-        mapped  = pd.read_sql(sq, engine)
+        mapped = pd.read_sql(sq, engine)
         # Replace nas and convert columns to proper type
-        return mapped.astype({c.name:c.datatype for c in self.columns}).fillna({c.name:c.na for c in self.columns})
+        return mapped.astype({c.name: c.datatype for c in self.columns}).fillna({c.name: c.na for c in self.columns})
 
-    def transfer_file(self, date:dt.datetime, temporary:bool=False) -> pd.DataFrame:
+    def transfer_file(self, date: dt.datetime, temporary: bool = False) -> pd.DataFrame:
         """
         Transfers the file identified by the date `date` from the source to the
         destination. 
@@ -723,9 +810,9 @@ class SourceMapping():
         return affected
 
 
-def try_parse(in_dt: Union[str, dt.datetime], fmt:str):
+def try_parse(in_dt: Union[str, dt.datetime], fmt: str):
     """
-    Tries parsin a string as a date, unless
+    Tries parsing a string as a date, unless
     the passed object is already a date object
     """
     if isinstance(in_dt, str):
@@ -733,10 +820,8 @@ def try_parse(in_dt: Union[str, dt.datetime], fmt:str):
     elif isinstance(in_dt, dt.datetime):
         out = in_dt
     else:
-        raise TypeError("Input is neither date nor striny")
+        raise TypeError("Input is neither date nor string")
     return out
-
-
 
 
 class DataMappingFactory():
@@ -747,31 +832,34 @@ class DataMappingFactory():
     """
 
     @staticmethod
-    def create_column_mapping(d:dict) -> ColumnMapping:
+    def create_column_mapping(d: dict) -> ColumnMapping:
         """
         Creates a new :obj:`sensorutils.files.ColumnMapping` object from a dict.
         """
         try:
             return ColumnMapping(**d)
         except TypeError as e:
-            raise TypeError(f"The input {d} is not a valid configuration of a ColumnMapping")
-            
+            raise TypeError(
+                f"The input {d} is not a valid configuration of a ColumnMapping")
 
     @staticmethod
     def create_data_source(source: dict) -> Union[DBSource, CsvSource]:
         source_type = source.pop('type')
-        source['date_from'] = try_parse(source['date_from'], '%Y-%m-%d %H:%M:%S')
+        source['date_from'] = try_parse(
+            source['date_from'], '%Y-%m-%d %H:%M:%S')
         if source_type == 'file':
-            source_obj = CsvSource(**source) 
+            return CsvSource(**source)
         elif source_type == 'DB':
-            source_obj = DBSource(**source) 
-        return source_obj
+            return DBSource(**source)
+        else:
+            raise TypeError(
+                f'The data source type {source_type} does not exist')
 
     @staticmethod
-    def create_mapping(source: dict, dest:dict, coulmns:dict):
-        source = DataMappingFactory.create_data_source(source)
-        dest = DataMappingFactory.create_data_source(dest)
-        return SourceMapping(source=source, dest=dest, columns=coulmns)
+    def create_mapping(source: dict, dest: dict, coulmns: List[ColumnMapping]):
+        sd = DataMappingFactory.create_data_source(source)
+        dd = DataMappingFactory.create_data_source(dest)
+        return SourceMapping(source=sd, dest=dd, columns=coulmns)
 
     @staticmethod
     def read_config(path: Union[pl.Path, str], type='yaml') -> List[SourceMapping]:
@@ -782,11 +870,13 @@ class DataMappingFactory():
         """
         if type not in ('yaml', 'json'):
             raise ArgumentError("`type` must be in ('yaml', 'json')")
-        loaders = {'yaml':yaml.load, 'json':json.load}
         with open(path, 'r') as js:
-            configs = loaders[type](js)
-            mappings = [DataMappingFactory.create_mapping(it['source'], it['dest'], [DataMappingFactory.create_column_mapping(i) for i  in it['columns']])  for k, it in configs.items()]
+            loader: function = yaml.load if type == 'yaml' else json.load
+            configs = loader(js)
+            mappings = [DataMappingFactory.create_mapping(it['source'], it['dest'], [
+                                                          DataMappingFactory.create_column_mapping(i) for i in it['columns']]) for k, it in configs.items()]
             return mappings
+
 
 @dataclass
 class RefProcessingConfiguration():
@@ -823,6 +913,7 @@ class RefProcessingConfiguration():
     species_cal: str
     calibrated: bool
 
+
 def read_picarro_processing_configuration(path: Union[str, pl.Path]) -> List[RefProcessingConfiguration]:
     with open(path, 'r') as content:
         configs = yaml.load(content)
@@ -836,17 +927,18 @@ def read_picarro_data(path: Union[str, pl.Path], tz='CET') -> pd.DataFrame:
     Assumes that the date is in CET, returns a date column in UTC. 
     For another timezone, use the `tz` argument
     """
-    data = pd.read_csv(path, delimiter=r"\s+", parse_dates=[['DATE','TIME']])
-    col_map = {\
-        'DATE_TIME':'date', 
-        'CO2_sync':'CO2',
-        'CO2_dry_sync':'CO2_DRY',
-        'H2O_sync':'H2O'
-        }
-    
-    data_map = data.rename(columns = col_map)[[l for l in col_map.values()]]
+    data = pd.read_csv(path, delimiter=r"\s+", parse_dates=[['DATE', 'TIME']])
+    col_map = {
+        'DATE_TIME': 'date',
+        'CO2_sync': 'CO2',
+        'CO2_dry_sync': 'CO2_DRY',
+        'H2O_sync': 'H2O'
+    }
+
+    data_map = data.rename(columns=col_map)[[l for l in col_map.values()]]
     data_map['date'] = data_map['date'].dt.tz_localize(tz).dt.tz_convert('UTC')
     return data_map
+
 
 def read_climate_chamber_data(path:  Union[str, pl.Path], tz='CET') -> pd.DataFrame:
     """
@@ -854,10 +946,14 @@ def read_climate_chamber_data(path:  Union[str, pl.Path], tz='CET') -> pd.DataFr
     The date and time is supposed to be in CET for the input data, returns UTC data.
     """
     cols = ['date', 'target_temperature', 'temperature', 'target_RH', 'RH']
-    date_parser = lambda s: dt.datetime.strptime(s.strip(), nabel_format_full)
-    data = pd.read_csv(path, sep=';', encoding='latin1', skiprows=3, header=0, date_parser=date_parser, parse_dates=[0], names=cols, usecols=[i for i in range(len(cols))])
-    data['date'] = pd.to_datetime(data['date']).dt.tz_localize(tz).dt.tz_convert('UTC')
+    def date_parser(s): return dt.datetime.strptime(
+        s.strip(), nabel_format_full)
+    data = pd.read_csv(path, sep=';', encoding='latin1', skiprows=3, header=0, date_parser=date_parser, parse_dates=[
+                       0], names=cols, usecols=[i for i in range(len(cols))])
+    data['date'] = pd.to_datetime(
+        data['date']).dt.tz_localize(tz).dt.tz_convert('UTC')
     return data
+
 
 def read_pressure_data(path: Union[str, pl.Path], tz='CET'):
     """
@@ -865,7 +961,11 @@ def read_pressure_data(path: Union[str, pl.Path], tz='CET'):
     and stores them in a pandas dataframe. The date is assumed to be in CET, the output in UTC
     """
     cols = ['date', 'pressure']
-    date_parser = lambda s: dt.datetime.strptime(s.strip(), '%d.%m.%y %H:%M')
-    data = pd.read_csv(path, sep=';', encoding='latin1', skiprows=3, header=0, date_parser=date_parser, parse_dates=[0], names=cols, usecols=[i for i in range(len(cols))])
-    data['date'] = pd.to_datetime(data['date']).dt.tz_localize(tz).dt.tz_convert('UTC')
+
+    def date_parser(s): return dt.datetime.strptime(
+        s.strip(), '%d.%m.%y %H:%M')
+    data = pd.read_csv(path, sep=';', encoding='latin1', skiprows=3, header=0, date_parser=date_parser, parse_dates=[
+                       0], names=cols, usecols=[i for i in range(len(cols))])
+    data['date'] = pd.to_datetime(
+        data['date']).dt.tz_localize(tz).dt.tz_convert('UTC')
     return data

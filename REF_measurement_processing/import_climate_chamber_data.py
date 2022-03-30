@@ -40,7 +40,7 @@ def rename_and_subset(df: pd.DataFrame, subset:Dict[str, str]) -> pd.DataFrame:
     Rename a pandas Dataframe with the `subset` dictionary only keeping the
     columns mentioned there.
     """
-    return df.rename(columns=subset)[[v for v in subset.values()]]
+    return df.rename(columns=subset)[list(subset.values())]
 
 #Load picarro data
 if args.picarro:
@@ -84,6 +84,7 @@ for cfg in cfgs:
     for p in cfg['paths']:
         orig_data = cfg['reader'](p)
         import pdb; pdb.set_trace()
+        #TODO Make more explicit
         data = rename_and_subset(du.date_to_timestamp(du.average_df(orig_data).reset_index(), 'date'), cfg['mapping']).dropna(subset=cfg['mapping'].values())
         with eng.connect() as con:
             with con.begin() as tr:

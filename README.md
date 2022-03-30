@@ -57,6 +57,18 @@ At the moment, there are three databases that are necessary for the pipeline, as
 - NabelGsn, empaGSN
   - These databases contain some of the sensor data from NABLE and EMPA. To obtain access, ask Stephan Henne
 
+
+### Configure Decentlab API Key
+Obtain a InfluxDB API Key from decentlab. This keys allows you access to the timeseries database where the raw measurement data resides. 
+Once you have the key, store it in a yaml file called `secrets.yaml` in the `config` folder:
+```
+-decentlab:
+  -key: your-api-key
+```
+
+
+
+
 ### Configure network shares
 Using automount, configure the following (Windows) network shares to be mounted on `/mnt/{username}/` in the following way:
 - `K:/Projects/` 
@@ -164,7 +176,7 @@ The repository is structured in directories containing group of scripts performi
   - [api-v1.3_2019-09-03.r](./CarboSenseUtilities/api-v1.3_2019-09-03.r)
    - Decentlab API for data retrieval/data upload used in various scripts
 
-- [LP8_measurement_processing](./LP8_measurement_processing/)
+- [**LP8_measurement_processing**](./LP8_measurement_processing/)
 
   - The LP8 measurement processing is applied for two model versions:
     - version [3]: full model -> database table: `CarboSense_CO2_TEST01`
@@ -177,17 +189,17 @@ The repository is structured in directories containing group of scripts performi
 
     First part: Computation of processed measurements, outlier correction, discontinuity in time series, drift correction, consistency check
 
-    1. Compute_CarboSense_CO2_values.r 
+    1. [Compute_CarboSense_CO2_values.r](./LP8_measurement_processing/Compute_CarboSense_CO2_values.r)
         - Required input variables: par1: partial/complete processing [T/F]; par2: version [1/2/3]; optional_par3: processing only measurements from DUE1 [DUE] 
         - Tasks:
           - Computation of CO2 concentration based on raw measurements and calibration model/parameters
           - Export processed measurements to database tables CarboSense_CO2_TEST01, CarboSense_CO2_TEST00 or CarboSense_CO2 (depending on **version**)
           - Flags outliers based on SHT21_RH [-> FLAG]
-    2. Empa_OutlierDetection_P.r 
+    2.  [Empa_OutlierDetection_P.r](./LP8_measurement_processing/Empa_OutlierDetection_P.r)
         - Required input variables: par1: Version [1/2/3]; par2: processing measurements from DUE1 [DUE/NO_DUE] 
         - Tasks:
           - Flags outliers [-> O_FLAG]
-    3. LP8_measurement_analysis.r 
+    3. [LP8_measurement_analysis.r](./LP8_measurement_processing/LP8_measurement_analysis.r) 
         - Required input variables: par1: Version [1/2/3]; optional_par2: processing only measurements from DUE1 [DUE] 
         - Tasks:
           - Detects discontinuity periods in LP8 time series 
@@ -330,3 +342,21 @@ This is a python package containing utilities used in all other scripts. To inst
 pip install -e ./sensorutils
 ```
 
+# Climate Chamber Calibration
+In this section, we will give a short overwiew of the processes / files needed to run a climate chamber / pressure chamber calibration, as this process is more manual than the regular co-located calibration, where the data is automatically imported from the NABEL exports in `K:\Projects\Nabel`
+## Files
+- *Picarro*:
+When you run a climate chamber calibration, please place the **original** `.dat` files as exported from the Picarro instrument into a folder of your choosing (So far, this was `K:\Carbosense\Data\Klimakammer_Versuche_27022017_XXXXXXXX`). You can then import them into the database  using 
+  ```
+  import_climate_chamber_data.py --picarro your_path your_regex
+  ```
+  Do not forget to add the picarro id to the `Deployment` table in the database. Before / after the calibration, run a picarro calibration
+  and store the results in `G:\503_Themen\CarboSense`
+- *Climate Chamber*: export the data (as is) from the climate chamber control software and store it in a folder of your choosing. To import the data, use:
+  ```
+  import_climate_chamber_data.py --climate your_path your_regex
+  ```
+- *Pressure* as the climate chamber does not have a pressure measurement, ask Nabel to export the pressure data from the calibration lab (same floor as the climate chamber). Place the csv files in a folder and use the following command to import them: 
+  ```
+  import_climate_chamber_data.py --pressure your_path your_regex
+  ```
