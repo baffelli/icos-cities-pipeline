@@ -26,7 +26,9 @@ def create_upsert_metod(meta: db.MetaData) -> Callable:
 	def method(table: db.Table, conn: db.engine.Connection, keys, data_iter):
 		sql_table = db.Table(table.name, meta, autoload=True)
 		insert_stmt = db.dialects.mysql.insert(sql_table).values([dict(zip(keys, data)) for data in data_iter])
-		upsert_stmt = insert_stmt.on_duplicate_key_update({x.name: x for x in insert_stmt.inserted})
+		upsert_cols = {x.name: x for x in insert_stmt.inserted}
+		upsert_cols_subset = {k:v for k,v in upsert_cols.items() if k in keys}
+		upsert_stmt = insert_stmt.on_duplicate_key_update(upsert_cols_subset)
 		try:
 			conn.execute(upsert_stmt)
 		except db.exc.SQLAlchemyError as e:
