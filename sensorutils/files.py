@@ -1,5 +1,6 @@
 from argparse import ArgumentError
 import imp
+from yaml import Loader
 from sys import intern
 from turtle import st
 import influxdb
@@ -14,6 +15,7 @@ from dataclasses import dataclass
 from abc import ABC, abstractmethod
 import re as re
 from . import db as db_utils
+from . import data as du
 import json
 import sqlalchemy as sqa
 from sqlalchemy.orm import sessionmaker, Session
@@ -21,6 +23,8 @@ import platform
 import sqlite3
 import yaml
 import numpy as np
+import pytz
+
 
 """
 This module contains functions used to interact with files and read and write specific file formats used in this 
@@ -146,11 +150,11 @@ def format_nabel_date(date: dt.datetime) -> str:
     return dt.datetime.strftime(date, '%y%m%d')
 
 
-def get_available_measurements_on_db(station: str,
-                                     date_column: sqa.orm.Query, 
+def get_available_measurements_on_db(engine: sqa.engine.Engine, station: str,
+                                     date_column: sqa.orm.Query,
                                      grouping_column: Optional[str] = None,
-                                     group_id: Optional[Union[str, int]]=None,
-                                     db_group='CarboSense_MySQL') -> pd.DataFrame:
+                                     group_id: Optional[Union[str, int]] = None,
+                                     ) -> pd.DataFrame:
     """
     List all available datasets (grouped by date) on the database for the (NABEL) station with the ID `station`.
     To determine the available files, the following query is used:
@@ -176,22 +180,22 @@ def get_available_measurements_on_db(station: str,
         An optional column name. Specify the name of a column used to filter the data if only a subgroup is needed
     group_id: str or int
         If `grouping_column` is specified, specifiy the value of the group of interest
-    db_group: str
-        The name of the options group used to get the database connection. 
+    engine: sqlalchemy.engine.Engine
+        A sqlalchemy engine
 
     """
-    eng = db_utils.connect_to_metadata_db(group=db_group)
-    metadata = sqa.MetaData(bind=eng)
+    metadata = sqa.MetaData(bind=engine)
     table = sqa.Table(station, metadata, autoload=True)
-    Session = sessionmaker(eng)
+    Session = sessionmaker(engine)
     session = Session()
     dq = date_column.select_from(table).distinct()
     if group_id:
-        stmt = dq.filter(table.columns[grouping_column]==group_id)
+        stmt = dq.filter(table.columns[grouping_column] == group_id)
     else:
         stmt = dq
-    qs = stmt.with_session(session).statement.compile(compile_kwargs={"literal_binds": True})
-    return pd.read_sql_query(str(qs), eng, parse_dates=['date'])
+    qs = stmt.with_session(session).statement.compile(
+        compile_kwargs={"literal_binds": True})
+    return pd.read_sql_query(str(qs), engine, parse_dates=['date'])
 
 
 def get_all_picarro_files(station: str, rexp: str = '.*\.(csv|CSV)') -> List[pl.Path]:
@@ -431,9 +435,9 @@ class DataSource(ABC):
     na:
         A dict representing missing values (used when storing the data). 
     """
-    path: str
-    date_from: dt.datetime
+    date_from: Optional[dt.datetime]
     na: Union[str, float]
+    path: Optional[str]
 
     @abstractmethod
     def list_files(self, *args) -> pd.DataFrame:
@@ -448,8 +452,38 @@ class DataSource(ABC):
         pass
 
 
+
 @dataclass
-class DBSource(DataSource):
+class DatabaseSource(DataSource):
+    """
+    Represents a generic DataSource stored in a database. Additionally
+    to the usual properties, it also keeps a database connection object and provides
+    a method to connect to the db at runtime by passing the connection object.
+    """
+    date_column: str
+    group: Optional[Union[str, int]] = None
+    grouping_key: Optional[str] = None
+    eng: Optional[Union[sqa.engine.Engine, influxdb.client.InfluxDBClient]] = None
+
+    @abstractmethod
+    def attach_db(self, db:Any) -> None:
+        pass
+
+def check_db(fun):
+    """
+    This decorator ensures that the instance of the object with the decorated method
+    has a db instance attached before running the method
+    """
+    def deco(self:DatabaseSource, *args, **kwargs):
+        if self.eng:
+            return fun(self, *args, **kwargs)
+        else:
+            raise AttributeError(f'This instance: {self} has no database connection attached. Please connect using `attach_db`')
+    return deco
+
+@dataclass
+# TODO make db connection external to object like in InfluxdbSource
+class DBSource(DatabaseSource):
     """
     This subclass of :obj:`DataSource`represents a datasource located on a relational database.
     It is assumed that the datasource represents data from a single measurement station and that the data is 
@@ -473,11 +507,16 @@ class DBSource(DataSource):
     grouping_key: str
         The column name used to generate the grouping key
     """
-    db_prefix: str
-    date_column: str
-    group: Optional[str] = None
-    grouping_key: Optional[str] = None
-    na: str
+    db_prefix: Optional[str] = None
+
+    
+    def attach_db(self, eng:sqa.engine.Engine):
+        self.eng = eng
+    
+    def attach_db_from_config(self):
+        if self.db_prefix:
+            eng = db_utils.connect_to_metadata_db(group=self.db_prefix)
+            self.attach_db(eng)
 
     def date_expression(self) -> sqa.sql.text:
         """
@@ -498,6 +537,7 @@ class DBSource(DataSource):
         """
         return sqa.orm.Query(sqa.cast(sqa.func.from_unixtime(self.date_expression()), sqa.DATE).label(label))
 
+    @check_db
     def list_files(self, *args) -> pd.DataFrame:
         """
         Lists all available *files* on the data source. One *file* is assumed to be the set of all measurements sharing the same date.
@@ -508,9 +548,13 @@ class DBSource(DataSource):
             A dataframe with the available files
         """
         meas = get_available_measurements_on_db(
-            self.path, date_column=self.date_group_query(), grouping_column=self.grouping_key, group_id=self.group, db_group=self.db_prefix)
-        return meas[meas['date'] > self.date_from]
+            self.eng, self.path, date_column=self.date_group_query(), grouping_column=self.grouping_key, group_id=self.group)
+        meas_full = meas
+        if self.group:
+            meas_full['group_id'] = self.group
+        return meas_full[meas['date'] > self.date_from]
 
+    @check_db
     def read_file(self, date: dt.datetime):
         """
         Reads one file from the database source with a given date
@@ -522,18 +566,19 @@ class DBSource(DataSource):
 
         """
 
-        eng = db_utils.connect_to_metadata_db(group=self.db_prefix)
-        metadata = sqa.MetaData(bind=eng)
+        
+        metadata = sqa.MetaData(bind=self.eng)
         table = sqa.Table(self.path, metadata, autoload=True)
-        Session = sessionmaker(eng)
+        Session = sessionmaker(self.eng)
         session = Session()
         lb = 'date_group'
         dq = self.date_group_query(label=lb).with_session(
             session).select_from(table).add_columns(*table.columns).subquery()
         fq = session.query(dq).filter(dq.c[lb] == date.strftime('%Y-%m-%d'))
         qs = fq.statement.compile(compile_kwargs={"literal_binds": True})
-        return pd.read_sql(qs, eng).drop(lb, axis=1).replace(self.na, np.NaN)
+        return pd.read_sql(qs, self.eng).drop(lb, axis=1).replace(self.na, np.NaN)
 
+    @check_db
     def write_file(self, input: pd.DataFrame, temporary: bool = False) -> pd.DataFrame:
         """
         Writes one file to the database. If the keys are duplicated,
@@ -554,17 +599,16 @@ class DBSource(DataSource):
             transaction that is rolled back after returning the affected rows.
         """
         # Connect to the database
-        eng = db_utils.connect_to_metadata_db(group=self.db_prefix)
-        metadata = sqa.MetaData(bind=eng)
+        metadata = sqa.MetaData(bind=self.eng)
         metadata.reflect()
         # Create an upsert method
         method = db_utils.create_upsert_metod(metadata)
         # Fill na with the na value
         input_filled = input.fillna(self.na)
-        Session = sessionmaker(bind=eng)
+        Session = sessionmaker(bind=self.eng)
         session = Session()
         output_table = metadata.tables[self.path]
-        with eng.connect() as con:
+        with self.eng.connect() as con:
             tran = con.begin()
             input_filled.to_sql(self.path, con, method=method,
                                 index=False, if_exists='append')
@@ -583,50 +627,81 @@ class DBSource(DataSource):
 
 
 @dataclass
-class InfluxdbSource(DataSource):
+class InfluxdbSource(DatabaseSource):
     """
     This subclass of :obj:`DataSource`represents a datasource located in an influxdb data. One *file* 
     in this dataset corresponds to a day of measurements for a specific sensor node.
-    To set the sensor, the object uses the 'node' attribute
+    To set the sensor, the object uses the 'group' attribute.
+    The object expexcts that you pass a :obj:`influxdb.InfluxDBClient` connection in order
+    for the methods to work. This can be done at run time by monkey patching.
     """
-    client: influxdb.InfluxDBClient
-    node: str
+    group: Optional[Union[str, int]] = None
+    grouping_key: Optional[str] = 'node'
+    date_column: str = 'time'
 
+    def attach_db(self, db: influxdb.InfluxDBClient) -> None:
+        self.eng = db
+
+    @check_db
     def list_files(self, *args) -> pd.DataFrame:
-        q = f"""
+        if self.eng:
+            q = f"""
+            SELECT
+            *
+            FROM
+            (
+            SELECT COUNT("value") FROM "measurements" WHERE {self.grouping_key} =~ /{self.group}/ AND sensor =~ /senseair|sensirion|battery|calibration/ AND time > '2017-01-01 00:00:00' GROUP BY time(1d)
+            )
+            WHERE count > 0
+            """
+            # Send query
+            fs = self.eng.query(q, epoch='s', params={
+                                f"{self.grouping_key}": self.group})
+            # Make datafame
+            if len(fs) > 0:
+                available_data = pd.DataFrame([a for a in fs['measurements']])
+                available_data['date'] = pd.to_datetime(
+                    available_data[self.date_column], unit='s')
+                available_data['path'] = self.path
+                available_data['group'] = self.group
+            else:
+                available_data = pd.DataFrame(columns=['date'])
+            return available_data
+    @check_db
+    def read_file(self, date: dt.datetime) -> pd.DataFrame:
+        # format date
+        ut = pytz.utc
+        min_ts, max_ts = [
+            f"{ut.localize(d).isoformat()}" for d in day_ts(date)]
+        query = \
+            f"""
         SELECT
         *
         FROM
         (
-        SELECT COUNT("value") FROM "measurements" WHERE node =~ /{self.node}/ AND sensor =~ /senseair|sensirion|battery|calibration/ AND time > '2017-01-01 00:00:00' GROUP BY time(1d)
+            SELECT value FROM "measurements" WHERE {self.grouping_key}=~ /{self.group}/ 
+            AND sensor =~ /senseair*|sensirion*|battery|calibration*/ AND "time" > $start_ts AND "time" < $end_ts
+            GROUP BY "{self.grouping_key}","sensor"
         )
-        WHERE count > 0
         """
-        # Send query
-        fs = self.client.query(q, epoch='s', params={"node": self.node})
-        # Make datafame
-        if len(fs) >0:
-            available_data = pd.DataFrame([a for a in fs['measurements']]) 
-            available_data['date'] = pd.to_datetime(
-                available_data['time'], unit='s')
-            available_data['path'] = self.path
-            available_data['node'] = self.node
-        else:
-            available_data = pd.DataFrame(columns=['date'])
-        return available_data
 
-    def read_file(self, date: dt.datetime) -> pd.DataFrame:
-        min_ts, max_ts = day_ts(date)
-        import pdb
-        pdb.set_trace()
-        return min_ts
-
+        fs = self.eng.query(query, epoch='s', bind_params={
+                               "group": self.group, "start_ts": min_ts, "end_ts": max_ts})
+        df = du.influxql_results_to_df(fs)
+        grp = [self.date_column, self.grouping_key] if self.grouping_key else [
+            self.date_column]
+        df_wide = du.reshape_influxql_results(df, grp, 'sensor', 'value')
+        return df_wide
+    @check_db
     def write_file(self, input: pd.DataFrame, temporary: bool = False) -> None:
         pass
 
 
-def day_ts(day: dt.datetime) -> Tuple[float, float]:
-    return (day.replace(hour=0, minute=0, second=0).timestamp(), day.replace(hour=23, minute=59, second=59).timestamp())
+def day_ts(day: dt.datetime) -> Tuple[dt.datetime, dt.datetime]:
+    """
+    Return the minimum and maximum date object for a given day
+    """
+    return (day.replace(hour=0, minute=0, second=0), day.replace(hour=23, minute=59, second=59))
 
 
 @dataclass
@@ -720,7 +795,26 @@ class SourceMapping():
     dest: DataSource
     columns: List[ColumnMapping]
 
-    def list_files_missing_in_dest(self, all: bool = False, backfill: int = 3) -> Set:
+    def connect_all_db(self, 
+        source_eng:Optional[Union[sqa.engine.Engine, influxdb.client.InfluxDBClient]]=None, 
+        dest_eng:Optional[Union[sqa.engine.Engine, influxdb.client.InfluxDBClient]]=None) -> None:
+        """
+        Connect all dbs using the passed arguments `source_eng` and `dest_eng` or
+        the specified connection configuration group name as given by `db_prefix`.
+        """
+        def connect_db(ds:DatabaseSource, eng:Optional[Union[sqa.engine.Engine, influxdb.client.InfluxDBClient]]=None) ->DatabaseSource:
+            if isinstance(ds, DatabaseSource):
+                if eng:
+                    ds.attach_db(eng)
+            if isinstance(ds, DBSource):
+                if ds.db_prefix:
+                    ds.attach_db_from_config()
+            return ds
+
+        self.source = connect_db(self.source)
+        self.dest = connect_db(self.dest)
+
+    def list_files_missing_in_dest(self, all: bool = False, backfill: int = 3) -> List[dt.datetime]:
         """
         Lists the files available in the source that are missing in the destination. Using the `backfill` parameter,
         a certain number of files in the past (with respect to current date) is added to the list
@@ -736,17 +830,20 @@ class SourceMapping():
         pandas.DataFrame   
             A :obj:`pandas.DataFrame` object with dates and paths of the missing files
         """
-        sf = self.source.list_files()
-        df = self.dest.list_files()
-        source_dates = (sf['date'].astype(object).unique())
-        dest_dates = (df['date'].astype(object).unique())
-        # Find dates to backfill
-        backfill_dates = set(
-            source_dates[(dt.datetime.now() - source_dates) < dt.timedelta(days=backfill)])
-        # Find dates missing in dest
-        missing_dates = (set(source_dates) - set(dest_dates)
-                         ).union(backfill_dates) if not all else source_dates
-        return missing_dates
+        source_files = self.source.list_files().sort_values('date').drop_duplicates()
+        destination_files = self.dest.list_files().sort_values('date').drop_duplicates()
+        if len(source_files) > 0:
+            source_dates = source_files['date'].dt.to_pydatetime()
+            dest_dates = destination_files['date'].dt.to_pydatetime()
+            # Find dates to backfill
+            backfill_dates = set(
+                source_dates[(dt.datetime.now() - source_dates) <= dt.timedelta(days=backfill)])
+            # Find dates missing in dest
+            missing_dates = (set(source_dates) - set(dest_dates)
+                             ).union(backfill_dates) if not all else source_dates
+        else:
+            missing_dates = []
+        return sorted(missing_dates)
 
     def mapping_to_query(self) -> List[sqa.sql.text]:
         """
@@ -843,7 +940,7 @@ class DataMappingFactory():
                 f"The input {d} is not a valid configuration of a ColumnMapping")
 
     @staticmethod
-    def create_data_source(source: dict) -> Union[DBSource, CsvSource]:
+    def create_data_source(source: dict) -> Union[DBSource, CsvSource, InfluxdbSource]:
         source_type = source.pop('type')
         source['date_from'] = try_parse(
             source['date_from'], '%Y-%m-%d %H:%M:%S')
@@ -851,6 +948,8 @@ class DataMappingFactory():
             return CsvSource(**source)
         elif source_type == 'DB':
             return DBSource(**source)
+        elif source_type == 'influxDB':
+            return InfluxdbSource(**source)
         else:
             raise TypeError(
                 f'The data source type {source_type} does not exist')
@@ -862,7 +961,7 @@ class DataMappingFactory():
         return SourceMapping(source=sd, dest=dd, columns=coulmns)
 
     @staticmethod
-    def read_config(path: Union[pl.Path, str], type='yaml') -> List[SourceMapping]:
+    def read_config(path: Union[pl.Path, str], type='yaml') -> Dict[str, SourceMapping]:
         """
         Reads a YAML/JSON configuration file representing a group of SourceMapping object
         and returns a list. The validation of the file is delegated to the constructors 
@@ -871,10 +970,10 @@ class DataMappingFactory():
         if type not in ('yaml', 'json'):
             raise ArgumentError("`type` must be in ('yaml', 'json')")
         with open(path, 'r') as js:
-            loader: function = yaml.load if type == 'yaml' else json.load
+            loader: function = (lambda x: yaml.load(
+                x, Loader)) if type == 'yaml' else (lambda x: json.load(x))
             configs = loader(js)
-            mappings = [DataMappingFactory.create_mapping(it['source'], it['dest'], [
-                                                          DataMappingFactory.create_column_mapping(i) for i in it['columns']]) for k, it in configs.items()]
+            mappings = {k: DataMappingFactory.create_mapping(it['source'], it['dest'], [ DataMappingFactory.create_column_mapping(i) for i in it['columns']]) for k, it in configs.items()}
             return mappings
 
 

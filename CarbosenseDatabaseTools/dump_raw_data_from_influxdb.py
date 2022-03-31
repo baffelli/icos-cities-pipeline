@@ -1,6 +1,7 @@
 """
 This script dumps the raw data from the decentlab DB into a database table
 """
+from importlib_resources import path
 import influxdb
 import pandas as pd
 import pymysql
@@ -12,39 +13,57 @@ import sensorutils.decentlab as dl
 import sensorutils.db as db_utils
 import sensorutils.secrets as sec
 import sensorutils.files as fu
+import sensorutils.data as du
 
 from datetime import datetime as dt
 from datetime import timedelta 
 import argparse as ap
 
+import pathlib as pl
+
+
+#Renam
+
 parser = ap.ArgumentParser(description='Import raw data from decentlab into database')
+parser.add_argument('config', type=pl.Path, help='Path to the datasource mapping configuration file')
+parser.add_argument('--import-all', default=False, action='store_true', help='Import all data or only incremental import?')
 
+args = parser.parse_args()
 
+#Default date
+default_date = dt.strptime('2017-01-01 00:00:00', '%Y-%m-%d %H:%M:%S') 
+#Mapping table <> sensor type
+table_mapping = {'HPP':"hpp_data", "LP8":'lp8_data'}
 
-
-#TODO add parameters from argparse
-import_all = False
-sensor_type = 'HPP'
-
-
+mapping = fu.DataMappingFactory.read_config(args.config)
+import pdb; pdb.set_trace()
 #Get API key from secrets
 passw = sec.get_key('decentlab')
-
 #Create influxdb client
 client = dl.decentlab_client(token=passw)
-#Connect to database
+#Connect to  target database
 engine = db_utils.connect_to_metadata_db()
 db_metadata = db.MetaData(bind=engine, reflect=True)
 
+#Load the mapping file
+
 #List all ids
-ids = db_utils.list_all_sensor_ids('LP8', engine)
-for row in ids.itertuples():
-	default_date = dt.strptime('2017-01-01 00:00:00', '%Y-%m-%d %H:%M:%S')
-	src = fu.InfluxdbSource(path='a', date_from=default_date, node=row.SensorUnit_ID, client=client, na=None)
-	dest = fu.DBSource(path='lp8_data', date_from=default_date, db_prefix='CarboSense_MySQL', date_column='time', na=-999, group=row.SensorUnit_ID, grouping_key='SensorUnit_ID')
-	ad = dest.list_files()
-	mapping = fu.SourceMapping(source=src, dest=dest, columns=None)
-	print(mapping.list_files_missing_in_dest())
+sensor_ids = db_utils.list_all_sensor_ids(sensor_type, engine)
+#Iterate over all sensors
+for row in sensor_ids.itertuples():
+	mapping['']
+	# src = fu.InfluxdbSource(path='a', date_from=default_date, client=client, group=row.SensorUnit_ID, grouping_key='node', na=None)
+	# dest = fu.DBSource(path=table_mapping[sensor_type], date_from=default_date, db_prefix='CarboSense_MySQL', date_column='time', na=-999, group=row.SensorUnit_ID, grouping_key='SensorUnit_ID')
+	# ad = dest.list_files()
+	# mapping = fu.SourceMapping(source=src, dest=dest, columns=None)
+	# missing = mapping.list_files_missing_in_dest()
+	# if len(missing) > 0:
+	# 	for missing_date in missing:
+	# 		data = src.read_file(missing_date)
+	# 		import pdb; pdb.set_trace()
+	# 		data.rename(lambda x: x.replace('-',"_"))
+	# 		import pdb; pdb.set_trace()
+	print('a')
 
 
 

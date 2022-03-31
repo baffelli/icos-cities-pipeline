@@ -24,7 +24,7 @@ import pathlib as pl
 
 import glob
 
-from typing import Optional, List, Union
+from typing import Optional, List, Union, Dict
 
 
 import argparse as ap
@@ -36,9 +36,9 @@ The configuration is specified in a yaml file, see the repository for an example
 
 
 
-def load_and_map(source_dest_mapping: List[fu.SourceMapping], temporary: bool=False) -> None:
+def load_and_map(source_dest_mapping: Dict[str, fu.SourceMapping], temporary: bool=False) -> None:
     #Iterate over the mapping
-    for mapping in source_dest_mapping:
+    for key, mapping in source_dest_mapping.items():
         #Get Missing files
         missing_files = mapping.list_files_missing_in_dest(backfill=5)
         #Iterate over files
