@@ -8,8 +8,10 @@ import enum
 import imp
 from typing import Callable, Iterable, Union, List, Optional, Pattern, Dict, Set
 from dataclasses import dataclass, field
+import influxdb
+from matplotlib.pyplot import axis
 from pyparsing import col
-import sensorutils.files as fu
+from . import files as fu
 import yaml
 import pandas as pd
 import datetime as dt
@@ -393,3 +395,17 @@ def date_to_timestamp(dt: pd.DataFrame, dt_col:str, target_name:str='timestamp')
     """
     dt[dt_col] = pd.to_datetime(dt[dt_col]).apply(lambda x: x.timestamp())
     return dt.rename(columns={dt_col:target_name})
+
+def influxql_results_to_df(res: influxdb.client.ResultSet) -> pd.DataFrame:
+    """
+    Converts an :obj:`influxdb.client.ResultSet` into a pandas.DataFrame
+    """
+    return pd.DataFrame([r for r in res.get_points()])
+
+def reshape_influxql_results(res: pd.DataFrame, keys:List[str], names:str, value:str) -> pd.DataFrame:
+    """
+    Reshapes a :obj:`pandas.DataFrame` of results from an influxql
+    query into a wider object using the given keys
+    """
+    return pd.pivot_table(res, index=keys, columns=names, values=value).reset_index()
+
