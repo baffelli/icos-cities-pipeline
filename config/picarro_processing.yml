@@ -1,0 +1,9 @@
+
+- source: NABEL_DUE
+  location: DUE1
+  species: CO2_DRY
+  species_cal: CO2_DRY_CAL
+  valid_from: 2017-01-01 00:00:00
+  valid_to: 2100-01-01 00:00:00
+  calibrated: False
+  sensor: picarro

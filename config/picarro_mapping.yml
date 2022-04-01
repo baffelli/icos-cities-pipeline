@@ -216,3 +216,7 @@ LAEG:
     - {name: CO_F, query: 1 - isnull(CO), datatype: int, na: 0}
     - {name: H2O, query: H2O, datatype: float, na: -999}
     - {name: H2O_F, query:  1 - isnull(H2O), datatype: int, na: 0}
+ClimateChamber:
+  source:
+    type: file
+  

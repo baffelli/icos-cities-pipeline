@@ -1,0 +1,7 @@
+DUE:
+  location: NABEL_DUE
+  parameters:
+    - {species: CO2_DRY, species_cal: CO2_DRY_CAL, valid_from:}
+    -
+    -
+
