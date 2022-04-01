@@ -4,7 +4,7 @@ import sqlalchemy as db
 import sqlalchemy.orm as orm
 from typing import Callable
 import pandas as pd
-
+from .log import logger
 """
 This module contains function used to interact with the metadata DB,
 """
@@ -59,7 +59,10 @@ def connect_to_metadata_db(group: str = 'CarboSense_MySQL', conf_path: str = "~/
     -------
             sqlachemy.engine.Engine
     """
-    return eng.create_engine('mysql+pymysql://', connect_args={'read_default_file': conf_path, 'read_default_group': group})
+    logger.debug(f'Attempting connection to db using config file {conf_path} and configuration group {group}')
+    engine = eng.create_engine('mysql+pymysql://', connect_args={'read_default_file': conf_path, 'read_default_group': group})
+    logger.debug(f'Succesfully connected to db')
+    return engine
 
 
 def list_all_sensor_ids(type: str, eng: eng.Engine, id_col:str = 'SensorUnit_ID', type_col: str = 'Type', sensors_table: str = 'Sensors', dep_table: str = 'Deployment') -> pd.DataFrame:
