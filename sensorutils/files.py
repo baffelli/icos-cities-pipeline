@@ -1,5 +1,6 @@
 from argparse import ArgumentError
 import imp
+from sklearn.exceptions import DataConversionWarning
 from yaml import Loader
 from sys import intern
 from turtle import st
@@ -12,7 +13,7 @@ from parsimonious.grammar import Grammar
 from parsimonious.nodes import NodeVisitor
 from typing import Callable, Union, List, Optional, Pattern, Dict, Set, Any, Tuple
 from dataclasses import dataclass
-from abc import ABC, abstractmethod
+from abc import ABC, ABCMeta, abstractmethod
 import re as re
 from . import db as db_utils
 from . import data as du
@@ -24,7 +25,13 @@ import sqlite3
 import yaml
 import numpy as np
 import pytz
+import functools
+import string
+import random
 
+import itertools
+import functools
+from .log import logger
 
 """
 This module contains functions used to interact with files and read and write specific file formats used in this 
@@ -440,7 +447,7 @@ class DataSource(ABC):
     path: Optional[str]
 
     @abstractmethod
-    def list_files(self, *args) -> pd.DataFrame:
+    def list_files(self, *args, **kwargs) -> pd.DataFrame:
         pass
 
     @abstractmethod
@@ -538,7 +545,7 @@ class DBSource(DatabaseSource):
         return sqa.orm.Query(sqa.cast(sqa.func.from_unixtime(self.date_expression()), sqa.DATE).label(label))
 
     @check_db
-    def list_files(self, *args) -> pd.DataFrame:
+    def list_files(self, group=None, *args) -> pd.DataFrame:
         """
         Lists all available *files* on the data source. One *file* is assumed to be the set of all measurements sharing the same date.
 
@@ -548,22 +555,25 @@ class DBSource(DatabaseSource):
             A dataframe with the available files
         """
         meas = get_available_measurements_on_db(
-            self.eng, self.path, date_column=self.date_group_query(), grouping_column=self.grouping_key, group_id=self.group)
+            self.eng, self.path, date_column=self.date_group_query(), grouping_column=self.grouping_key, group_id=group)
         meas_full = meas
         if self.group:
             meas_full['group_id'] = self.group
         return meas_full[meas['date'] > self.date_from]
 
     @check_db
-    def read_file(self, date: dt.datetime):
+    def read_file(self, date: dt.datetime, group:Optional[Union[str, int]]=None):
         """
-        Reads one file from the database source with a given date
+        Reads one file from the database source with a given date.
+        If the `group` parameter is passed, only read the part where `grouping_key` 
+        equals the value of `group`
 
         Parameters
         ----------
         date: datetime.datetime
             The date of the dataset to read
-
+        group: 
+            Optional group id to filter the data
         """
 
         
@@ -575,11 +585,16 @@ class DBSource(DatabaseSource):
         dq = self.date_group_query(label=lb).with_session(
             session).select_from(table).add_columns(*table.columns).subquery()
         fq = session.query(dq).filter(dq.c[lb] == date.strftime('%Y-%m-%d'))
-        qs = fq.statement.compile(compile_kwargs={"literal_binds": True})
+        if group:
+            fq_tot = fq.filter(dq.c[self.grouping_key] == self.group)
+        else:
+            fq = fq
+        qs = fq_tot.statement.compile(compile_kwargs={"literal_binds": True})
+        logger.debug(f"The query is {qs}")
         return pd.read_sql(qs, self.eng).drop(lb, axis=1).replace(self.na, np.NaN)
 
     @check_db
-    def write_file(self, input: pd.DataFrame, temporary: bool = False) -> pd.DataFrame:
+    def write_file(self, input: pd.DataFrame, group:Optional[Union[str, int]]=None, temporary: bool = False) -> pd.DataFrame:
         """
         Writes one file to the database. If the keys are duplicated,
         the data are upserted using :obj:`sensorutils.db.create_upsert_metod`
@@ -590,7 +605,8 @@ class DBSource(DatabaseSource):
             The input dataset to write. It should have the same columns as contained in the database
         temporary: bool
             If set to `True` only perform insert in a temporary uncommited transaction. Useful when testing import
-
+        group:
+            Set if you want to write to a specific group only (it is only needed to return the affected rows for that group, not for writing)
         Returns
         -------
         pd.DataFrame
@@ -612,19 +628,30 @@ class DBSource(DatabaseSource):
             tran = con.begin()
             input_filled.to_sql(self.path, con, method=method,
                                 index=False, if_exists='append')
-            new_data = session.query(output_table).filter(output_table.columns.timestamp.between(
-                input['timestamp'].min(), input['timestamp'].max())).statement.compile(compile_kwargs={"literal_binds": True})
-            affected = pd.read_sql(new_data, con)
-            print(f"Affected rows {affected}")
+            new_data = session.query(output_table).filter(output_table.columns[self.date_column].between(
+                input[self.date_column].min(), input[self.date_column].max()))
+            if group and self.grouping_key:
+                new_data = new_data.filter(output_table.columns[self.grouping_key] == group)
+            affected = pd.read_sql(new_data.statement.compile(compile_kwargs={"literal_binds": True}), con)
+            logger.debug(f"Affected rows {affected}")
             if temporary:
-                print("Rolling back as the temporary flag was set")
+                logger.debug("Rolling back as the temporary flag was set")
                 tran.rollback()
                 return affected
             else:
                 tran.commit()
-                print("Commiting affected rows")
+                logger.debug("Commiting affected rows")
                 return affected
 
+
+def combine_first_column(df:pd.DataFrame) -> pd.DataFrame:
+    """
+    Coalesce duplicated columns into a single column
+    """
+    def cf(cols: pd.DataFrame) -> pd.Series:
+        return cols.bfill(axis=1).iloc[:,0]
+    df_col = df.groupby(df.columns, axis=1).agg(cf)
+    return df_col
 
 @dataclass
 class InfluxdbSource(DatabaseSource):
@@ -635,6 +662,7 @@ class InfluxdbSource(DatabaseSource):
     The object expexcts that you pass a :obj:`influxdb.InfluxDBClient` connection in order
     for the methods to work. This can be done at run time by monkey patching.
     """
+    eng: Optional[influxdb.client.InfluxDBClient] = None
     group: Optional[Union[str, int]] = None
     grouping_key: Optional[str] = 'node'
     date_column: str = 'time'
@@ -643,55 +671,68 @@ class InfluxdbSource(DatabaseSource):
         self.eng = db
 
     @check_db
-    def list_files(self, *args) -> pd.DataFrame:
+    def list_files(self, *args, group=None) -> pd.DataFrame:
         if self.eng:
+            gq = f"{self.grouping_key} =~ /{group}/ AND" if group else ""
             q = f"""
             SELECT
             *
             FROM
             (
-            SELECT COUNT("value") FROM "measurements" WHERE {self.grouping_key} =~ /{self.group}/ AND sensor =~ /senseair|sensirion|battery|calibration/ AND time > '2017-01-01 00:00:00' GROUP BY time(1d)
+            SELECT COUNT("value") FROM "measurements" WHERE {gq} sensor =~ /senseair|sensirion|battery|calibration/ AND time > '2017-01-01 00:00:00' GROUP BY time(1d)
             )
             WHERE count > 0
             """
             # Send query
             fs = self.eng.query(q, epoch='s', params={
-                                f"{self.grouping_key}": self.group})
+                                f"{self.grouping_key}": group})
             # Make datafame
             if len(fs) > 0:
                 available_data = pd.DataFrame([a for a in fs['measurements']])
                 available_data['date'] = pd.to_datetime(
                     available_data[self.date_column], unit='s')
                 available_data['path'] = self.path
-                available_data['group'] = self.group
+                available_data['group'] = group
             else:
                 available_data = pd.DataFrame(columns=['date'])
             return available_data
     @check_db
-    def read_file(self, date: dt.datetime) -> pd.DataFrame:
+    def read_file(self, date: dt.datetime, group:str=None, av_time:Optional[str]=None) -> pd.DataFrame:
+        """
+        Reads a date of measurements from the influxdb db
+        with the given date. Optionally specify `group`
+        if you want to read only the subgroup specified at initalisation
+        by the parameter `grouping_key`.
+        If you want to perform additional time averaging, pass the influxdb averaging string with the keyword `av_time`.
+        """
         # format date
         ut = pytz.utc
         min_ts, max_ts = [
             f"{ut.localize(d).isoformat()}" for d in day_ts(date)]
+        #Make query componend conditionally
+        gq = f"{self.grouping_key} =~ /{group}/ AND" if group else ""
+        aq = f", time({av_time})" if av_time else ""
+        sq = 'mean("value") AS value' if av_time else "value"
         query = \
             f"""
         SELECT
         *
         FROM
         (
-            SELECT value FROM "measurements" WHERE {self.grouping_key}=~ /{self.group}/ 
-            AND sensor =~ /senseair*|sensirion*|battery|calibration*/ AND "time" > $start_ts AND "time" < $end_ts
-            GROUP BY "{self.grouping_key}","sensor"
+            SELECT {sq} FROM "measurements" WHERE {gq}
+            sensor =~ /senseair*|sensirion*|battery|calibration*/ AND "time" > $start_ts AND "time" < $end_ts
+            GROUP BY "{self.grouping_key}","sensor"{aq} fill(previous)
         )
         """
-
+        logger.debug(f'The query is {query}')
         fs = self.eng.query(query, epoch='s', bind_params={
-                               "group": self.group, "start_ts": min_ts, "end_ts": max_ts})
+                               "group": group, "start_ts": min_ts, "end_ts": max_ts})
         df = du.influxql_results_to_df(fs)
         grp = [self.date_column, self.grouping_key] if self.grouping_key else [
             self.date_column]
         df_wide = du.reshape_influxql_results(df, grp, 'sensor', 'value')
         return df_wide
+
     @check_db
     def write_file(self, input: pd.DataFrame, temporary: bool = False) -> None:
         pass
@@ -712,14 +753,14 @@ class CsvSource(DataSource):
     """
     re: str
 
-    def list_files(self, *args) -> pd.DataFrame:
+    def list_files(self, *args, group=None) -> pd.DataFrame:
         """
         Lists all the available files in the :obj:`path` with the specified regex.
         """
         files = get_available_files(self.path, rexp=self.re)
         return files[files['date'] > self.date_from]
 
-    def read_file(self, date: dt.datetime) -> Optional[pd.DataFrame]:
+    def read_file(self, date: dt.datetime, group=None) -> Optional[pd.DataFrame]:
         """
         Read a file with the given date from the datasource.
         If there are multiple files with the same date these are (outer) joined on the date key.
@@ -744,9 +785,40 @@ class CsvSource(DataSource):
     def write_file(self, data, temporary: bool = False):
         pass
 
+@dataclass
+class ColumnMapping(ABC):
+    """
+    Abstract base class representing the mapping of columns 
+    between two pandas.DataFrame. This is needed to flexibly
+    support complex operations, ranging from just renaming the column
+    to SQL-like joins and other column operations.
+    """
+    name: str
+    datatype: str
+    na: Optional[Union[str, int]]
+
+    @abstractmethod
+    def make_mapper(self) -> Callable:
+        pass
 
 @dataclass
-class ColumnMapping():
+class NominalColumnMapping(ColumnMapping):
+    """
+    Represents the mapping between columns
+    as a renaming operation
+    """
+    source_name: str
+
+    def make_mapper(self) -> Callable:
+        def rename(df: pd.DataFrame, eng:Optional[sqa.engine.Engine]) -> pd.DataFrame:
+            renamed = df.rename(columns={self.source_name:self.name})
+            renamed_selected = renamed[self.name] if self.name in renamed.columns else pd.DataFrame()
+            return renamed_selected
+        return rename
+
+
+@dataclass
+class SQLColumnMapping(ColumnMapping):
     """
     Represents the mapping between columns in two systems
     as a SQL statement
@@ -757,15 +829,16 @@ class ColumnMapping():
         The output column name
     query: str
         A SQL query used to generated the output column
+    source_name: str
+        An alternative to the query for simple renaming
     datatype: str
         The datatype of the output column
     na: str or float or int
-        The value used to represen NaN / Null in the destination system
+        The value used to represent NaN / Null in the destination system
     """
     name: str
     query: str
-    datatype: str
-    na: Union[str, float, int]
+
 
     def make_query(self) -> sqa.sql.text:
         """
@@ -773,6 +846,22 @@ class ColumnMapping():
         """
         return sqa.sql.text(f"{self.query} AS {self.name}")
 
+    def make_mapper(self) -> Callable:
+        """
+        Makes a mapping function that maps
+        a column by using a SQL query
+        """
+        def mapper(df: pd.DataFrame, eng:sqa.engine.Engine) -> pd.DataFrame:
+            tb = id_generator()
+            df.to_sql(tb, eng,  )
+            # Represent the source as sqlalchemy object
+            md = sqa.MetaData(bind=eng)
+            md.reflect()
+            # Apply mapping
+            sq = sqa.select([self.make_query()]).select_from(md.tables[tb])
+            mapped = pd.read_sql(sq, eng)
+            return mapped
+        return mapper
 
 @dataclass
 class SourceMapping():
@@ -814,7 +903,7 @@ class SourceMapping():
         self.source = connect_db(self.source)
         self.dest = connect_db(self.dest)
 
-    def list_files_missing_in_dest(self, all: bool = False, backfill: int = 3) -> List[dt.datetime]:
+    def list_files_missing_in_dest(self, group=None, all: bool = False, backfill: int = 3) -> List[dt.datetime]:
         """
         Lists the files available in the source that are missing in the destination. Using the `backfill` parameter,
         a certain number of files in the past (with respect to current date) is added to the list
@@ -830,8 +919,8 @@ class SourceMapping():
         pandas.DataFrame   
             A :obj:`pandas.DataFrame` object with dates and paths of the missing files
         """
-        source_files = self.source.list_files().sort_values('date').drop_duplicates()
-        destination_files = self.dest.list_files().sort_values('date').drop_duplicates()
+        source_files = self.source.list_files(group=group).sort_values('date').drop_duplicates()
+        destination_files = self.dest.list_files(group=group).sort_values('date').drop_duplicates()
         if len(source_files) > 0:
             source_dates = source_files['date'].dt.to_pydatetime()
             dest_dates = destination_files['date'].dt.to_pydatetime()
@@ -851,8 +940,29 @@ class SourceMapping():
         list of :obj:`sqlalchemy.sql.text` expression. These are then combined
         to prepare a query in 
         """
-        q = [expr.make_query() for expr in self.columns]
+        q = [expr.make_query() for expr in self.columns if not expr.source_name]
         return q
+    
+    def data_type_mapping(self) -> Dict[str, str]:
+        """
+        Transform the column mapping into
+        a dictonary of datatype mapping used by pandas.astype
+        """
+        return {c.name: c.datatype for c in self.columns}
+    
+    def unique_columns(self) -> Set[str]:
+        """
+        Return only unique column names
+        from the objects column mapping
+        """
+        return set([c.name for c in self.columns])
+
+    def na_mapping(self):
+        """
+        Transform the column mapping into
+        a dictionary of na values for each column
+        """
+        return {c.name: c.na for c in self.columns if c.na is not None}
 
     def map_file(self, file: pd.DataFrame) -> pd.DataFrame:
         """
@@ -879,13 +989,18 @@ class SourceMapping():
         # Represent the source as sqlalchemy object
         md = sqa.MetaData(bind=engine)
         md.reflect()
-        # Create mappping query
-        cols = self.mapping_to_query()
-        # Apply mapping
-        sq = sqa.select([q for q in cols]).select_from(md.tables["source"])
-        mapped = pd.read_sql(sq, engine)
+        #Map columns
+        mapped_cols = [s.make_mapper()(file, engine) for s,file,engine in itertools.product(self.columns,[file],[engine])]
+        #Exclude empty
+        valid_cols = [m for m in mapped_cols if not m.empty]
+        mapped = pd.concat(valid_cols, axis=1)
+        #Remove duplicate columns by coalescing
+        mapped_dedup = combine_first_column(mapped)
+        mapped_na = mapped_dedup.fillna({k:v for k,v in self.na_mapping().items() if k in mapped_dedup.columns})
         # Replace nas and convert columns to proper type
-        return mapped.astype({c.name: c.datatype for c in self.columns}).fillna({c.name: c.na for c in self.columns})
+        dt_mapping = {k:v for k,v in self.data_type_mapping().items() if k in mapped_na.columns}
+        mapped_new_types = mapped_na.astype(dt_mapping)
+        return mapped_new_types
 
     def transfer_file(self, date: dt.datetime, temporary: bool = False) -> pd.DataFrame:
         """
@@ -933,11 +1048,17 @@ class DataMappingFactory():
         """
         Creates a new :obj:`sensorutils.files.ColumnMapping` object from a dict.
         """
+        em =  f"The input {d} is not a valid configuration of a ColumnMapping"
         try:
-            return ColumnMapping(**d)
+            if 'query' in d.keys():
+                mp = SQLColumnMapping(**d)
+            elif 'source_name' in d.keys():
+                mp = NominalColumnMapping(**d)
+            else:
+                raise TypeError(em)
         except TypeError as e:
-            raise TypeError(
-                f"The input {d} is not a valid configuration of a ColumnMapping")
+            raise TypeError(em)
+        return mp
 
     @staticmethod
     def create_data_source(source: dict) -> Union[DBSource, CsvSource, InfluxdbSource]:
@@ -1026,6 +1147,7 @@ def read_picarro_data(path: Union[str, pl.Path], tz='CET') -> pd.DataFrame:
     Assumes that the date is in CET, returns a date column in UTC. 
     For another timezone, use the `tz` argument
     """
+    logger.debug(f"Loading file {path}")
     data = pd.read_csv(path, delimiter=r"\s+", parse_dates=[['DATE', 'TIME']])
     col_map = {
         'DATE_TIME': 'date',
@@ -1044,6 +1166,7 @@ def read_climate_chamber_data(path:  Union[str, pl.Path], tz='CET') -> pd.DataFr
     Reads the climate chamber data from the given path and return a pandas dataframe
     The date and time is supposed to be in CET for the input data, returns UTC data.
     """
+    logger.debug(f"Loading file {path}")
     cols = ['date', 'target_temperature', 'temperature', 'target_RH', 'RH']
     def date_parser(s): return dt.datetime.strptime(
         s.strip(), nabel_format_full)
@@ -1068,3 +1191,10 @@ def read_pressure_data(path: Union[str, pl.Path], tz='CET'):
     data['date'] = pd.to_datetime(
         data['date']).dt.tz_localize(tz).dt.tz_convert('UTC')
     return data
+
+
+def id_generator(size=6, chars=string.ascii_uppercase + string.digits):
+    """
+    Generates a random id of given length
+    """
+    return ''.join(random.choice(chars) for _ in range(size))
