@@ -1,7 +1,9 @@
 """
 Consolidates the reference measurements from several tables 
 into a single table. The source tables and destination tables
-are expressed as configuration 
+are expressed as configuration, as is the column mapping
+For an example of the mapping file, look at '/config/reference_table_mapping.yaml' in
+this repository.
 """
 from unicodedata import name
 from importlib_resources import path
@@ -9,8 +11,9 @@ import influxdb
 import pandas as pd
 import pymysql
 import sqlalchemy.engine as eng
-import sqlalchemy as db 
+import sqlalchemy as db
 from sqlalchemy.orm.session import Session, sessionmaker
+import sqlalchemy.sql as sql
 import itertools as ito
 
 import sensorutils.decentlab as dl
@@ -20,63 +23,75 @@ import sensorutils.files as fu
 import sensorutils.data as du
 
 from datetime import datetime as dt
-from datetime import timedelta 
+from datetime import timedelta
 import argparse as ap
 
 import pathlib as pl
 
-from sensorutils.log import logger 
+from typing import Dict, List
 
-parser = ap.ArgumentParser(description='Consolidate data from multiple reference table into one')
-parser.add_argument('--import-all', default=False, action='store_true', help='Import all data or only incremental import?')
+from sensorutils.log import logger
+
+parser = ap.ArgumentParser(
+    description='Consolidate data from multiple reference table into one')
+parser.add_argument('config', type=pl.Path,
+                    help="Path to configuration file for table mapping")
+parser.add_argument('--temporary', default=False,
+                    action='store_true', help='Execute temporary transaction?')
+
+parser.add_argument('--import-all', default=False, action='store_true',
+                    help='Import all data or only incremental import?')
 args = parser.parse_args()
 
 logger.info('Connecting to the DB')
 engine = db_utils.connect_to_metadata_db()
 db_metadata = db.MetaData(bind=engine, reflect=True)
 
-#Create a ORM session
+# Create a ORM session
 Session = sessionmaker(engine)
 session = Session()
 
-cols = ['timestamp', 'CO2','CO2_F', 'CO2_DRY','CO2_DRY_CAL','CO2_DRY_F', 'T', 'pressure', 'RH', 'H2O', 'H2O_F']
 
-tables = {
-    'DUE1':'NABEL_DUE', 
-    'HAE':'NABEL_HAE', 
-    'RIG:':'NABEL_RIG', 
-    'GIMM':'UNIBE_GIMM', 
-    'BRM':'UNIBE_BRM', 
-    'LAEG':'EMPA_LAEG', 
-    'DUE2':'ClimateChamber_00_DUE'}
-
-target_table = 'picarro_data'
-dest_tb = db_metadata.tables[target_table]
-name_column = 'LocationName'
-
-for alias, table_name in tables.items():
-    source_tb = db_metadata.tables[table_name]
-    #Select from source table
-    source_sel = session.query(*[source_tb.c[id] for id in cols]).cte().alias('src')
-    #Find subset with same name
-
-    #Create existence query
-    #ext = session.query(source_tb).filter((source_tb.c['timestamp']==dest_tb.c['timestamp']) & (dest_tb.c[name_column] == alias))
-    #anti_query = session.query(db.select([source_tb.c[id] for id in cols])).filter(~ext)
-
-    #qr = anti_query.statement.compile(compile_kwargs={"literal_binds": True})
+# Load Colum mapping
+table_mapping = fu.DataMappingFactory.read_config(args.config)
 
 
-    eq = session.query(source_sel, db.sql.expression.literal(alias).label(name_column)).filter(
-        ~session.query(dest_tb).filter((source_sel.c['timestamp']==dest_tb.c['timestamp']) & (dest_tb.c[name_column] == alias)).exists()
+# Iterate over mapping
+for alias, mapping in table_mapping.items():
+    source_table_name = mapping.source.path
+    dest_table_name = mapping.dest.path
+    dest_loc_column = mapping.dest.grouping_key
+    source_time_column = mapping.source.date_column
+    dest_time_column = mapping.dest.date_column
+
+    logger.info(
+        f"Processing input table '{source_table_name}', copying to '{dest_table_name}' with location id '{alias}'")
+    source_tb = db_metadata.tables[source_table_name]
+    dest_tb = db_metadata.tables[dest_table_name]
+    # Select from source table
+    cm_sel = [c.make_query() for c in mapping.columns]
+    cm_names = [c.name for c in mapping.columns] + [dest_loc_column]
+    source_sel = db.select(cm_sel).select_from(source_tb).cte().alias('src')
+
+    # Find subset with same name
+
+    # Create existence query
+    eq = session.query(source_sel, db.sql.expression.literal(alias).label(dest_loc_column)).filter(
+        ~session.query(dest_tb).filter(
+            (source_sel.c[source_time_column] == dest_tb.c[dest_time_column]) &
+            (dest_tb.c[dest_loc_column] == alias)).exists()
     )
-    
-    #Insert into
-    insert_cmd = dest_tb.insert().from_select(cols + [name_column],eq)
+
+    # Insert into query
+    insert_cmd = dest_tb.insert().from_select(cm_names, eq)
 
     with engine.connect() as cur:
         with cur.begin() as tr:
             stmt = insert_cmd.compile(compile_kwargs={"literal_binds": True})
-            stmt.execute(tr)
-            #missing = pd.read_sql(eq.statement.compile(), cur)
-            tr.rollback()
+            logger.debug(f"The insert statement is {str(stmt)}")
+            res = stmt.execute(tr)
+            logger.debug(f"Done inserting for table {source_table_name}")
+            if args.temporary:
+                logger.debug(
+                    "Rolling back as `temporary` command-line argument was set")
+                tr.rollback()

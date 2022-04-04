@@ -439,11 +439,8 @@ class DataSource(ABC):
         The "path" of the datasource
     date_from: 
         The first date available on the datasource. Used to filter older datasets out
-    na:
-        A dict representing missing values (used when storing the data). 
     """
     date_from: Optional[dt.datetime]
-    na: Union[str, float]
     path: Optional[str]
 
     @abstractmethod
@@ -840,11 +837,11 @@ class SQLColumnMapping(ColumnMapping):
     query: str
 
 
-    def make_query(self) -> sqa.sql.text:
+    def make_query(self) -> sqa.sql.literal_column:
         """
-        Returns the column transformation as a :obj:`sqlalchemy.sql.text` element
+        Returns the column transformation as a :obj:`sqlalchemy.sql.literal_column` element
         """
-        return sqa.sql.text(f"{self.query} AS {self.name}")
+        return sqa.sql.literal_column(self.query).label(self.name)
 
     def make_mapper(self) -> Callable:
         """
@@ -879,6 +876,8 @@ class SourceMapping():
         A mapping between source and destination columns. The dictionary key represent
         the destination column name, the value the source column name (or a SQL expression 
         if the column is derived from multiple source columns).
+    filter:
+        An optional SQL where expression to filter the source data
     """
     source: DataSource
     dest: DataSource
