@@ -27,10 +27,13 @@ parser.add_argument('config', type=str)
 args = parser.parse_args()
 
 eng = db_utils.connect_to_metadata_db()
+
+md = du.Base.metadata.create_all(eng, checkfirst=True)
 du.Base.metadata.create_all(eng, checkfirst=True)
 Session = sessionmaker(bind=eng)
 session = Session() 
 metadata = sqa.MetaData(bind=eng)
+metadata.reflect()
 
 
 for source in du.read_calibration_config(args.config):
@@ -38,7 +41,10 @@ for source in du.read_calibration_config(args.config):
     cal_data = source.reader(source.get_path())
     cal_data['location'] = cal_data['location'] if 'location' in cal_data.columns else source.location
     cal_data['device'] = cal_data['device'] if 'device' in cal_data.columns else source.device
-    cal_params = du.make_calibration_parameters_table(cal_data.dropna())
+    #Replace CO2_DRY with CO2
+    cal_data['compound'] = cal_data['compound'].replace('CO2_DRY', 'CO2')
+    cal_params = du.make_calibration_parameters_table(cal_data.dropna().query("compound == 'CO2'"))
+    import pdb; pdb.set_trace()
     #Serialise objects
     for cp in cal_params:
         session.add(cp)
