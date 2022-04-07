@@ -2,19 +2,34 @@
 This module contains functions to perform 
 sensor-specific calculations such as conversion between units, 
 computation of absolute moisture from relative moisture, conversion
-between molar and mass concentrations and similar operations
+between molar and mass concentrations and similar operations.
+It also includes some useful constants
+
+Attributes
+----------
+T0: float
+    The 0 C temperature in K
+TC: float
+    The critical point temperature of water
+PC: float
+    The critical point pressure of water
+P0: float
+    Reference pressure at sea level
 """
 import numpy as np
+#TODO mark constants as final in python > 3.9
+#from typing import Final
 
 """
 Constants
 """
-T_0 = 273.15
+T0 = 273.15
 TC = 647.096
 PC = 22.064e6
+P0 = 1013.25e2
 
 def absolute_temperature(t: float):
-    return t + T_0
+    return t + T0
 
 
 def saturation_vapor_pressure(t:float) -> float:
@@ -71,3 +86,10 @@ def rh_to_molar_mixing(rh:float, t:float, p:float):
         Pressure in Pa
     """
     return saturation_vapor_pressure(t) * rh / 100  * 1/p 
+
+def dry_to_wet_molar_mixing(conc:float, H2O:float) -> float:
+    """
+    Convert the dry molar mixing ratio to wet molar mixing ratio given
+    the water mixing ratio (both in ppm)
+    """
+    return conc * (1 - H2O / 100)
