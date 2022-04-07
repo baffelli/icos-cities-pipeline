@@ -1,0 +1,33 @@
+name: icos-cities
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - pymysql
+  - sqlalchemy
+  - pylint
+  - urllib3
+  - requests
+  - pysftp
+  - mysql-client
+  - pyodbc
+  - xarray
+  - influxdb
+  - watchdog
+  - nco
+  - scipy
+  - matplotlib
+  - keyring
+  - pytables
+  - parsimonious
+  - mypy
+  - dataclasses
+  - pytest
+  - xlrd
+  - openpyxl
+  - scikit-learn
+  - statsmodels
+  - pep8
+  - autopep8
+prefix: /newhome/basi/.conda/envs/icos-cities
