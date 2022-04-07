@@ -1,0 +1,20 @@
+[CarboSense_MySQL]
+user = basi
+database = CarboSense
+password = 
+host = emp-sql-cs1
+port = 3306
+
+[NabelGsn]
+user = basi
+database = NabelGsn
+password = 
+host = du-gsn1
+port = 3306
+
+[empaGSN]
+user = muem
+database = empaGSN
+password = 
+host = du-gsn1
+port = 3306
