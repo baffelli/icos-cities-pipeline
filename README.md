@@ -15,11 +15,17 @@ To activate the environment, use:
 conda activate carbosense-processing
 ```
 
+I also created a newer, python only environment called *icos-cities*. Its configuration file is found in [icos-cities.yaml](config/icos-cities.yaml)
+
+Use the same command as above to initialise and use the environment.
+
 ### Install sensorutils manually
 This is a python package containing utilities used in all other scripts. To install it in the project, run the following command from the main repository directory:
 ```
-pip install -e ./sensorutils
+pip install -e .
 ```
+
+The package is found in [sensorutils](./sensorutils/)
 
 ### Configure database connections
 
@@ -50,6 +56,7 @@ port=3306
 [client]
 socket=/var/lib/mysql/mysql.sock
 ```
+An example of this file is found [here](./config/databases.cnf)
 
 At the moment, there are three databases that are necessary for the pipeline, as you can see in this file:
 - CarboSense_MySQL
