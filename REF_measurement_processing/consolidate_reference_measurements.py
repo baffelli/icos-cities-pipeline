@@ -45,7 +45,8 @@ args = parser.parse_args()
 
 logger.info('Connecting to the DB')
 engine = db_utils.connect_to_metadata_db()
-db_metadata = db.MetaData(bind=engine, reflect=True)
+db_metadata = db.MetaData(bind=engine)
+db_metadata.reflect()
 
 # Create a ORM session
 Session = sessionmaker(engine)

@@ -71,7 +71,8 @@ def list_all_sensor_ids(type: str, eng: eng.Engine, id_col:str = 'SensorUnit_ID'
     It looks up for the sensor types in the table given by `sensors_table` and for
     deployment information in `deployment_table`
     """
-    md = db.MetaData(bind=eng, reflect=True)
+    md = db.MetaData(bind=eng)
+    md.reflect()
     st = md.tables[sensors_table]
     dt = md.tables[dep_table]
     Session = orm.sessionmaker(eng)

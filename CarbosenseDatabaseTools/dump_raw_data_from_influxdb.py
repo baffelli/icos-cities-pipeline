@@ -46,7 +46,8 @@ client = dl.decentlab_client(token=passw)
 #Connect to  target database
 logger.info('Connecting to the DB')
 engine = db_utils.connect_to_metadata_db()
-db_metadata = db.MetaData(bind=engine, reflect=True)
+db_metadata = db.MetaData(bind=engine)
+db_metadata.reflect()
 mapping = fu.DataMappingFactory.read_config(args.config)[args.sensor_type]
 #Attach the client to the source and destination
 mapping.source.attach_db(client)
