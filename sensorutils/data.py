@@ -67,7 +67,7 @@ Base = declarative_base()
 class CalibrationParameter(Base):
     """
     Represents a single component (parameter)
-    of a linear calibration model for the model with id `model_id` .
+    of a calibration model for the model with id `model_id` .
     This classed is used in combination with SQLalchemy to keep the calibration
     parameters synchronised in the db
 
@@ -103,8 +103,6 @@ class CalibrationParameters(Base):
     the database table with the name `calibration_parameters`
     Attributes
     ----------
-    id: int
-        The id of the calibration model
     type: CalType
         The type of calibration
     species: str
@@ -113,8 +111,11 @@ class CalibrationParameters(Base):
         The start of the validity range of this calibration
     valid_to:  date
         The end of the validity range of this calibration
+    computed: date
+        The date of computation of this model
     device: str
         The device under calibration
+    computation
     parameters: list of CalibrationParameter objects
         A list of parameters, one for each component in the model
     """
@@ -125,6 +126,7 @@ class CalibrationParameters(Base):
     species: str = Column(String(64))
     valid_from: dt.datetime = Column(DateTime())
     valid_to: dt.datetime = Column(DateTime())
+    computed: dt.datetime = Column(DateTime())
     device: str = Column(String(64))
     parameters: List[CalibrationParameter] = relationship(
         "CalibrationParameter")
