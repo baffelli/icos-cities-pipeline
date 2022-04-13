@@ -4,9 +4,10 @@ respectively calibrated data. The type of sensors respectively the processing mo
 are choosen with a command line arguments, while the calibration model and the tables
 are specified using a configuration file
 """
-import sqlite3
 
-from requests import session
+import sqlite3
+import enum
+from pymysql import DataError
 import sensorutils.db as db_utils
 import sensorutils.files as fu
 import sensorutils.data as du
@@ -16,11 +17,12 @@ import pathlib as pl
 import pandas as pd
 import sqlalchemy as sqa
 from sqlalchemy import func
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import sessionmaker, Session
 import datetime as dt
 import argparse as ap
-from typing import Dict, List, NamedTuple, Tuple
+from typing import Dict, List, NamedTuple, Tuple, Callable, Optional
 import numpy as np
+import math
 
 import matplotlib.pyplot as plt
 import matplotlib as mpl
@@ -66,7 +68,14 @@ def get_sensor_data(
         aggregations: Dict[str, str],
         avg_time: int,
         time_col: str = 'time',
-        id_col: str = "SensorUnit_ID") -> pd.DataFrame:
+        id_col: str = "SensorUnit_ID",
+        cyl: bool = True,
+        cyl_tb: str = "RefGasCylinder",
+        cyl_dep_tb: str = "RefGasCylinder_Deployment") -> pd.DataFrame:
+    """
+    Gets the data for a given sensor id and a duration period.
+    Optionally returns the reference cylinder data
+    """
     # Get the table
     st: sqa.Table = md.tables[sensor_table]
     # Make an aggegation column
@@ -79,9 +88,73 @@ def get_sensor_data(
         (st.columns[id_col] == sensor_id) &
         (st.columns[time_col].between(start.timestamp(), end.timestamp()))
     ).group_by(*[ac, id_c])
+    if cyl:
+        qr_ct = qr.cte("agg")
+        # If asked for, also add the cylinder values
+        cd = get_cylinder_data(eng, md, sensor_id).cte("cyl")
+        cyl_col = [cd.c["CO2_DRY_CYL"], cd.c["cylinder_id"], cd.c['inlet']]
+        qr_cyl = sqa.select(*qr_ct.c, *cyl_col).join(cd,
+                                                (qr_ct.c['SensorUnit_ID'] == cd.c['sensor_id']) &
+                                                (qr_ct.c[time_col].between(cd.c['cylinder_start'],  cd.c['cylinder_end'])), isouter=True)
+    else:
+        qr_cyl = qr
     with eng.connect() as c:
-        res = pd.read_sql(qr.compile(), c)
-    return res
+        res = pd.read_sql(qr_cyl.compile(), c)
+    # Pivot cylinder data (if any)
+    return pivot_cylinder_data(res) if cyl else res
+
+
+def pivot_cylinder_data(dt: pd.DataFrame, 
+                        index_col: List[str] = ['time'],
+                        cyl_col: List[str] = ['CO2_DRY_CYL'], 
+                        cyl_index_col:List[str]=['cylinder_id'], 
+                        inlet_col: str = 'inlet') -> pd.DataFrame:
+    """
+    Pivots the cylinder information in the calibration data to deliver one columns per cylinder id / inlet with the values
+    of cylinder concentration and active inlet
+    """
+    # Column with the cylinder value
+    all_col = [c for c in dt.columns if c not in cyl_col +
+               [inlet_col] + index_col]
+    # Pivot the sensor data
+    dt_sens = pd.pivot_table(dt, index=index_col, values=all_col)
+    # Pivot the cylinder data
+    dt_cyl = pd.pivot_table(dt, index=index_col, columns=inlet_col, values=cyl_col)
+    dt_cyl_out = dt_cyl.copy().reset_index().set_index(index_col)
+    dt_cyl_out.columns = [f"{a}_{b}" for a,b in dt_cyl.columns]
+    #Join
+    dt_wide = (dt_sens.join(dt_cyl_out , on=index_col)) if not dt_cyl_out.empty else dt_sens
+    assert len(dt_wide) == len(dt.reset_index())
+    return dt_wide.reset_index()
+
+
+def get_cylinder_data(
+        eng: sqa.engine.Engine,
+        md: sqa.MetaData,
+        inlet: str,
+        cyl_table: str = "RefGasCylinder",
+        dep_table: str = "RefGasCylinder_Deployment") -> sqa.sql.Selectable:
+    """
+    Get calibration cylinder data
+    for a given sensor id and period
+    """
+    cyl_tb = md.tables[cyl_table]
+    dep_tb = md.tables[dep_table]
+    cols = [cyl_tb.c["CO2"].label("CO2_DRY_CYL"),
+            dep_tb.c['SensorUnit_ID'].label("sensor_id"),
+            dep_tb.c['CylinderID'].label("cylinder_id"),
+            func.unix_timestamp(dep_tb.c['Date_UTC_from']).label(
+                "cylinder_start"),
+            func.least(func.unix_timestamp(dep_tb.c['Date_UTC_to']), func.unix_timestamp(
+                func.curdate())).label("cylinder_end"),
+            dep_tb.c['inlet']]
+    st = sqa.select(cols).select_from(cyl_tb, dep_tb).join(cyl_tb,
+                                                           (cyl_tb.c["CylinderID"] == dep_tb.c["CylinderID"]) &
+                                                           (dep_tb.c["Date_UTC_from"] >= cyl_tb.c["Date_UTC_from"]) &
+                                                           (dep_tb.c["Date_UTC_to"] <=
+                                                            cyl_tb.c["Date_UTC_to"])
+                                                           )
+    return st
 
 
 def get_ref_data(
@@ -186,6 +259,80 @@ def get_calibration_periods(
         res = [CalDataRow(**rw)for rw in con.execute(ct_com)]
     return res
 
+def get_picarro_data(eng: sqa.engine.Engine, 
+                    md: sqa.MetaData, 
+                    location: str, 
+                    start: dt.datetime, 
+                    end: dt.datetime, 
+                    agg_duration: int,
+                    table: str = "picarro_data") -> pd.DataFrame:
+    """
+    Get data for the Picarro CRDS 
+    instrument at the given location `location` for the period
+    between `start` and `end`. Returns aggregate data aggregated 
+    by `agg_time`
+    """
+    picarro_agg = {
+    'ref_CO2_DRY': 'AVG(IF(CO2_DRY = -999 OR CO2_DRY_F = 0, NULL, CO2_DRY))',
+    'ref_CO2_DRY_SD': 'STDDEV(IF(CO2_DRY = -999 OR CO2_DRY_F = 0, NULL, CO2_DRY))',
+    'ref_T': 'AVG(NULLIF(T, -999))',
+    'ref_RH': 'AVG(NULLIF(RH, -999))',
+    'ref_pressure': 'AVG(NULLIF(pressure * 100, -999))',
+    'ref_H2O': 'AVG(IF(H2O = -999 OR H2O_F = 0, NULL, H2O))',}
+    picarro_data = get_ref_data(eng, md,location, table , start, end, picarro_agg, agg_duration)
+    return picarro_data
+
+def get_HPP_data(
+                engine: sqa.engine.Engine, 
+                md: sqa.MetaData, 
+                id: int,
+                start: dt.datetime,
+                end: dt.datetime,
+                agg_duration:int,
+                table:str = 'hpp_data'):
+    """
+    Get the data
+    for a senseair HPP instrument for the selected
+    duration
+    """
+    hpp_agg = {
+        'sensor_CO2': 'AVG(NULLIF(senseair_hpp_co2_filtered, -999))',
+        'sensor_pressure': 'AVG(NULLIF(senseair_hpp_pressure_filtered, -999))',
+        'sensor_RH': 'AVG(NULLIF(sensirion_sht21_humidity, -999))',
+        'sensor_t': 'AVG(NULLIF(sensirion_sht21_temperature, -999))',
+        'sensor_ir_lpl': 'AVG(NULLIF(senseair_hpp_lpl_signal, -999))',
+        'sensor_ir': 'AVG(NULLIF(senseair_hpp_ir_signal, -999))',
+        ' ': 'AVG(NULLIF(senseair_hpp_temperature_detector, -999))',
+        'sensor_mcu_t': 'AVG(NULLIF(senseair_hpp_temperature_mcu, -999))',
+        'sensor_calibration_a': 'MAX(COALESCE(calibration_a, 0))',
+        'sensor_calibration_b': 'MAX(COALESCE(calibration_b, 0))',
+        }
+    sensor_data = get_sensor_data(engine, md, id, table, start, end, hpp_agg, agg_duration, cyl=True)
+    return sensor_data
+
+def get_LP8_data(
+                engine: sqa.engine.Engine, 
+                md: sqa.MetaData, 
+                id: int,
+                start: dt.datetime,
+                end: dt.datetime,
+                agg_duration:int,
+                table:str = 'lp8_data'):
+    """
+    Get the data
+    for a senseair LP8 instrument for the selected
+    duration and aggregation duration
+    """
+    lp8_agg = {
+        'sensor_CO2': 'AVG(NULLIF(senseair_lp8_co2_filtered, -999))',
+        'sensor_RH': 'AVG(NULLIF(sensirion_sht21_humidity, -999))',
+        'sensor_t': 'AVG(NULLIF(sensirion_sht21_temperature, -999))',
+        'sensor_ir': 'AVG(NULLIF(senseair_lp8_ir, -999))',
+        'sensor_detector_t': 'AVG(NULLIF(senseair_lp8_temperature, -999))',
+        }
+    sensor_data = get_sensor_data(engine, md, id, table, start, end, lp8_agg, agg_duration, cyl=True)
+    return sensor_data
+
 
 def get_cal_data(eng: sqa.engine.Engine,
                  md: sqa.MetaData,
@@ -193,18 +340,20 @@ def get_cal_data(eng: sqa.engine.Engine,
                  sensor_type:
                  str,
                  agg_duration:
-                 int,
-                 ref_agg: Dict[str, str],
-                 sens_agg: Dict[str, str]) -> List[Tuple[Tuple[str, dt.datetime, dt.datetime], pd.DataFrame]]:
-
+                 int) -> List[Tuple[Tuple[str, dt.datetime, dt.datetime], pd.DataFrame]]:
+    #Get the calibration periods
     ref_dt = get_calibration_periods(eng, md, sensor_id,  sensor_type)
-
+    #Select getter
+    match sensor_type:
+        case 'HPP':
+            getter = get_HPP_data
+        case 'LP8':
+            getter = get_LP8_data
     def get_and_combine(tw: CalDataRow) -> pd.DataFrame:
-        sensor_data = get_sensor_data(
-            eng, md, sensor_id, map_sensor_to_table(sensor_type), tw.cal_start, tw.cal_end, sens_agg, agg_duration)
+        sensor_data = getter(
+            eng, md, sensor_id, tw.cal_start, tw.cal_end, agg_duration)
         # Import reference data
-        picarro_data = get_ref_data(eng, md, tw.location,
-                                    "picarro_data", tw.cal_start, tw.cal_end, ref_agg, agg_duration)
+        picarro_data = get_picarro_data(eng, md, tw.location, tw.cal_start, tw.cal_end, agg_duration)
         # Join data
         cal_data = sensor_data.set_index('time').join(
             picarro_data.set_index('timestamp'))
@@ -221,95 +370,37 @@ def get_cal_data(eng: sqa.engine.Engine,
     grps = ["serial_number", "sensor_start", "sensor_end"]
     return list(pd_con.groupby(grps))
 
-
-# Setup parser
-parser = ap.ArgumentParser(description="Calibrate or process HPP/LP8 data")
-#parser.add_argument('config', type=pl.Path, help="Path to configuration file")
-parser.add_argument('mode', type=str, choices=[
-                    'calibrate', 'process'], help="Processing mode")
-parser.add_argument('sensor_type', type=str, choices=[
-                    'HPP', 'LP8'], help="Sensor type")
-parser.add_argument('--plot', type=pl.Path, help='Path to save plots')
-parser.add_argument('id', type=int, nargs='?',
-                    help="If passed, only process one sensor")
-parser.add_argument('--full', default=True, action='store_false',
-                    help="Partial processing or full data")
-args = parser.parse_args()
-
-# Connect to metadata/measurement database
-logger.info('Connecting to the DB')
-engine = db_utils.connect_to_metadata_db()
-db_metadata = sqa.MetaData(bind=engine)
-db_metadata.reflect()
-#Create ORM session
-Session = sessionmaker(engine)
-
-# List all ids
-ids = db_utils.list_all_sensor_ids(args.sensor_type, engine)
-# Find the ids to process
-ids_to_process = list(
-    (ids if not args.id else ids[ids['SensorUnit_ID'] == args.id])['SensorUnit_ID'])
-if len(ids_to_process) == 0:
-    logger.warn(f'The sensor with id {args.id} does not exist')
-logger.debug(f"Processing mode: '{args.mode}'")
-logger.debug(
-    f"Processing sensor type '{args.sensor_type}' with ids:\n {ids_to_process}")
-
-
-# Expression for HPP averaging
-hpp_agg = {
-    'sensor_CO2': 'AVG(NULLIF(senseair_hpp_co2_filtered, -999))',
-    'sensor_pressure': 'AVG(NULLIF(senseair_hpp_pressure_filtered, -999))',
-    'sensor_RH': 'AVG(NULLIF(sensirion_sht21_humidity, -999))',
-    'sensor_t': 'AVG(NULLIF(sensirion_sht21_temperature, -999))',
-    'sensor_ir_lpl': 'AVG(NULLIF(senseair_hpp_lpl_signal, -999))',
-    'sensor_ir': 'AVG(NULLIF(senseair_hpp_ir_signal, -999))',
-    'sensor_detector_t': 'AVG(NULLIF(senseair_hpp_temperature_detector, -999))',
-    'sensor_mcu_t': 'AVG(NULLIF(senseair_hpp_temperature_mcu, -999))',
-    'sensor_calibration_a': 'MAX(calibration_a)',
-    'sensor_calibration_b': 'MAX(calibration_b)',
-}
-picarro_agg = {
-    'ref_CO2_DRY': 'AVG(IF(CO2_DRY = -999 OR CO2_DRY_F = 0, NULL, CO2_DRY))',
-    'ref_T': 'AVG(NULLIF(T, -999))',
-    'ref_RH': 'AVG(NULLIF(RH, -999))',
-    'ref_pressure': 'AVG(NULLIF(pressure * 100, -999))',
-    'ref_H2O': 'AVG(IF(H2O = -999 OR H2O_F = 0, NULL, H2O))',
-}
-
-
-def prepare_features(dt: pd.DataFrame, ir_col:str="sensor_ir_lpl", fit: bool = True, plt: str = '1d') -> pd.DataFrame:
+def prepare_features(dt: pd.DataFrame, ir_col: str = "sensor_ir_lpl", fit: bool = True, plt: str = '1d') -> pd.DataFrame:
     """
     Prepare features for CO2 calibration / predictions
     """
     dt_new = dt.copy()
-    import pdb; pdb.set_trace()
     dt_new['date'] = pd.to_datetime(dt_new['time'], unit='s')
     dt_new["sensor_ir_log"] = - np.log(dt_new[ir_col])
     dt_new["sensor_ir_inverse"] = 1/(dt_new[ir_col])
-    dt_new["sensor_ir_interaction_t"] = dt_new[f"sensor_detector_t"] * dt_new[ir_col]
-    dt_new["sensor_ir_interaction_inverse_pressure"] = dt_new['sensor_pressure']/(dt_new[ir_col])
+    dt_new["sensor_ir_interaction_t"] = dt_new[f"sensor_t"] * \
+        dt_new[ir_col]
+    dt_new["sensor_ir_interaction_inverse_pressure"] = dt_new['sensor_pressure'] / \
+        (dt_new[ir_col])
     dt_new['sensor_t_abs'] = calc.absolute_temperature(dt_new['sensor_t'])
-    #Water content
+    # Water content
     dt_new['sensor_H2O'] = calc.rh_to_molar_mixing(
         dt_new['sensor_RH'], dt_new['sensor_t_abs'], dt_new['sensor_pressure'] / 100)
-    #Referenced CO2
-    nc_sens = (dt_new['sensor_pressure']) / calc.P0 
+    # Referenced CO2
+    nc_sens = (dt_new['sensor_pressure']) / calc.P0 * dt_new['sensor_t_abs'] / calc.T0
     dt_new['sensor_CO2_comp'] = dt["sensor_CO2"] * nc_sens
     # Dummy variable every `plt` days
-    import pdb; pdb.set_trace()
     dt_new['time_dummy'] = dt_new['date'].dt.round(plt).dt.date.astype('str')
     # Additional features needed for fitting
     if fit:
         dt_new['ref_t_abs'] = calc.absolute_temperature(dt_new['ref_T'])
         # Normalisation constant
-        nc = (dt_new['ref_pressure']) / calc.P0 
+        nc = (dt_new['ref_pressure']) / calc.P0 * dt_new['ref_t_abs'] / calc.T0
         # Compute normalised concentrations using ideal gas law
         dt_new['sensor_H2O_comp'] = dt_new['sensor_H2O'] * nc
         dt_new['ref_CO2'] = calc.dry_to_wet_molar_mixing(
             dt_new['ref_CO2_DRY'], dt_new['ref_H2O']) * nc
         dt_new['ref_H2O_comp'] = dt_new['ref_H2O'] * nc
-
 
     return dt_new
 
@@ -338,7 +429,7 @@ def add_dummies(dt_in: pd.DataFrame, dummy_name: str) -> Tuple[pd.DataFrame, Lis
     return dt_dm, dm_cols
 
 
-def CO2_calibration(dt_in: pd.DataFrame, reg:List[str]) -> sm.regression.linear_model.RegressionModel:
+def CO2_calibration(dt_in: pd.DataFrame, reg: List[str]) -> sm.regression.linear_model.RegressionModel:
     """
     Fit the HPP CO2 calibration
 
@@ -351,24 +442,25 @@ def CO2_calibration(dt_in: pd.DataFrame, reg:List[str]) -> sm.regression.linear_
     dt_dm, dm_cols = add_dummies(dt, 'time_dummy')
     tg_col = ['ref_CO2']
     reg_col = reg + dm_cols
-    import pdb; pdb.set_trace()
     # Drop any missing regressors
     valid = ~(dt_dm[reg_col+tg_col].isna().any(axis=1))
     dt_valid = dt_dm[valid]
     cm = sm.OLS(dt_valid[tg_col], dt_valid[reg_col])
     return cm.fit()
 
-def HPP_CO2_calibration(dt_in:pd.DataFrame, lpl:bool=True):
+
+def HPP_CO2_calibration(dt_in: pd.DataFrame, lpl: bool = True):
     """
     Computes the HPP CO2 calibration with the model
     proposed by Michael Müller
     Using the `lpl` flag you can use either the long path or
     the short path IR value
     """
-    reg =  [
-        "sensor_ir_log","sensor_ir_inverse",
-        "sensor_detector_t","sensor_t_abs","sensor_ir_interaction_inverse_pressure",'sensor_H2O']
+    reg = [
+        "sensor_ir_log", "sensor_ir_inverse", "sensor_detector_t", "sensor_ir_interaction_inverse_pressure", 'sensor_H2O']
     return CO2_calibration(dt_in, reg)
+
+
 def predict_CO2(dt_in: pd.DataFrame, model: sm.regression.linear_model.RegressionResultsWrapper) -> pd.DataFrame:
     """
     Apply the model in `model` to
@@ -382,15 +474,17 @@ def predict_CO2(dt_in: pd.DataFrame, model: sm.regression.linear_model.Regressio
     return dt_out
 
 
-def plot_CO2_calibration(dt: pd.DataFrame) -> plt.Figure:
+def plot_CO2_calibration(dt: pd.DataFrame, 
+                        model: sm.regression.linear_model.RegressionResults,
+                        ref_col='ref_CO2', 
+                        pred_col='CO2_pred',
+                        orig_col="sensor_CO2_comp") -> Tuple[plt.Figure, plt.Figure]:
     """
     Plot detailed CO2 calibration results:
     - Time series of sensor and reference
     - Scatter plot
+    - Residuals of regressors
     """
-    ref_col = "ref_CO2"
-    pred_col = "CO2_pred"
-    orig_col = "sensor_CO2_comp"
     # Compute residuals statistics
     residuals = dt[ref_col] - dt[pred_col]
     res_sd = np.sqrt(residuals.var())
@@ -400,7 +494,7 @@ def plot_CO2_calibration(dt: pd.DataFrame) -> plt.Figure:
     ann = AnchoredText(
         f"RMSE: {res_sd:5.2f} ppm\n, Bias: {res_bias:5.2f} ppm,\n corr: {res_cor:5.2f}", loc=3)
     cs = plt.cm.get_cmap('Set2')
-    # Create plot
+    # Create plot for timeseries
     fig = mpl.figure.Figure()
     ax = fig.add_subplot(211)
     ax.scatter(dt[ref_col], dt[pred_col], 0.4,
@@ -428,7 +522,19 @@ def plot_CO2_calibration(dt: pd.DataFrame) -> plt.Figure:
     ts_ax.set_ylabel('CO2 mixing ratio [ppm]')
     ts_ax.legend()
     ts_ax.tick_params(axis='x', labelrotation=45)
-    return fig
+    #Plot residuals vs various parameters
+    fig2:mpl.Figure = mpl.figure.Figure()
+    reg_names = [k for k,n in model.params.items()]
+    nr = math.ceil(math.log2(len(reg_names)))
+    for i, par_name in enumerate(reg_names, start=1):
+        current_ax = fig2.add_subplot(nr, nr, i)
+        current_ax.scatter(dt[par_name], residuals, 0.4)
+        current_ax.set_xlabel(f"Feature: {par_name}")
+        current_ax.set_ylabel('Residual [ppm]')
+        current_ax.set_ylim(-30, 30)
+    fig2.tight_layout()
+    fig.tight_layout()
+    return fig, fig2
 
 
 def cleanup_data(dt_in: pd.DataFrame) -> pd.DataFrame:
@@ -439,7 +545,9 @@ def cleanup_data(dt_in: pd.DataFrame) -> pd.DataFrame:
     """
     dt = dt_in.copy()
     dt = dt.replace([None, -999], [0, np.NaN])
-    con = dt['ref_CO2_DRY'].le(0) | dt['ref_CO2_DRY'].isna()
+    # Condition
+    con = dt['ref_CO2_DRY'].le(0) | dt['ref_CO2_DRY'].isna() | np.abs(
+        dt['ref_CO2_DRY_SD']) > 4
     return dt[~con]
 
 
@@ -454,22 +562,62 @@ def split_HPP_cal_data(dt_in: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame]
     return dt_in[cal_period], dt_in[~cal_period]
 
 
-def cal_cv_split(dt_in: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame]:
+class CalModes(enum.Enum):
     """
-    Splits the data in a training and testing dataset
-    The default mode uses:
-    - Data in the climate chamber + 2 week before and after
-    - Data outside for testing
-    Fallback if no chamber:c
-    - First two months of data for calibration
+    Enum to represent different CV modes for the calibration
     """
-    is_chamber = dt_in['cal_mode'].isin([2, 3])
-    chamber_start = dt_in[is_chamber].date.min() - dt.timedelta(days=14)
-    chamber_end = dt_in[is_chamber].date.max() + dt.timedelta(days=14)
-    train: pd.Series = dt_in.date.between(chamber_start, chamber_end)
-    split = train if train.any() else dt_in.date.le(
-        (dt_in.date.min() + dt.timedelta(days=60)))
-    return dt_in[split], dt_in[~split]
+    CHAMBER = 'CHAMBER'
+    COLLOCATION = 'COLLOCATION'
+    MIXED = 'MIXED'
+
+
+
+def cal_cv_split(dt_in: pd.DataFrame,
+                 mode: CalModes = CalModes.MIXED,
+                 duration: int = 7,
+                 date_col: str = 'date') -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Splits the data in a training and testing dataset.
+    Different splits are choosen depending on the calibration mode
+
+    For MIXED (chamber and collocation), uses:
+
+    - Climate chamber for training
+    - Collocation for assessment
+
+    For COLLOCATION, uses:
+
+    - First `duration` days data  for calibration
+    - The remaining time for assessment
+
+    For CHAMBER, uses:
+
+    - First `duration` days of data for training
+    - The remaining time for assessment
+
+    """
+    match mode:
+        case CalModes.COLLOCATION:
+            cal_period = dt_in['cal_mode'].isin([1])
+            cal_start = dt_in[cal_period][date_col].min()
+            cal_end = dt_in[cal_period][date_col].max() + \
+                dt.timedelta(days=duration)
+        case CalModes.CHAMBER:
+            cal_period = dt_in['cal_mode'].isin([2, 3])
+            cal_start = dt_in[cal_period][date_col].min()
+            cal_end = dt_in[cal_period][date_col].max() + \
+                dt.timedelta(days=duration)
+        case CalModes.MIXED:
+            cal_period = dt_in['cal_mode'].isin([2, 3])
+            cal_start = dt_in[cal_period][date_col].min()
+            cal_end = dt_in[cal_period][date_col].max()
+    if not cal_period.any():
+        raise DataError(
+            f"There are no values for the calibration type {mode} in this dataset")
+    cal_start = dt_in[cal_period][date_col].min()
+    cal_end = dt_in[cal_period][date_col].max() + dt.timedelta(days=duration)
+    train: pd.Series = dt_in[date_col].between(cal_start, cal_end)
+    return dt_in[train], dt_in[~train]
 
 
 def remove_dummies(mod_fit: sm.regression.linear_model.OLSResults, dummy_prefix: str) -> sm.regression.linear_model.OLSResults:
@@ -498,12 +646,13 @@ def save_multipage(plots: List[plt.Figure], base_path: pl.Path, names: List[str]
             pdf.savefig(p)
 
 
-def convert_calibration_parameters(cp: sm.regression.linear_model.OLSResults, 
-                                species: str,
-                                type: str,
-                                valid_from: dt.datetime, 
-                                valid_to: dt.datetime,
-                                device: str) -> du.CalibrationParameters:
+def convert_calibration_parameters(cp: sm.regression.linear_model.OLSResults,
+                                   species: str,
+                                   type: str,
+                                   valid_from: dt.datetime,
+                                   valid_to: dt.datetime,
+                                   computed: dt.datetime,
+                                   device: str) -> du.CalibrationParameters:
     """
     Convert the fit results into a :obj:`sensorutils.data.CalibrationParameters`
     object that can be persisted in the database in a human-readable format
@@ -511,45 +660,99 @@ def convert_calibration_parameters(cp: sm.regression.linear_model.OLSResults,
     """
     pl = [du.CalibrationParameter(parameter=n, value=v)
           for n, v in cp.params.items()]
-    return du.CalibrationParameters(parameters = pl, species=species, type=type, valid_from=valid_from, valid_to=valid_to, device=device)
+    return du.CalibrationParameters(parameters=pl,
+                                    species=species,
+                                    type=type, valid_from=valid_from,
+                                    valid_to=valid_to,
+                                    computed=computed, device=device)
+
+# Setup parser
+parser = ap.ArgumentParser(description="Calibrate or process HPP/LP8 data")
+#parser.add_argument('config', type=pl.Path, help="Path to configuration file")
+parser.add_argument('mode', type=str, choices=[
+                    'calibrate', 'process'], help="Processing mode")
+parser.add_argument('sensor_type', type=str, choices=[
+                    'HPP', 'LP8'], help="Sensor type")
+parser.add_argument('--plot', type=pl.Path, help='Path to save plots')
+parser.add_argument('id', type=int, nargs='?',
+                    help="If passed, only process one sensor")
+parser.add_argument('--full', default=True, action='store_false',
+                    help="Partial processing or full data")
+args = parser.parse_args()
+
+# Connect to metadata/measurement database
+logger.info('Connecting to the DB')
+engine = db_utils.connect_to_metadata_db()
+db_metadata = sqa.MetaData(bind=engine)
+db_metadata.reflect()
+# Create ORM session
+Session = sessionmaker(engine)
+
+# List all ids
+ids = db_utils.list_all_sensor_ids(args.sensor_type, engine)
+# Find the ids to process
+ids_to_process = list(
+    (ids if not args.id else ids[ids['SensorUnit_ID'] == args.id])['SensorUnit_ID'])
+if len(ids_to_process) == 0:
+    logger.warn(f'The sensor with id {args.id} does not exist')
+logger.debug(f"Processing mode: '{args.mode}'")
+logger.debug(
+    f"Processing sensor type '{args.sensor_type}' with ids:\n {ids_to_process}")
+
+
+# Expression for HPP averaging
+
+
+
+
 
 
 for id in ids_to_process:
     logger.debug(f"Processing sensor id {id}")
     logger.debug(f"Getting reference data")
-    ref_dt = get_calibration_periods(
-        engine, db_metadata, id,  args.sensor_type)
-    # Iterate over calibration data
-    cal_data_all_serial = get_cal_data(
-        engine, db_metadata, id, args.sensor_type, 600, picarro_agg, hpp_agg)
-    for (serialnumber, sensor_start, sensor_end), cal_data in cal_data_all_serial:
-        logger.info(f"Processing sensor {serialnumber} of unit {id}")
-        #Prepare features
-        cal_data_clean = cleanup_data(cal_data)
-        cal_feature = prepare_features(cal_data_clean.reset_index())
-        #Split into training and testing data
-        bottle_cal, field_cal = split_HPP_cal_data(cal_feature)
-        cal_feature_train, cal_feature_test = cal_cv_split(field_cal)
+    match args.mode:
+        case "calibrate":
+            ref_dt = get_calibration_periods(
+                engine, db_metadata, id,  args.sensor_type)
+            # Iterate over calibration data
+            cal_data_all_serial = get_cal_data(engine, db_metadata, id, args.sensor_type, 600)
+            for (serialnumber, sensor_start, sensor_end), cal_data in cal_data_all_serial:
+                logger.info(f"Processing sensor {serialnumber} of unit {id}")
+                # Prepare features
+                cal_data_clean = cleanup_data(cal_data)
+                cal_feature = prepare_features(cal_data_clean.reset_index())
+                # Split into training and testing data
+                bottle_cal, field_cal = split_HPP_cal_data(cal_feature)
+                cal_feature_train, cal_feature_test = cal_cv_split(field_cal)
+                H2O_cal = H2O_calibration(cal_feature_train)
+                co2_cal = HPP_CO2_calibration(cal_feature_train)
+                # Remove dummies from model fit
+                co2_cal_nd = remove_dummies(co2_cal, 'time_dummy')
+                # Persist parameters
+                computed_when = dt.datetime.now()
+                cal_obj = convert_calibration_parameters(
+                    co2_cal_nd, "CO2", args.sensor_type, sensor_start, sensor_end, computed_when, serialnumber)
+                with Session() as session:
+                    logger.info("Persisting calibration parameters")
+                    session.add(cal_obj)
+                    session.commit()
+                # Predict and plot the prediction
+                pred_df = predict_CO2(cal_feature_test, co2_cal_nd)
+                pred_df_bottle = predict_CO2(bottle_cal, co2_cal_nd)
+                # Plot prediction week by week (for the collocation)
+                wp = pred_df.resample('W', on='date').apply(
+                    lambda x: pd.Series({'plot': plot_CO2_calibration(x, co2_cal_nd)})).reset_index()
+                b_pth: pl.Path = args.plot
+                wp_path = b_pth.with_name(f'HPP_{id}_{serialnumber}.pdf')
+                wp_res_path = b_pth.with_name(f'HPP_res_{id}_{serialnumber}.pdf')
+                #Save calibration results plot
+                save_multipage([u for u,w in wp['plot']], wp_path, wp['date'])
+                #Save residuals 
+                save_multipage([w for u,w in wp['plot']], wp_res_path, wp['date'])
+                import pdb; pdb.set_trace()
+                # Plot prediction for bottle times
+                wp = pred_df_bottle.resample('W', on='date').apply(lambda x: pd.Series({'plot': plot_CO2_calibration(x,ref_col='CO2_DRY_CYL_a')})).reset_index()
+                wp_path = b_pth.with_name(f'HPP_bottle_{id}_{serialnumber}.pdf')
+                save_multipage(wp['plot'], wp_path, wp['date'])
 
-        H2O_cal = H2O_calibration(cal_feature_train)
-        co2_cal = HPP_CO2_calibration(cal_feature_train)
-        # Remove dummies from model fit
-        co2_cal_nd = remove_dummies(co2_cal, 'time_dummy')
-        # Persist parameters
-        cal_obj = convert_calibration_parameters(co2_cal_nd, "CO2", "HPP", sensor_start, sensor_end, serialnumber)
-        with Session() as session:
-            logger.info("Persisting calibration parameters")
-            session.add(cal_obj)
-            session.commit()
-        #Predict and plot the prediction
-        pred_df = predict_CO2(cal_feature_test, co2_cal_nd)
-        pred_df_bottle = predict_CO2(bottle_cal, co2_cal_nd)
-        # Plot prediction week by week
-        wp = pred_df.resample('W', on='date').apply(
-            lambda x: pd.Series({'plot': plot_CO2_calibration(x)})).reset_index()
-        b_pth: pl.Path = args.plot
-        wp_path = b_pth.with_name(f'HPP_{id}_{serialnumber}.pdf')
-        save_multipage(wp['plot'], wp_path, wp['date'])
-        import pdb
-        pdb.set_trace()
-        logger.debug(ref_dt)
+                logger.debug(ref_dt)
