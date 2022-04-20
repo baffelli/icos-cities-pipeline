@@ -121,7 +121,7 @@ class CalibrationParameters(Base):
     """
     __tablename__ = "calibration_parameters"
     __sa_dataclass_metadata_key__ = "sa"
-    id: int = Column(Integer, primary_key=True)
+    id: int = Column(Integer, primary_key=True, autoincrement=True)
     type: str = Column(String(64))
     species: str = Column(String(64))
     valid_from: dt.datetime = Column(DateTime())
