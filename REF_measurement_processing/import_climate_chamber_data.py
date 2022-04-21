@@ -26,6 +26,7 @@ parser = ap.ArgumentParser(description='Import data from the Climate chamber exp
 parser.add_argument('--picarro', type=str, nargs=2, help='Base path and regex for Picarro CRDS data')
 parser.add_argument('--climate', type=str, nargs=2, help='Base path and regex for climate chamber data (temperature program)')
 parser.add_argument('--pressure', type=str, nargs=2, help='Base path and regex for climate chamber data (pressure sensor)')
+parser.add_argument('--climate_new', type=str, nargs=2, help='Base path and regex for new climate chamber data (temperature program)')
 parser.add_argument('--dest', type=str, default='ClimateChamber_00_DUE', help='Destination table')
 
 args = parser.parse_args()
@@ -50,7 +51,10 @@ if args.picarro:
     pic_cols = {
         'timestamp':'timestamp', 
         'CO2_mean':'CO2', 
+        'CO2_F_max': 'CO2_F',
+        'CO2_DRY_F_max':'CO2_DRY_F',
         'H2O_mean':'H2O',
+        'H2O_F_max': 'H2O_F',
         'CO2_DRY_mean':'CO2_DRY'}
 #Load climate chamber data
 if args.climate:
@@ -70,15 +74,25 @@ if args.pressure:
         'timestamp':'timestamp',
         'pressure_mean':'pressure'
     }
-
+if args.climate_new:
+    cn_cols = {
+        'timestamp': 'timestamp',
+        'T_mean':'T',
+        'RH_mean':'RH',
+        'CO2_soll_mean': 'CO2_soll',
+        'T_F_max': 'T_F',
+        'RH_F_max': 'RH_F'
+    }
+    pf = pl.Path(args.climate_new[0])
+    cn_paths = [f for f in pf.glob(args.climate_new[1])]
 
 
 pd = {'mapping':pic_cols, 'paths':pic_paths, 'reader':fu.read_picarro_data} if args.picarro else None
 cd = {'mapping':clim_cols, 'paths':clim_paths, 'reader':fu.read_climate_chamber_data} if args.climate else None
 pressd = {'mapping':pressure_cols, 'paths':press_paths, 'reader': lambda x: fu.read_pressure_data(x).set_index('date').resample('1 min').pad().reset_index()} if args.pressure else None
+cn = {'mapping':cn_cols, 'paths':cn_paths, 'reader':fu.read_new_climate_chamber_data} if args.climate_new else None
 
-
-cfgs = [el for el in [pd, cd, pressd] if el is not None]
+cfgs = [el for el in [pd, cd, pressd, cn] if el is not None]
 
 for cfg in cfgs:
     for p in cfg['paths']:
@@ -86,6 +100,7 @@ for cfg in cfgs:
         import pdb; pdb.set_trace()
         #TODO Make more explicit
         data = rename_and_subset(du.date_to_timestamp(du.average_df(orig_data).reset_index(), 'date'), cfg['mapping']).dropna(subset=cfg['mapping'].values())
+        import pdb; pdb.set_trace()
         with eng.connect() as con:
             with con.begin() as tr:
                 mt = db_utils.create_upsert_metod(sqa.MetaData(bind=con))

@@ -42,11 +42,35 @@ import yaml
 import numpy as np
 
 import itertools
-
+import enum
 """
 Represents the missing (or unset) time in ICOS-cities database
 """
 NAT = pd.Timestamp('2100-01-01 00:00:00')
+
+ICOS_MISSING = -999
+
+
+class ClimateChamberStatusCode(enum.Enum):
+    """
+    Enum class to list possible error
+    codes from the new Dübendorf calibration chamber
+    """
+    START = 'Start'
+    STARTUP = 'Einlauf'
+    ERROR = 'Messfehler'
+    MEASURE = 'MESSUNG'
+    
+
+class AvailableSensors(enum.Enum):
+    """
+    Enum class to list all available
+    sensor types for the calibration.
+    This prevents the user to pass a wrong
+    sensor type to the calibration method
+    """
+    HPP = "HPP"
+    LP8 = "LP8"
 
 
 @dataclass
@@ -385,6 +409,7 @@ def average_df(dt: pd.DataFrame, funs:Dict[str, Callable]={'max':np.max, 'min':n
     """
     cols = set(dt.columns) - set([date_col])
     fns_name = {col: [(name, fn) for name, fn in funs.items()] for  col in cols}
+    import pdb; pdb.set_trace()
     dt_agg = dt.set_index(date_col).resample(av).agg(fns_name)
     new_names = ["_".join(c) for c in dt_agg.columns]
     dt_agg.columns = new_names
@@ -411,3 +436,15 @@ def reshape_influxql_results(res: pd.DataFrame, keys:List[str], names:str, value
     """
     return pd.pivot_table(res, index=keys, columns=names, values=value).reset_index()
 
+
+def map_climate_chamber_status_code(ec: ClimateChamberStatusCode) -> int:
+    match ec:
+        case ClimateChamberStatusCode.STARTUP:
+            value = 0
+        case ClimateChamberStatusCode.START:
+            value = 0
+        case ClimateChamberStatusCode.ERROR:
+            value = 0
+        case ClimateChamberStatusCode.MEASURE:
+            value = 1
+    return value

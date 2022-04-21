@@ -6,8 +6,8 @@ For an example of the mapping file, look at '/config/reference_table_mapping.yam
 this repository.
 """
 from unicodedata import name
-from importlib_resources import path
 import influxdb
+from matplotlib.pyplot import table
 import pandas as pd
 import pymysql
 import sqlalchemy.engine as eng
@@ -41,6 +41,7 @@ parser.add_argument('--temporary', default=False,
 
 parser.add_argument('--import-all', default=False, action='store_true',
                     help='Import all data or only incremental import?')
+parser.add_argument('--name', nargs='*', type=str)
 args = parser.parse_args()
 
 logger.info('Connecting to the DB')
@@ -56,6 +57,10 @@ session = Session()
 # Load Colum mapping
 table_mapping = fu.DataMappingFactory.read_config(args.config)
 
+if args.name:
+    table_mapping = {k:v for k,v in table_mapping.items() if k in args.name}
+else:
+    pass
 
 # Iterate over mapping
 for alias, mapping in table_mapping.items():
@@ -90,7 +95,7 @@ for alias, mapping in table_mapping.items():
         with cur.begin() as tr:
             stmt = insert_cmd.compile(compile_kwargs={"literal_binds": True})
             logger.debug(f"The insert statement is {str(stmt)}")
-            res = stmt.execute(tr)
+            res = cur.execute(stmt)
             logger.debug(f"Done inserting for table {source_table_name}")
             if args.temporary:
                 logger.debug(

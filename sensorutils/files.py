@@ -512,7 +512,7 @@ class DBSource(DatabaseSource):
         The column name used to generate the grouping key
     """
     db_prefix: Optional[str] = None
-
+    na: Optional[str | int] = None
     
     def attach_db(self, eng:sqa.engine.Engine):
         self.eng = eng
@@ -591,6 +591,7 @@ class DBSource(DatabaseSource):
         return pd.read_sql(qs, self.eng).drop(lb, axis=1).replace(self.na, np.NaN)
 
     @check_db
+    #TODO fix returing of affected
     def write_file(self, input: pd.DataFrame, group:Optional[Union[str, int]]=None, temporary: bool = False) -> pd.DataFrame:
         """
         Writes one file to the database. If the keys are duplicated,
@@ -625,20 +626,20 @@ class DBSource(DatabaseSource):
             tran = con.begin()
             input_filled.to_sql(self.path, con, method=method,
                                 index=False, if_exists='append')
-            new_data = session.query(output_table).filter(output_table.columns[self.date_column].between(
-                input[self.date_column].min(), input[self.date_column].max()))
             if group and self.grouping_key:
-                new_data = new_data.filter(output_table.columns[self.grouping_key] == group)
-            affected = pd.read_sql(new_data.statement.compile(compile_kwargs={"literal_binds": True}), con)
-            logger.debug(f"Affected rows {affected}")
+                new_data = session.query(output_table).filter(output_table.columns[self.date_column].between(
+                input[self.date_column].min(), input[self.date_column].max())
+                & (output_table.columns[self.grouping_key] == group))
+                affected = pd.read_sql(new_data.statement.compile(compile_kwargs={"literal_binds": True}), con)
+                logger.debug(f"Affected rows {affected}")
             if temporary:
                 logger.debug("Rolling back as the temporary flag was set")
                 tran.rollback()
-                return affected
+                return pd.DataFrame()
             else:
                 tran.commit()
                 logger.debug("Commiting affected rows")
-                return affected
+                return pd.DataFrame()
 
 
 def combine_first_column(df:pd.DataFrame) -> pd.DataFrame:
@@ -1152,12 +1153,16 @@ def read_picarro_data(path: Union[str, pl.Path], tz='CET') -> pd.DataFrame:
         'DATE_TIME': 'date',
         'CO2_sync': 'CO2',
         'CO2_dry_sync': 'CO2_DRY',
-        'H2O_sync': 'H2O'
+        'H2O_sync': 'H2O',
+        'ALARM_STATUS': 'status'
     }
-
     data_map = data.rename(columns=col_map)[[l for l in col_map.values()]]
     data_map['date'] = data_map['date'].dt.tz_localize(tz).dt.tz_convert('UTC')
-    return data_map
+    data_map['valid'] = data_map['status'].eq(0).astype(int)
+    data_map['CO2_DRY_F'] = data_map['valid']
+    data_map['H2O_F'] = data_map['valid']
+    data_map['CO2_F'] = data_map['valid']
+    return data_map[['date','CO2', 'CO2_DRY', 'CO2_F', 'CO2_DRY_F', 'H2O', 'H2O_F']]
 
 
 def read_climate_chamber_data(path:  Union[str, pl.Path], tz='CET') -> pd.DataFrame:
@@ -1175,6 +1180,30 @@ def read_climate_chamber_data(path:  Union[str, pl.Path], tz='CET') -> pd.DataFr
         data['date']).dt.tz_localize(tz).dt.tz_convert('UTC')
     return data
 
+def read_new_climate_chamber_data(path: pl.Path, tz='CET') -> pd.DataFrame:
+    """
+    Reads the climate chamber data from the given path and returns a pandas DataFrame.
+    The date and time is supposed to be in CET (with switch to DST at the correct time).
+    Returns data in utc format
+    """
+    name_mapping =  {'Zeit':'time', 'Phase':'phase', 'CO2_soll':'CO2_setpoint', 'Status':'status', 'T':'T', 'RH':'RH','CO2ref':'CO2_LI850'}
+    #Regex for the phase column
+    soll_re = re.compile(r"(\d+)\/(\d+)\s* (\d+)")
+    dt = pd.read_excel(path)
+    dt_new = dt.copy().rename(columns=name_mapping)
+    dt_new['date'] = dt_new['time'].dt.tz_localize(tz='CET').dt.tz_convert('UTC')
+    dt_new['status'] = dt_new['status'].apply(lambda x: du.map_climate_chamber_status_code(du.ClimateChamberStatusCode(x)))
+    dt_new['T_F'] = dt_new['status']
+    dt_new['RH_F'] = dt_new['status']
+    setpoints = dt_new['phase'].str.extract(soll_re).rename(columns={0:'T_soll', 1:'RH_soll', 2:'CO2_soll'}).astype(np.float64)
+    dt_full = pd.concat([dt_new, setpoints], axis=1)
+    return dt_full.reset_index()[['date', 'T', 'T_F', 'RH', 'RH_F', 'CO2_soll', 'RH_soll', 'T_soll']]
+
+def tz_to_epoch(series: pd.Series) -> pd.Series:
+    """
+    Convert a series in pandas.TimeStamp to unix epoch
+    """
+    return (series - pd.Timestamp("1970-01-01",  tz='UTC')) // pd.Timedelta('1s')
 
 def read_pressure_data(path: Union[str, pl.Path], tz='CET'):
     """
