@@ -32,7 +32,7 @@ import random
 import itertools
 import functools
 from .log import logger
-
+import pytz
 """
 This module contains functions used to interact with files and read and write specific file formats used in this 
 project
@@ -41,6 +41,8 @@ Attributes
 ----------
 
 """
+
+
 
 
 def get_user() -> str:
@@ -339,8 +341,7 @@ def read_nabel_csv(path: Union[pl.Path, str], encoding: str = 'latin-1') -> pd.D
     # Import data
     data = pd.read_csv(path, encoding=nabel_encoding, header=0, names=headers,  skiprows=skip,
                        keep_default_na=True, sep=nabel_sep, index_col=False,  na_values=['', ])
-    data['date'] = pd.to_datetime(data['date'], format=nabel_format).dt.tz_localize(
-        'CET') - dt.timedelta(minutes=1)
+    data['date'] = pd.to_datetime(data['date'], format=nabel_format).dt.tz_localize('CET') - dt.timedelta(minutes=1)
     return data.rename(lambda x: x.replace('_AV', ''), axis='columns')
 
 
@@ -513,9 +514,17 @@ class DBSource(DatabaseSource):
     """
     db_prefix: Optional[str] = None
     na: Optional[str | int] = None
+    metadata: Optional[sqa.MetaData] = None
     
     def attach_db(self, eng:sqa.engine.Engine):
+        """
+        Connects the database to this instance of the file object
+        and uses SQLAlchemy reflection to obtain metadata object
+        used to access the tables
+        """
         self.eng = eng
+        self.metadata = sqa.MetaData(bind=self.eng)
+        self.metadata.reflect()
     
     def attach_db_from_config(self):
         if self.db_prefix:
@@ -612,16 +621,13 @@ class DBSource(DatabaseSource):
             in the source file. In combination with ``temporary=True`` this facilitates the testing of data loading as the data is copied with a database
             transaction that is rolled back after returning the affected rows.
         """
-        # Connect to the database
-        metadata = sqa.MetaData(bind=self.eng)
-        metadata.reflect()
         # Create an upsert method
-        method = db_utils.create_upsert_metod(metadata)
+        method = db_utils.create_upsert_metod(self.metadata)
         # Fill na with the na value
         input_filled = input.fillna(self.na)
         Session = sessionmaker(bind=self.eng)
         session = Session()
-        output_table = metadata.tables[self.path]
+        output_table = self.metadata.tables[self.path]
         with self.eng.connect() as con:
             tran = con.begin()
             input_filled.to_sql(self.path, con, method=method,
@@ -1140,16 +1146,17 @@ def read_picarro_processing_configuration(path: Union[str, pl.Path]) -> List[Ref
     return [RefProcessingConfiguration(**c) for c in configs]
 
 
-def read_picarro_data(path: Union[str, pl.Path], tz='CET') -> pd.DataFrame:
+def read_picarro_data(path: Union[str, pl.Path], tz:Union[str, pytz.tzinfo.BaseTzInfo]='CET') -> pd.DataFrame:
     """
     Reads the data in the picarro `.dat` format into
     a :obj:`pandas.DataFrame`. 
-    Assumes that the date is in CET, returns a date column in UTC. 
+    Assumes that the date is in CET (Winter), returns a date column in UTC. 
     For another timezone, use the `tz` argument
     """
     logger.debug(f"Loading file {path}")
     data = pd.read_csv(path, delimiter=r"\s+", parse_dates=[['DATE', 'TIME']])
     col_map = {
+        'EPOCH_TIME': 'timestamp',
         'DATE_TIME': 'date',
         'CO2_sync': 'CO2',
         'CO2_dry_sync': 'CO2_DRY',
@@ -1157,7 +1164,8 @@ def read_picarro_data(path: Union[str, pl.Path], tz='CET') -> pd.DataFrame:
         'ALARM_STATUS': 'status'
     }
     data_map = data.rename(columns=col_map)[[l for l in col_map.values()]]
-    data_map['date'] = data_map['date'].dt.tz_localize(tz).dt.tz_convert('UTC')
+    import pdb; pdb.set_trace()
+    data_map['date'] = pd.to_datetime(data_map['timestamp'], unit='s')
     data_map['valid'] = data_map['status'].eq(0).astype(int)
     data_map['CO2_DRY_F'] = data_map['valid']
     data_map['H2O_F'] = data_map['valid']

@@ -48,18 +48,26 @@ Represents the missing (or unset) time in ICOS-cities database
 """
 NAT = pd.Timestamp('2100-01-01 00:00:00')
 
+"""
+Missing data
+"""
 ICOS_MISSING = -999
 
+
+"""
+Start date of carbosense
+"""
+CS_START = dt.datetime(2018, 1, 1)
 
 class ClimateChamberStatusCode(enum.Enum):
     """
     Enum class to list possible error
     codes from the new Dübendorf calibration chamber
     """
-    START = 'Start'
-    STARTUP = 'Einlauf'
-    ERROR = 'Messfehler'
-    MEASURE = 'MESSUNG'
+    START:str = 'Start'
+    STARTUP:str = 'Einlauf'
+    ERROR:str = 'Messfehler'
+    MEASURE:str = 'MESSUNG'
     
 
 class AvailableSensors(enum.Enum):
@@ -69,8 +77,8 @@ class AvailableSensors(enum.Enum):
     This prevents the user to pass a wrong
     sensor type to the calibration method
     """
-    HPP = "HPP"
-    LP8 = "LP8"
+    HPP:str = "HPP"
+    LP8:str = "LP8"
 
 
 @dataclass
