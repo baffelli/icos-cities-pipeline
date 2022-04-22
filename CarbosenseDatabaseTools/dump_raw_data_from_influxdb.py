@@ -1,7 +1,7 @@
 """
 This script dumps the raw data from the decentlab DB into a database table
 """
-from importlib_resources import path
+from multiprocessing.sharedctypes import Value
 import influxdb
 import pandas as pd
 import pymysql
@@ -23,13 +23,36 @@ import pathlib as pl
 
 from sensorutils.log import logger 
 
+from typing import List, Match
+import re
 
-#Renam
+def parse_range(input_range:str) -> List[int]:
+	"""
+	Parses a range in the format a-b
+	and return a list of numbers
+	"""
+	parser = re.compile(r'(\d+)(-)?(\d+)?')
+	matches = parser.match(input_range)
+	match matches:
+		case None:
+			raise ValueError("Invalid range specification")
+		case m:
+			match m.groups():
+				case x, None:
+					import pdb; pdb.set_trace()
+					rg = [int(x)]
+				case x, _, y:
+					rg = list(range(int(x), int(y)))
+				case _:
+					raise ValueError("No match")
+	return rg
+
+#Read command line arguments
 
 parser = ap.ArgumentParser(description='Import raw data from decentlab into database')
 parser.add_argument('config', type=pl.Path, help='Path to the datasource mapping configuration file')
 parser.add_argument('sensor_type', type=str, choices=['HPP','LP8'], help='Sensor type to import')
-parser.add_argument('id', type=int, nargs='?', help='Sensor type to import')
+parser.add_argument('id', type=parse_range, help='Sensor id to import: either number or numeric range start-end')
 parser.add_argument('--import-all', default=False, action='store_true', help='Import all data or only incremental import?')
 args = parser.parse_args()
 
@@ -59,7 +82,7 @@ if not args.id:
 	sensor_ids = db_utils.list_all_sensor_ids(args.sensor_type, engine)
 else:
 	logger.info('Processing only sensor with id {args.id}')
-	sensor_ids = pd.DataFrame({'SensorUnit_ID':[args.id]})
+	sensor_ids = pd.DataFrame({'SensorUnit_ID':args.id})
 #Iterate over all sensors
 for row in sensor_ids.itertuples():
 	logger.info(f"Listing missing files for sensor  {row.SensorUnit_ID}")
