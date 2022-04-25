@@ -2,6 +2,7 @@
 This script dumps the raw data from the decentlab DB into a database table
 """
 from multiprocessing.sharedctypes import Value
+from tkinter import E
 import influxdb
 import pandas as pd
 import pymysql
@@ -23,28 +24,29 @@ import pathlib as pl
 
 from sensorutils.log import logger 
 
-from typing import List, Match
+from typing import List, Match, Optional
 import re
 
-def parse_range(input_range:str) -> List[int]:
+def parse_range(input_range:str) -> Optional[List[int]]:
 	"""
 	Parses a range in the format a-b
 	and return a list of numbers
 	"""
 	parser = re.compile(r'(\d+)(-)?(\d+)?')
 	matches = parser.match(input_range)
+	e = ValueError(f"Invalid range specification: {input_range}")
 	match matches:
 		case None:
-			raise ValueError("Invalid range specification")
+			raise e
 		case m:
 			match m.groups():
-				case x, None:
+				case x, None, None:
 					import pdb; pdb.set_trace()
 					rg = [int(x)]
 				case x, _, y:
 					rg = list(range(int(x), int(y)))
 				case _:
-					raise ValueError("No match")
+					raise e
 	return rg
 
 #Read command line arguments
@@ -52,8 +54,10 @@ def parse_range(input_range:str) -> List[int]:
 parser = ap.ArgumentParser(description='Import raw data from decentlab into database')
 parser.add_argument('config', type=pl.Path, help='Path to the datasource mapping configuration file')
 parser.add_argument('sensor_type', type=str, choices=['HPP','LP8'], help='Sensor type to import')
-parser.add_argument('id', type=parse_range, help='Sensor id to import: either number or numeric range start-end')
+parser.add_argument('id', type=parse_range, nargs='?', help='Sensor id to import: either number or numeric range start-end')
 parser.add_argument('--import-all', default=False, action='store_true', help='Import all data or only incremental import?')
+parser.add_argument('--backfill', default=0, type=int, help='Backfill time for incremental import')
+
 args = parser.parse_args()
 
 #Default date
@@ -86,7 +90,7 @@ else:
 #Iterate over all sensors
 for row in sensor_ids.itertuples():
 	logger.info(f"Listing missing files for sensor  {row.SensorUnit_ID}")
-	missing = mapping.list_files_missing_in_dest(group=row.SensorUnit_ID)
+	missing = mapping.list_files_missing_in_dest(group=row.SensorUnit_ID, backfill=args.backfill)
 	logger.info(f"The missing files for sensor {row.SensorUnit_ID} are {missing}")
 	for m in missing:
 		logger.info(f"Loading file {m} for sensor {row.SensorUnit_ID}")

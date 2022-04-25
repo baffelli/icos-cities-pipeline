@@ -4,7 +4,6 @@ HPP:
     path: measurements
     date_from: 2017-01-01T00:00:00.000
     grouping_key: node
-    na: ''
   dest:
     type: DB
     path: hpp_data
@@ -18,7 +17,7 @@ HPP:
     - {name: SensorUnit_ID, source_name: node, datatype: int, na: Null}
     - {name: battery, source_name: battery, datatype: float, na: 0}
     - {name: calibration_a, source_name: 'calibration', datatype: int, na: 0}
-    - {name: calibration_b, source_name: 'calibration-a', datatype: int, na: 0}
+    - {name: calibration_a, source_name: 'calibration-a', datatype: int, na: 0}
     - {name: calibration_b, source_name: 'calibration-b', datatype: int, na: 0}
     - {name: senseair_hpp_co2_filtered, source_name: 'senseair-hpp-co2-filtered', datatype: float, na: Null}
     - {name: senseair_hpp_ir_signal, source_name: 'senseair-hpp-ir-signal', datatype: float, na: Null}
@@ -31,3 +30,34 @@ HPP:
     - {name: senseair_hpp_temperature_mcu, source_name: 'senseair-hpp-temperature-mcu', datatype: float, na: Null} 
     - {name: sensirion_sht21_humidity, source_name: 'sensirion-sht21-humidity', datatype: float, na: Null}   
     - {name: sensirion_sht21_temperature, source_name: 'sensirion-sht21-temperature', datatype: float, na: Null}      
+LP8:
+  source:
+      type: influxDB
+      path: measurements
+      date_from: 2017-01-01T00:00:00.000
+      grouping_key: node
+  dest:
+      type: DB
+      path: lp8_data
+      db_prefix: CarboSense_MySQL
+      date_from: 2017-01-01T00:00:00.000
+      grouping_key: SensorUnit_ID
+      date_column: time
+      na: -999
+  columns:
+      - {name: time,  source_name: 'time', datatype: int, na: Null}
+      - {name: SensorUnit_ID, source_name: node, datatype: int, na: Null}
+      - {name: battery, source_name: battery, datatype: float, na: 0}
+      - {name: 'senseair_lp8_co2', source_name: 'senseair-lp8-co2', datatype: float, na: Null}
+      - {name: 'senseair_lp8_co2_filtered', source_name: 'senseair-lp8-co2-filtered', datatype: float, na: Null}
+      - {name: 'senseair_lp8_co2_last', source_name: 'senseair-lp8-co2-last', datatype: float, na: Null}
+      - {name: 'senseair_lp8_ir', source_name: 'senseair-lp8-ir', datatype: float, na: Null}
+      - {name: 'senseair_lp8_ir_filtered', source_name: 'senseair-lp8-ir-filtered', datatype: float, na: Null}
+      - {name: 'senseair_lp8_ir_last', source_name: 'senseair-lp8-ir-last', datatype: float, na: Null}
+      - {name: 'senseair_lp8_status', source_name: 'senseair-lp8-status', datatype: int, na: 0}
+      - {name: 'senseair_lp8_temperature', source_name: 'senseair-lp8-temperature', datatype: float, na: Null}
+      - {name: 'senseair_lp8_temperature_last', source_name: 'senseair-lp8-temperature-last', datatype: float, na: Null}
+      - {name: 'senseair_lp8_vcap1', source_name: 'senseair-lp8-vcap1', datatype: int, na: Null}
+      - {name: 'senseair_lp8_vcap', source_name: 'senseair-lp8-vcap', datatype: int, na: Null}
+      - {name: sensirion_sht21_humidity, source_name: 'sensirion-sht21-humidity', datatype: float, na: Null}   
+      - {name: sensirion_sht21_temperature, source_name: 'sensirion-sht21-temperature', datatype: float, na: Null}
