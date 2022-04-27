@@ -3,7 +3,7 @@
 This repository contains *almost* all the code, configurations and scripts needed to process the ICOS-Cities/CarboSense mid- and low-cost sensor data. Usually, the entry point in the processing is done through the DigDag [DAG](process_carbosense.dig). If you inspect this (yaml) file, you will see a list of all processes and their dependencies. To learn more about digdag DAG, see the documentation [here](http://docs.digdag.io/concepts.html).
 
 ## Setup the Pipeline
-To setup a working pipeline, you need to follow the steps below. In case of problems, you can contact Simone Baffelli. In the following sections, we assume you work on a Linux system with python>=3.6 and with an working installation of conda/anaconda.
+To setup a working pipeline, you need to follow the steps below. In case of problems, you can contact Simone Baffelli. In the following sections, we assume you work on a Linux system with python>=3.10 and with an working installation of conda/anaconda.
 ### Install dependencies with conda
 Using conda, install all the dependencies from [envrionment.yaml](config/environment.yaml):
 ```bash
@@ -17,7 +17,8 @@ conda activate carbosense-processing
 
 I also created a newer, python only environment called *icos-cities*. Its configuration file is found in [icos-cities.yaml](config/icos-cities.yaml)
 
-Use the same command as above to initialise and use the environment.
+Use the same commands as above to initialise and use the environment.
+This environment is needed to run the python scripts that process the data, while the `carbosense-processing` envrionment is used to run the older scripts that were used during the CarboSense project.
 
 ### Install sensorutils manually
 This is a python package containing utilities used in all other scripts. To install it in the project, run the following command from the main repository directory:
@@ -59,9 +60,9 @@ socket=/var/lib/mysql/mysql.sock
 An example of this file is found [here](./config/databases.cnf)
 
 At the moment, there are three databases that are necessary for the pipeline, as you can see in this file:
-- CarboSense_MySQL
+- *CarboSense_MySQL*
   - This is the metadata and raw data database which is used to store processed data and raw data. To obtain a password, ask Simone Baffelli or Patrick Burkhalter
-- NabelGsn, empaGSN
+- *NabelGsn*, *empaGSN*
   - These databases contain some of the sensor data from NABLE and EMPA. To obtain access, ask Stephan Henne
 
 
@@ -72,8 +73,7 @@ Once you have the key, store it in a yaml file called `secrets.yaml` in the `con
 -decentlab:
   -key: your-api-key
 ```
-
-
+Do not forget to make the file only readable from the user running the pipeline. 
 
 
 ### Configure network shares
@@ -82,8 +82,9 @@ Using automount, configure the following (Windows) network shares to be mounted 
   - One folder per project, e.g  `K:/Projects/Nabel`  mapped on  `/mnt/{username}/Nabel`
 - `G:/`
   - On `/mnt/{username}/G`
+To setup automount, ask Stephan Henne from 503 or Patrick Burckhalter from the IT department.
 ### Install DigDag
-Follow the instructions [here](http://docs.digdag.io/getting_started.html#downloading-the-latest-version) to install the latest version of digdag.
+Follow the instructions [here](http://docs.digdag.io/getting_started.html#downloading-the-latest-version) to install the latest version of digdag. Digdag is used to automate the run of the pipeline at daily intervals.
 
 ## Running the pipeline
 ### Manual run
@@ -226,19 +227,19 @@ The repository is structured in directories containing group of scripts performi
       - Required input variables: par1: Version [1/2/3]
       - Tasks:
         - Creates LP8 measurement time series
-- Compute_Diurnal_CO2concentrations.r **CronJob**
-  - Required input variables: par1: Version [1/2/3]
-  - Tasks:
-    - Computes diurnal CO2 variations (aggregated for months) based on LP8 measurements (+ HPP/Picarro measurements)
-- Comparison_CO2_LP8_REF.r **CronJob**
-  - Required input variables: par1: Version [1/2/3]; par2: comparison for CO2_DRY or CO2_WET [DRY/WET]
-  - Tasks:
-    - Compares LP8 measurements with measurements of co-located Picarro-instruments [sites HAE, PAY, DUE, RIG, BRM, LAEG]
-- Comparison_CO2_LP8_LP8.r **CronJob**
-  - Required input variables: par1: Version [1/2/3]
-  - Tasks:
-    - Compares measurements of co-located LP8 sensors
-- Comparison_CO2_LP8_HPP.r **CronJob**
+  - Compute_Diurnal_CO2concentrations.r **CronJob**
+    - Required input variables: par1: Version [1/2/3]
+    - Tasks:
+      - Computes diurnal CO2 variations (aggregated for months) based on LP8 measurements (+ HPP/Picarro measurements)
+  - Comparison_CO2_LP8_REF.r **CronJob**
+    - Required input variables: par1: Version [1/2/3]; par2: comparison for CO2_DRY or CO2_WET [DRY/WET]
+    - Tasks:
+      - Compares LP8 measurements with measurements of co-located Picarro-instruments [sites HAE, PAY, DUE, RIG, BRM, LAEG]
+  - Comparison_CO2_LP8_LP8.r **CronJob**
+    - Required input variables: par1: Version [1/2/3]
+    - Tasks:
+      - Compares measurements of co-located LP8 sensors
+  - Comparison_CO2_LP8_HPP.r **CronJob**
   - Required input variables: par1: Version [1/2/3]
   - Tasks:
     - Compares LP8 measurements with measurements of co-located HPP instruments [sites HAE, PAY, DUE, RIG, BRM, LAEG]
@@ -253,22 +254,22 @@ Miscellaneous:
   - Creation of maps with SHT21 / MeteoSwiss temperatures around the city of Zurich  
 
 
-## HPP_measurement_processing
-- Compute_CarboSense_HPP_CO2_values.r **CronJob**
-  - Required input variables: par1: partial/complete processing [T/F]; optional_par2: LocationName (if omitted only operational sites are processed)
-  - Tasks:
-    - Computation of CO2 concentrations based on raw measurements, calibration model and on-site calibration
-    - Export of computed concentrations to CarboSense.CarboSense_HPP_CO2
-    - Reports of calibration conditions (delta HPP-REF, H2O, RH, cylinder pressure)
-- Plot_HPP_CO2.r **CronJob**
-  - Tasks:
-    - Generation of HPP CO2 time series
-- Comparison_CO2_HPP_REF.r **CronJob**
-  - Tasks:
-    - Comparison of HPP measurements and measurements from Picarro instruments
-- Comparison_H2O_HPP_MCH.r **CronJob**
-  - Tasks:
-    - Comparison of computed HPP H2O values with H2O values computed from MeteoSwiss measurements
+- [**HPP_measurement_processing**](./HPP_measurement_processing/)
+  - Compute_CarboSense_HPP_CO2_values.r **CronJob**
+    - Required input variables: par1: partial/complete processing [T/F]; optional_par2: LocationName (if omitted only operational sites are processed)
+    - Tasks:
+      - Computation of CO2 concentrations based on raw measurements, calibration model and on-site calibration
+      - Export of computed concentrations to CarboSense.CarboSense_HPP_CO2
+      - Reports of calibration conditions (delta HPP-REF, H2O, RH, cylinder pressure)
+  - Plot_HPP_CO2.r **CronJob**
+    - Tasks:
+      - Generation of HPP CO2 time series
+  - Comparison_CO2_HPP_REF.r **CronJob**
+    - Tasks:
+      - Comparison of HPP measurements and measurements from Picarro instruments
+  - Comparison_H2O_HPP_MCH.r **CronJob**
+    - Tasks:
+      - Comparison of computed HPP H2O values with H2O values computed from MeteoSwiss measurements
 
 ## REF_measurement_processing
 - Plot_REF_CO2.r **CronJob**
@@ -343,20 +344,101 @@ Contacts related to "swiss.co2.live": Khash-Erdene Jalsan (khash.jalsan@decentla
 - Carbosense_data_release_2019-10.r
   - Script that created the files for the ICOS data release in October 2019  
 
+
 ## sensorutils
 This is a python package containing utilities used in all other scripts. To install it in the project, run the following command from the main repository directory:
 ```
 pip install -e ./sensorutils
 ```
 
-# Climate Chamber Calibration
+
+
+
+# Pipeline documentation
+In the following sections, I will describe the most important sections of the pipeline and how to run / configure them.
+## Importing raw sensor data
+### Motivation
+As of today (April 2022), the raw data from the LP8/HPP sensors is stored by DecentLab on their InfluxDB database. For safety and ease of processing, the first step in the pipeline is copying the raw data to our own relational database. 
+
+This is accomplished using the script [dump_raw_data_from_influxdb.py](CarbosenseDatabaseTools/dump_raw_data_from_influxdb.py). The script needs a configuration file to map the source and the destination tables, the current configuration file is located in [co2_sensor_mapping.yml](config/co2_sensor_mapping.yml). 
+### Background
+The script bases on the [`DataSourceMapping`](sensorutils/files.py) class, which defines a flexible mapping between (tabular) data located in different systems (so far: CSV, relational databases and influxdb) and that can automate bulk and incremental loading between these systems (loosely inspired by [embulk](https://www.embulk.org/)).
+
+The main concept in this system is the *file*. One file corresponds to the set of all measurement for one *group* and one *date*. The group is defined using the `grouping_key` keyword, while the date using the `date_column`. Using these information, the system checks which files are present on the source system that are absent in the destination. Files are then transferred with an optional column mapping / transformation step to convert / rename columns.
+
+To understand the concept, we have a look at one entry of the yaml file, the one for SenseAir HPP sensors:
+
+```
+HPP:
+  source:
+    type: influxDB
+    path: measurements
+    date_from: 2017-01-01T00:00:00.000
+    grouping_key: node
+  dest:
+    type: DB
+    path: hpp_data
+    db_prefix: CarboSense_MySQL
+    date_from: 2017-01-01T00:00:00.000
+    grouping_key: SensorUnit_ID
+    date_column: time
+    na: -999
+  columns:
+    - {name: time,  source_name: 'time', datatype: int, na: Null}
+    - {name: SensorUnit_ID, source_name: node, datatype: int, na: Null}
+    - {name: battery, source_name: battery, datatype: float, na: 0}
+```
+
+This defines a datasource mapping between the `source` and the `dest` systems. The source system is an InfluxDB database (the pipeline assumes by default this system to be the Decentlab one, but it can be easily changed, see the source code for this) with the *table* *measurements*. The field `grouping_key` is used to define a column identifying unique sensors in the source table so that incremental transfer is enabled. Because InfluxDB uses `time` as a default timestamp column, no `date_column` is define for the source system. The destination system in this example is the table *hpp_data* on the database defined by the prefix *CarboSense_MySQL* in the `.my.cnf` file as described [above](#configure-database-connections). 
+
+The section `columns` contains the mapping between the source and the destination columns. The `name` key specifies the name of the column in the destination system, the `source_name` the name in the source system. Instrad of `source_name`, a SQL query can be used with `query` to perform data transformations. The query will be then run against an in-memory SQLLite database. 
+
+### Using the script
+The script is normally run with just the configuration command line argument, as in: 
+```
+python3 dump_raw_data_from_influxdb.py ./config/co2_sensor_mapping.yml
+```
+In this mode, the script will perform an incremental load of all the systems defined in the configuration file.
+
+If you want to import data from a specific sensor only, you can use:
+```
+python3 dump_raw_data_from_influxdb.py ./config/co2_sensor_mapping.yml HPP 445
+```
+
+This will only incrementally load the data for HPP sensor 445.
+
+If you set the `--import-all` flag, a bulk import will be triggered, which will copy all the data from the source system, including the one already present there. If you set `--backfill n`, the incremental load will perform a backfill of the previous *n* days.
+
+
+## Import Reference sensor data (Picarro CRDS)
+The import is performed in two steps:
+- In a first step, the data is copied on a staging table, which corresponds to the old CarboSense *NABEL_DUE*, *EMPA_LAEG* etc... tables
+- In a second step, the data from these tables is consolidated into a single table called *picarro_data*, where the location of the data is identified by a location column in the table. 
+Below, I will explain how to run the various steps
+### Import into staging tables
+The reference data from the Picarro CRDS are imported with the script [import_picarro_data.py](./CarbosenseDatabaseTools/import_picarro_data.py). 
+The import configuration is very similar to the one for [raw data](#importing-raw-sensor-data) so I won't describe it here. The script is usually run using
+```
+python3 ./CarbosenseDatabaseTools/import_picarro_data.py ./config/picarro_mapping.yml
+```
+
+### Consolidate data
+To consolidate the data, the following script is run:
+```
+python3  ./REF_measurement_processing/consolidate_reference_measurements.py ./config/reference_table_mapping.yaml
+```
+
+
+
+## Import Climate Chamber Calibration
 In this section, we will give a short overwiew of the processes / files needed to run a climate chamber / pressure chamber calibration, as this process is more manual than the regular co-located calibration, where the data is automatically imported from the NABEL exports in `K:\Projects\Nabel`
-## Files
+### Files
 - *Picarro*:
-When you run a climate chamber calibration, please place the **original** `.dat` files as exported from the Picarro instrument into a folder of your choosing (So far, this was `K:\Carbosense\Data\Klimakammer_Versuche_27022017_XXXXXXXX`). You can then import them into the database  using 
+When you run a climate chamber calibration, please place the **original** `.dat` files as exported from the Picarro instrument into a folder of your choosing (So far, this was `K:\Carbosense\Data\Klimakammer_Versuche_27022017_XXXXXXXX`). You can then import them into the database  using:
   ```
   import_climate_chamber_data.py --picarro your_path your_regex
   ```
+  Where `your_regex` is a regular expression / glob pattern to find all the files you want to import.
   Do not forget to add the picarro id to the `Deployment` table in the database. Before / after the calibration, run a picarro calibration
   and store the results in `G:\503_Themen\CarboSense`
 - *Climate Chamber*: export the data (as is) from the climate chamber control software and store it in a folder of your choosing. To import the data, use:
@@ -367,3 +449,33 @@ When you run a climate chamber calibration, please place the **original** `.dat`
   ```
   import_climate_chamber_data.py --pressure your_path your_regex
   ```
+  You can specify the target table for importing the data using `--dest NAME`, where `NAME` is the name of the target database table.
+- For data exported from the calibration chamber built by Roger Vonbank (**DUE7** in the *Location* table), use `--climate-new path regex`.
+
+After importing the data, do not forget to consolidate the data using the second step described [above](#import-reference-sensor-data-picarro-crds)
+
+
+# Import Meteo data
+TBD
+
+# Process sensor data
+
+To process the sensor data, two different modes are available:
+- Calibration, used to determine the calibration parameter
+- Processing, used to apply the calibration parameters fitted in the previous step on new (or old) data.
+In the following sections, I will describe these modes
+
+## Calibration mode
+The sensor data is processed using the [process_hpp_data.py](./HPP_measurement_processing/process_hpp_data.py) script. Usually, the script will process all the sensor of one type sequentially, computing the calibration parameters for all time the sensor was placed in the calibration table.
+
+To run the calibration, use
+```
+python3 (./HPP_measurement_processing/process_hpp_data.py  ./config/co2_sensor_mapping.yaml calibrate {HPP,LP8} --plot your_plot_directory
+```
+Where `{HPP, LP8}` can be either of these two sensor names.
+If you want to calibrate a single sensor only, append the sensor id before the `--plot` command:
+```
+python3 (./HPP_measurement_processing/process_hpp_data.py  ./config/co2_sensor_mapping.yaml calibrate HPP 445 --plot your_plot_directory
+```
+
+## Processing mode
