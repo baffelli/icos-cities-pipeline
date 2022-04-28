@@ -409,16 +409,20 @@ def apply_calibration_parameters(table:sqa.Table, session:sqa.orm.Session, compo
 
 
 
-def average_df(dt: pd.DataFrame, funs:Dict[str, Callable]={'max':np.max, 'min':np.min, 'mean':np.mean, 'std':np.std}, date_col:str='date', av:str='1 min') -> pd.DataFrame:
+def average_df(dt: pd.DataFrame, funs:Dict[str, Callable]={'max':np.max, 'min':np.min, 'mean':np.mean, 'std':np.std}, date_col:str='date', groups:Optional[List[str]]=[], av:str='1 min') -> pd.DataFrame:
     """
     Averages a dataframe to the given time interval and applies
     a set of aggregation functions specified by the dictionary `funs` to all columns in the dataframe.
     If the new sampling interval is smaller than the older one, the data is forward filled before.
     """
     cols = set(dt.columns) - set([date_col])
-    fns_name = {col: [(name, fn) for name, fn in funs.items()] for  col in cols}
-    import pdb; pdb.set_trace()
-    dt_agg = dt.set_index(date_col).resample(av).agg(fns_name)
+    fns_name = {col: [(name, fn) for name, fn in funs.items()] for  col in cols if col not in groups}
+    dt_ix = dt.set_index([date_col])
+    if groups:
+        dt_grp = dt_ix.groupby(groups)
+    else:
+        dt_grp = dt_ix
+    dt_agg = dt_grp.resample(av).agg(fns_name)
     new_names = ["_".join(c) for c in dt_agg.columns]
     dt_agg.columns = new_names
     return dt_agg

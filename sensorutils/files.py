@@ -33,6 +33,9 @@ import itertools
 import functools
 from .log import logger
 import pytz
+import tempfile as tf
+import subprocess as sp
+
 """
 This module contains functions used to interact with files and read and write specific file formats used in this 
 project
@@ -341,8 +344,9 @@ def read_nabel_csv(path: Union[pl.Path, str], encoding: str = 'latin-1') -> pd.D
     # Import data
     data = pd.read_csv(path, encoding=nabel_encoding, header=0, names=headers,  skiprows=skip,
                        keep_default_na=True, sep=nabel_sep, index_col=False,  na_values=['', ])
-    data['date'] = pd.to_datetime(data['date'], format=nabel_format).dt.tz_localize('CET') - dt.timedelta(minutes=1)
-    return data.rename(lambda x: x.replace('_AV', ''), axis='columns')
+    data['date'] = pd.to_datetime(data['date'], format=nabel_format) - dt.timedelta(hours=1)
+    data_filt = data[~data['date'].isnull()]
+    return data_filt.rename(lambda x: x.replace('_AV', ''), axis='columns')
 
 
 class NabelVisitor(NodeVisitor):
@@ -748,14 +752,107 @@ def day_ts(day: dt.datetime) -> Tuple[dt.datetime, dt.datetime]:
     """
     return (day.replace(hour=0, minute=0, second=0), day.replace(hour=23, minute=59, second=59))
 
+def process_awk(file: pl.Path, command: str, **kwargs) -> pd.DataFrame:
+    """
+    Runs an awk command given by `command` on the given file in `file`
+    and returns the result as a pandas dataframe.
+    This function does not check for side effects, it is up to the user to use stoud for returning the needed output
+    """
+    cmd_args = ["awk"] + [f"-{flag}{val}" for flag, val in kwargs.items()] + [fr"'{command}'", str(file.absolute())]
+    with tf.NamedTemporaryFile() as tmp:
+        res = sp.run(' '.join(cmd_args), stdin = sp.PIPE, stdout = tmp, stderr = sp.PIPE,shell=True, text=True)
+        print(' '.join(cmd_args))
+        tmp.flush()
+        #df = pd.read_csv(tmp.name, header=None)
+        df = pd.DataFrame()
+    return df
 
 @dataclass
 class CsvSource(DataSource):
+    """    
+    This subclass of :obj:`DataSource`represents a datasource located in a CSV file in the `str` path, which specifies the glob pattern
+    to find the files. One file corresponds to a day of measurements in the source system, with the date derived from `date_column`, the sensor / group derived
+    from `grouping_key`.
+    Attributes:
+    -----------
+    re: str
+        The regular expression used to find the files
+    date_column: str
+        The csv column used to determine the date of the files
+    date_re: str
+        If needed, use a regex to extract the date part from the date column
+    grouping_key: str or none
+        The name of the column used to group the files
+    sep: str or none
+        The separator of the CSV file
     """
-    This subclass of :obj:`DataSource`represents a datasource located in a CSV file. One *file* 
+    path: str
+    re: str
+    date_column: str
+    date_re: Optional[str]
+    grouping_key: Optional[str]
+    sep: Optional[str] = ';'
+    available_files: Optional[pd.DataFrame] = None
+
+    def list_physical_files(self) -> List[pl.Path]:
+        """
+        Find all physically available files with the current path and regexp
+        """
+        return [f for f in pl.Path(self.path).glob(self.re)]
+
+    def awk_command(self) -> str:
+        """
+        Makes an awk command to list all the unique column values in the file
+        """
+        cmd = f"FNR==1 {{ for (i=1;i<=NF;i++) f[$i]=i; next }}{{match($(f[\"{self.date_column}\"]),/{self.date_re}/, dt); st=$(f[\"{self.grouping_key}\"]);a[0]=dt[0];a[1]=st;for (i=1;i<=NF;i++) k=(i>1 ? k FS : \"\") a[i]}}!seen[k]++{{print dt[0]\",\"st}}"
+        return cmd
+
+    def get_keys_in_file(self, path: pl.Path) -> pd.DataFrame:
+        """
+        Reads only the key columns from a csv file and
+        return their unique values
+        """
+        dtypes = {}
+        new_names = {}
+        dtypes[self.date_column] = str
+        new_names[self.date_column] = "date"
+        if self.grouping_key:
+            dtypes[self.grouping_key] = str
+            new_names[self.grouping_key] = "group"
+        pre_keys = pd.read_csv(path, dtype=dtypes, sep=self.sep, usecols=dtypes.keys()).rename(columns=new_names)
+        keys = pre_keys.copy()
+        keys['path'] = path
+        keys['date'] = pd.to_datetime(keys['date'].str.extract(self.date_re, expand=False))
+        return keys.drop_duplicates()
+        
+
+    def list_files(self, *args, group:Optional[str]=None) -> pd.DataFrame:
+        """
+        List all files in this system
+        """
+        all_files = self.list_physical_files()
+        # def parse_with_awk(file: pl.Path) -> pd.DataFrame:
+        #     print(f"Processing {file}")
+        #     res = process_awk(file, self.awk_command(), F='";"').rename(columns={0:'date',1:'group'})
+        #     # res_out = res.copy()
+        #     # res_out['date'] = pd.to_datetime(res['date'], format='%Y%m%d')
+        #     return 1
+        return pd.concat([self.get_keys_in_file(file) for file in all_files])
+
+    def read_file(self, date: dt.datetime, group:Optional[str]=None) -> pd.DataFrame:
+        pass
+    
+    def write_file(self, input:pd.DataFrame, temporary: bool = False) -> pd.DataFrame:
+        pass
+
+@dataclass
+class NabelSource(DataSource):
+    """
+    This subclass of :obj:`DataSource`represents a datasource located in a CSV file on the NABEL folder. One *file* 
     in this dataset corresponds to a day of measurements for that station.
     """
     re: str
+    na: str
 
     def list_files(self, *args, group=None) -> pd.DataFrame:
         """
@@ -1067,18 +1164,21 @@ class DataMappingFactory():
         return mp
 
     @staticmethod
-    def create_data_source(source: dict) -> Union[DBSource, CsvSource, InfluxdbSource]:
+    def create_data_source(source: dict) -> Union[DBSource, NabelSource, InfluxdbSource, CsvSource]:
         source_type = source.pop('type')
         source['date_from'] = try_parse(
             source['date_from'], '%Y-%m-%d %H:%M:%S')
-        if source_type == 'file':
-            return CsvSource(**source)
-        elif source_type == 'DB':
-            return DBSource(**source)
-        elif source_type == 'influxDB':
-            return InfluxdbSource(**source)
-        else:
-            raise TypeError(
+        match source_type:
+            case 'NABEL':
+                return NabelSource(**source)
+            case 'DB':
+                return DBSource(**source)
+            case 'influxDB':
+                return InfluxdbSource(**source)
+            case 'CSV'|'csv':
+                return CsvSource(**source)
+            case _:
+                raise TypeError(
                 f'The data source type {source_type} does not exist')
 
     @staticmethod
@@ -1192,9 +1292,9 @@ def read_new_climate_chamber_data(path: pl.Path, tz='CET') -> pd.DataFrame:
     """
     Reads the climate chamber data from the given path and returns a pandas DataFrame.
     The date and time is supposed to be in CET (with switch to DST at the correct time).
-    Returns data in utc format
+    Returns data in utc format. Assumes the picarro data to be already present
     """
-    name_mapping =  {'Zeit':'time', 'Phase':'phase', 'CO2_soll':'CO2_setpoint', 'Status':'status', 'T':'T', 'RH':'RH','CO2ref':'CO2_LI850'}
+    name_mapping =  {'Zeit':'time', 'Phase':'phase', 'CO2_soll':'CO2_setpoint', 'calibration_mode':'calibration_mode', 'Status':'status', 'T':'T', 'RH':'RH','CO2ref':'CO2_LI850', 'PIC_CO2dry':'CO2_DRY', 'PIC_CO2':'CO2', 'PIC_H2O':'H2O'}
     #Regex for the phase column
     soll_re = re.compile(r"(\d+)\/(\d+)\s* (\d+)")
     dt = pd.read_excel(path)
@@ -1205,7 +1305,7 @@ def read_new_climate_chamber_data(path: pl.Path, tz='CET') -> pd.DataFrame:
     dt_new['RH_F'] = dt_new['status']
     setpoints = dt_new['phase'].str.extract(soll_re).rename(columns={0:'T_soll', 1:'RH_soll', 2:'CO2_soll'}).astype(np.float64)
     dt_full = pd.concat([dt_new, setpoints], axis=1)
-    return dt_full.reset_index()[['date', 'T', 'T_F', 'RH', 'RH_F', 'CO2_soll', 'RH_soll', 'T_soll']]
+    return dt_full.reset_index()[['date', 'T', 'T_F', 'RH', 'RH_F', 'CO2_soll', 'RH_soll', 'T_soll', 'CO2_DRY', 'CO2', 'H2O', 'calibration_mode']]
 
 def tz_to_epoch(series: pd.Series) -> pd.Series:
     """

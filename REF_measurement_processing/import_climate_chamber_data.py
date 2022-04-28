@@ -9,7 +9,10 @@ import_climate_chamber_data.py --picarro /mnt/basi/CarboSense/Data/Klimakammer_V
 --climate  /mnt/basi/CarboSense/Data/Klimakammer_Versuche_27022017_XXXXXXXX/ Klimakammerdaten_2021*.csv
 ```
 """
+from asyncore import read
+from multiprocessing.sharedctypes import Value
 from typing import Dict
+from xml.dom import ValidationErr
 import sensorutils.db as db_utils
 import sensorutils.files as fu
 import sensorutils.data as du
@@ -23,12 +26,10 @@ import numpy as np
 import datetime as dt
 import argparse as ap
 parser = ap.ArgumentParser(description='Import data from the Climate chamber experiment')
-parser.add_argument('--picarro', type=str, nargs=2, help='Base path and regex for Picarro CRDS data')
-parser.add_argument('--climate', type=str, nargs=2, help='Base path and regex for climate chamber data (temperature program)')
-parser.add_argument('--pressure', type=str, nargs=2, help='Base path and regex for climate chamber data (pressure sensor)')
-parser.add_argument('--climate_new', type=str, nargs=2, help='Base path and regex for new climate chamber data (temperature program)')
-parser.add_argument('--dest', type=str, default='ClimateChamber_00_DUE', help='Destination table')
-
+parser.add_argument('type', type=str, help='Device type')
+parser.add_argument('path', type=pl.Path, help='Base path to locate data')
+parser.add_argument('re', type=str, help='Regex to find the files to import')
+parser.add_argument('dest', type=str, help='Destination table')
 args = parser.parse_args()
 
 #Get engine
@@ -43,12 +44,10 @@ def rename_and_subset(df: pd.DataFrame, subset:Dict[str, str]) -> pd.DataFrame:
     """
     return df.rename(columns=subset)[list(subset.values())]
 
-#Load picarro data
-if args.picarro:
-    pf = pl.Path(args.picarro[0])
-    pic_paths = [f for f in pf.glob(args.picarro[1])]
-    #New names of picarro columns
-    pic_cols = {
+#Select type of file to read
+match args.type:
+    case 'picarro':
+        cols = {
         'timestamp':'timestamp', 
         'CO2_mean':'CO2', 
         'CO2_F_max': 'CO2_F',
@@ -56,52 +55,46 @@ if args.picarro:
         'H2O_mean':'H2O',
         'H2O_F_max': 'H2O_F',
         'CO2_DRY_mean':'CO2_DRY'}
-#Load climate chamber data
-if args.climate:
-    clim_cols = {
-    'timestamp':'timestamp', 
-    'temperature_mean':'T', 
-    'target_temperature_mean':'T_Soll',
-    'target_RH_mean':'RH_Soll',
-    'RH_mean':'RH'}
-
-    pf = pl.Path(args.climate[0])
-    clim_paths = [f for f in pf.glob(args.climate[1])]
-if args.pressure:
-    pf = pl.Path(args.pressure[0])
-    press_paths = [f for f in pf.glob(args.pressure[1])]
-    pressure_cols = {
+        reader = fu.read_picarro_data
+    case 'climate':
+        cols = {
+        'timestamp':'timestamp', 
+        'temperature_mean':'T', 
+        'target_temperature_mean':'T_Soll',
+        'target_RH_mean':'RH_Soll',
+        'RH_mean':'RH'}
+        reader = lambda x: fu.read_pressure_data(x).set_index('date').resample('1 min').pad().reset_index()
+    case 'pressure':
+        cols = {
         'timestamp':'timestamp',
-        'pressure_mean':'pressure'
-    }
-if args.climate_new:
-    cn_cols = {
+        'pressure_mean':'pressure'}
+        reader = fu.read_pressure_data
+    case 'climate_new':
+        cols = {
         'timestamp': 'timestamp',
         'T_mean':'T',
         'RH_mean':'RH',
         'CO2_soll_mean': 'CO2_soll',
         'T_F_max': 'T_F',
-        'RH_F_max': 'RH_F'
-    }
-    pf = pl.Path(args.climate_new[0])
-    cn_paths = [f for f in pf.glob(args.climate_new[1])]
+        'RH_F_max': 'RH_F',
+        'CO2_mean': 'CO2',
+        'CO2_DRY_mean': 'CO2_DRY',
+        'H2O_mean': 'H2O',
+        'calibration_mode_min': 'calibration_mode'
+        }
+        reader = fu.read_new_climate_chamber_data
+    case _:
+        raise ValueError(f"The sensor type {args.type} is not supported")
 
+pf = pl.Path(args.path)
+cn_paths = [f for f in pf.glob(args.re)]
 
-pd = {'mapping':pic_cols, 'paths':pic_paths, 'reader':fu.read_picarro_data} if args.picarro else None
-cd = {'mapping':clim_cols, 'paths':clim_paths, 'reader':fu.read_climate_chamber_data} if args.climate else None
-pressd = {'mapping':pressure_cols, 'paths':press_paths, 'reader': lambda x: fu.read_pressure_data(x).set_index('date').resample('1 min').pad().reset_index()} if args.pressure else None
-cn = {'mapping':cn_cols, 'paths':cn_paths, 'reader':fu.read_new_climate_chamber_data} if args.climate_new else None
-
-cfgs = [el for el in [pd, cd, pressd, cn] if el is not None]
-
-for cfg in cfgs:
-    for p in cfg['paths']:
-        orig_data = cfg['reader'](p)
-        import pdb; pdb.set_trace()
-        #TODO Make more explicit
-        data = rename_and_subset(du.date_to_timestamp(du.average_df(orig_data).reset_index(), 'date'), cfg['mapping']).dropna(subset=cfg['mapping'].values())
-        import pdb; pdb.set_trace()
-        with eng.connect() as con:
-            with con.begin() as tr:
-                mt = db_utils.create_upsert_metod(sqa.MetaData(bind=con))
-                data.to_sql(args.dest, con, index=False, if_exists='append', method=mt)
+for p in cn_paths:
+    orig_data = reader(p)
+    data = rename_and_subset(du.date_to_timestamp(du.average_df(orig_data).reset_index(), 'date'), cols).dropna(subset=cols.values())
+    with eng.connect() as con:
+        md = sqa.MetaData(bind=con)
+        md.reflect()
+        with con.begin() as tr:
+            mt = db_utils.create_upsert_metod(md)
+            data.to_sql(args.dest, con, index=False, if_exists='append', method=mt)

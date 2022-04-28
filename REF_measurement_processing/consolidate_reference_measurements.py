@@ -31,6 +31,7 @@ import pathlib as pl
 from typing import Dict, List
 
 from sensorutils.log import logger
+from sqlalchemy.dialects.mysql import insert
 
 parser = ap.ArgumentParser(
     description='Consolidate data from multiple reference table into one')
@@ -82,14 +83,18 @@ for alias, mapping in table_mapping.items():
     # Find subset with same name
 
     # Create existence query
-    eq = session.query(source_sel, db.sql.expression.literal(alias).label(dest_loc_column)).filter(
-        ~session.query(dest_tb).filter(
-            (source_sel.c[source_time_column] == dest_tb.c[dest_time_column]) &
-            (dest_tb.c[dest_loc_column] == alias)).exists()
-    )
+    source_query = session.query(source_sel, db.sql.expression.literal(alias).label(dest_loc_column))
+    if not args.import_all:
+        insert_quert = source_query.filter(
+            ~session.query(dest_tb).filter(
+                (source_sel.c[source_time_column] == dest_tb.c[dest_time_column]) &
+                (dest_tb.c[dest_loc_column] == alias)).exists()
+        )
+    else:
+        insert_quert = source_query
 
-    # Insert into query
-    insert_cmd = dest_tb.insert().from_select(cm_names, eq)
+    insert_cmd = dest_tb.insert().from_select(cm_names, insert_quert)
+ 
 
     with engine.connect() as cur:
         with cur.begin() as tr:
