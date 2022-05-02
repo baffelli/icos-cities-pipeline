@@ -30,6 +30,7 @@ parser.add_argument('type', type=str, help='Device type')
 parser.add_argument('path', type=pl.Path, help='Base path to locate data')
 parser.add_argument('re', type=str, help='Regex to find the files to import')
 parser.add_argument('dest', type=str, help='Destination table')
+parser.add_argument('dest_loc', type=str, help='Destination location name for the table')
 args = parser.parse_args()
 
 #Get engine
@@ -56,6 +57,7 @@ match args.type:
         'H2O_F_max': 'H2O_F',
         'CO2_DRY_mean':'CO2_DRY'}
         reader = fu.read_picarro_data
+        grouping = []
     case 'climate':
         cols = {
         'timestamp':'timestamp', 
@@ -64,25 +66,28 @@ match args.type:
         'target_RH_mean':'RH_Soll',
         'RH_mean':'RH'}
         reader = lambda x: fu.read_pressure_data(x).set_index('date').resample('1 min').pad().reset_index()
+        grouping = []
     case 'pressure':
         cols = {
         'timestamp':'timestamp',
         'pressure_mean':'pressure'}
         reader = fu.read_pressure_data
+        grouping = []
     case 'climate_new':
         cols = {
         'timestamp': 'timestamp',
         'T_mean':'T',
         'RH_mean':'RH',
-        'CO2_soll_mean': 'CO2_soll',
         'T_F_max': 'T_F',
         'RH_F_max': 'RH_F',
         'CO2_mean': 'CO2',
         'CO2_DRY_mean': 'CO2_DRY',
         'H2O_mean': 'H2O',
-        'calibration_mode_min': 'calibration_mode'
+        'chamber_status': 'chamber_status',
+        'calibration_mode': 'calibration_mode'
         }
         reader = fu.read_new_climate_chamber_data
+        grouping = ['chamber_status', 'calibration_mode']
     case _:
         raise ValueError(f"The sensor type {args.type} is not supported")
 
@@ -91,10 +96,13 @@ cn_paths = [f for f in pf.glob(args.re)]
 
 for p in cn_paths:
     orig_data = reader(p)
-    data = rename_and_subset(du.date_to_timestamp(du.average_df(orig_data).reset_index(), 'date'), cols).dropna(subset=cols.values())
+    data = rename_and_subset(du.date_to_timestamp(du.average_df(orig_data, groups=grouping).reset_index(), 'date'), cols).dropna(subset=cols.values())
+    #Set the destination location to write in the table
+    data["LocationName"] = args.dest_loc
     with eng.connect() as con:
         md = sqa.MetaData(bind=con)
         md.reflect()
         with con.begin() as tr:
             mt = db_utils.create_upsert_metod(md)
+            import pdb; pdb.set_trace()
             data.to_sql(args.dest, con, index=False, if_exists='append', method=mt)

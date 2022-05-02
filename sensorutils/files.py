@@ -297,7 +297,7 @@ def parse_nabel_headers(text: str) -> Grammar:
 Mapping between numeric codes in NABEL export files and textual description of these flags.
 For more information on the mapping, ask the NABEL team
 """
-nabel_flags = {
+NABEL_FLAGS = {
     5: 'AV',
     7: 'VALID_num',
     8: 'VALID',
@@ -344,9 +344,12 @@ def read_nabel_csv(path: Union[pl.Path, str], encoding: str = 'latin-1') -> pd.D
     # Import data
     data = pd.read_csv(path, encoding=nabel_encoding, header=0, names=headers,  skiprows=skip,
                        keep_default_na=True, sep=nabel_sep, index_col=False,  na_values=['', ])
+    # CET -> UTC
     data['date'] = pd.to_datetime(data['date'], format=nabel_format) - dt.timedelta(hours=1)
-    data_filt = data[~data['date'].isnull()]
-    return data_filt.rename(lambda x: x.replace('_AV', ''), axis='columns')
+    data_filt = data.set_index('date').dropna(how='all').reset_index()
+    #Skip problems due to CEST - > CET
+    data_valid_date = data_filt[~data_filt['date'].isnull()]
+    return data_valid_date.rename(lambda x: x.replace('_AV', ''), axis='columns')
 
 
 class NabelVisitor(NodeVisitor):
@@ -402,7 +405,7 @@ class NabelVisitor(NodeVisitor):
 
     def visit_data_file(self, node, visited_children):
         headers, (group, group_code), data, *rest = visited_children
-        group_name = group_code.replace(nabel_flags)
+        group_name = group_code.replace(NABEL_FLAGS)
         headers_full = headers.assign(group=group, flags=group_name).groupby(
             'group').apply(lambda x: x.mask(x == '')).dropna(how='all').ffill()
         colnames = ['date', *(headers_full['Kanal'] +
@@ -446,7 +449,7 @@ class DataSource(ABC):
         The first date available on the datasource. Used to filter older datasets out
     """
     date_from: Optional[dt.datetime]
-    path: Optional[str]
+    #path: Optional[str]
 
     @abstractmethod
     def list_files(self, *args, **kwargs) -> pd.DataFrame:
@@ -469,6 +472,7 @@ class DatabaseSource(DataSource):
     to the usual properties, it also keeps a database connection object and provides
     a method to connect to the db at runtime by passing the connection object.
     """
+    table: str
     date_column: str
     group: Optional[Union[str, int]] = None
     grouping_key: Optional[str] = None
@@ -491,7 +495,6 @@ def check_db(fun):
     return deco
 
 @dataclass
-# TODO make db connection external to object like in InfluxdbSource
 class DBSource(DatabaseSource):
     """
     This subclass of :obj:`DataSource`represents a datasource located on a relational database.
@@ -565,7 +568,7 @@ class DBSource(DatabaseSource):
             A dataframe with the available files
         """
         meas = get_available_measurements_on_db(
-            self.eng, self.path, date_column=self.date_group_query(), grouping_column=self.grouping_key, group_id=group)
+            self.eng, self.table, date_column=self.date_group_query(), grouping_column=self.grouping_key, group_id=group)
         meas_full = meas
         if self.group:
             meas_full['group_id'] = self.group
@@ -588,7 +591,7 @@ class DBSource(DatabaseSource):
 
         
         metadata = sqa.MetaData(bind=self.eng)
-        table = sqa.Table(self.path, metadata, autoload=True)
+        table = sqa.Table(self.table, metadata, autoload=True)
         Session = sessionmaker(self.eng)
         session = Session()
         lb = 'date_group'
@@ -631,10 +634,10 @@ class DBSource(DatabaseSource):
         input_filled = input.fillna(self.na)
         Session = sessionmaker(bind=self.eng)
         session = Session()
-        output_table = self.metadata.tables[self.path]
+        output_table = self.metadata.tables[self.table]
         with self.eng.connect() as con:
             tran = con.begin()
-            input_filled.to_sql(self.path, con, method=method,
+            input_filled.to_sql(self.table, con, method=method,
                                 index=False, if_exists='append')
             if group and self.grouping_key:
                 new_data = session.query(output_table).filter(output_table.columns[self.date_column].between(
@@ -687,7 +690,7 @@ class InfluxdbSource(DatabaseSource):
             *
             FROM
             (
-            SELECT COUNT("value") FROM "measurements" WHERE {gq} sensor =~ /senseair|sensirion|battery|calibration/ AND time > '2017-01-01 00:00:00' GROUP BY time(1d)
+            SELECT COUNT("value") FROM "{self.table}" WHERE {gq} sensor =~ /senseair|sensirion|battery|calibration/ AND time > '2017-01-01 00:00:00' GROUP BY time(1d)
             )
             WHERE count > 0
             """
@@ -699,7 +702,7 @@ class InfluxdbSource(DatabaseSource):
                 available_data = pd.DataFrame([a for a in fs['measurements']])
                 available_data['date'] = pd.to_datetime(
                     available_data[self.date_column], unit='s')
-                available_data['path'] = self.path
+                available_data['path'] = self.table
                 available_data['group'] = group
             else:
                 available_data = pd.DataFrame(columns=['date'])
@@ -771,29 +774,32 @@ def process_awk(file: pl.Path, command: str, **kwargs) -> pd.DataFrame:
 class CsvSource(DataSource):
     """    
     This subclass of :obj:`DataSource`represents a datasource located in a CSV file in the `str` path, which specifies the glob pattern
-    to find the files. One file corresponds to a day of measurements in the source system, with the date derived from `date_column`, the sensor / group derived
-    from `grouping_key`.
+    to find the files. One file corresponds to a day of measurements in the source system, with the date derived from `date_re` in the file name,
+    the group (optionally) from `group_re`
     Attributes:
     -----------
+    path: str
+        The base path to find the files
     re: str
         The regular expression used to find the files
-    date_column: str
-        The csv column used to determine the date of the files
     date_re: str
-        If needed, use a regex to extract the date part from the date column
-    grouping_key: str or none
-        The name of the column used to group the files
+        If needed, use a regex to extract the date part from the filename
+    group_re: str or none
+        The regex used to read the groupname from the file
     sep: str or none
         The separator of the CSV file
+    skip: int or none
+        How many lines to skip when reading
     """
     path: str
     re: str
     date_column: str
     date_re: Optional[str]
-    grouping_key: Optional[str]
+    group_re: Optional[str]
+    group: Optional[str]
     sep: Optional[str] = ';'
-    available_files: Optional[pd.DataFrame] = None
-
+    skip: Optional[int] = 0
+    output_format: Optional[str] = None
     def list_physical_files(self) -> List[pl.Path]:
         """
         Find all physically available files with the current path and regexp
@@ -851,6 +857,7 @@ class NabelSource(DataSource):
     This subclass of :obj:`DataSource`represents a datasource located in a CSV file on the NABEL folder. One *file* 
     in this dataset corresponds to a day of measurements for that station.
     """
+    path: str
     re: str
     na: str
 
@@ -1073,6 +1080,8 @@ class SourceMapping():
         and returns a :obj:`pandas.DataFrame`.
         The mapping is done using an in-memory SQLlite database to allow SQL-like expression in the datasource
         configuration.
+        If the `grouping_key` attribute is set and the `group` attribute has a value, add this column unless
+        it already exists
 
         Parameters
         ----------
@@ -1121,6 +1130,7 @@ class SourceMapping():
         """
         data = self.source.read_file(date)
         data_mapped = self.map_file(data)
+
         affected = self.dest.write_file(data_mapped, temporary=temporary)
         return affected
 
@@ -1182,10 +1192,11 @@ class DataMappingFactory():
                 f'The data source type {source_type} does not exist')
 
     @staticmethod
-    def create_mapping(source: dict, dest: dict, coulmns: List[ColumnMapping]):
+    def create_mapping(source: dict, dest: dict, columns: List[dict]):
         sd = DataMappingFactory.create_data_source(source)
         dd = DataMappingFactory.create_data_source(dest)
-        return SourceMapping(source=sd, dest=dd, columns=coulmns)
+        cm = [DataMappingFactory.create_column_mapping(d) for d in columns]
+        return SourceMapping(source=sd, dest=dd, columns=cm)
 
     @staticmethod
     def read_config(path: Union[pl.Path, str], type='yaml') -> Dict[str, SourceMapping]:
@@ -1200,7 +1211,7 @@ class DataMappingFactory():
             loader: function = (lambda x: yaml.load(
                 x, Loader)) if type == 'yaml' else (lambda x: json.load(x))
             configs = loader(js)
-            mappings = {k: DataMappingFactory.create_mapping(it['source'], it['dest'], [ DataMappingFactory.create_column_mapping(i) for i in it['columns']]) for k, it in configs.items()}
+            mappings = {k: DataMappingFactory.create_mapping(it['source'], it['dest'],  it['columns']) for k, it in configs.items()}
             return mappings
 
 
@@ -1264,7 +1275,6 @@ def read_picarro_data(path: Union[str, pl.Path], tz:Union[str, pytz.tzinfo.BaseT
         'ALARM_STATUS': 'status'
     }
     data_map = data.rename(columns=col_map)[[l for l in col_map.values()]]
-    import pdb; pdb.set_trace()
     data_map['date'] = pd.to_datetime(data_map['timestamp'], unit='s')
     data_map['valid'] = data_map['status'].eq(0).astype(int)
     data_map['CO2_DRY_F'] = data_map['valid']
@@ -1300,12 +1310,14 @@ def read_new_climate_chamber_data(path: pl.Path, tz='CET') -> pd.DataFrame:
     dt = pd.read_excel(path)
     dt_new = dt.copy().rename(columns=name_mapping)
     dt_new['date'] = dt_new['time'].dt.tz_localize(tz='CET').dt.tz_convert('UTC')
-    dt_new['status'] = dt_new['status'].apply(lambda x: du.map_climate_chamber_status_code(du.ClimateChamberStatusCode(x)))
-    dt_new['T_F'] = dt_new['status']
-    dt_new['RH_F'] = dt_new['status']
+    flag = dt_new['status'].apply(lambda x: du.map_climate_chamber_status_code(du.ClimateChamberStatusCode(x)))
+    dt_new['T_F'] = flag
+    dt_new['RH_F'] = flag
+    dt_new['chamber_status'] = dt_new['status'].apply(lambda x: du.ClimateChamberStatusCode(x).name)
+    import pdb; pdb.set_trace()
     setpoints = dt_new['phase'].str.extract(soll_re).rename(columns={0:'T_soll', 1:'RH_soll', 2:'CO2_soll'}).astype(np.float64)
     dt_full = pd.concat([dt_new, setpoints], axis=1)
-    return dt_full.reset_index()[['date', 'T', 'T_F', 'RH', 'RH_F', 'CO2_soll', 'RH_soll', 'T_soll', 'CO2_DRY', 'CO2', 'H2O', 'calibration_mode']]
+    return dt_full.reset_index()[['date', 'T', 'T_F', 'RH', 'RH_F', 'CO2_soll', 'RH_soll', 'T_soll', 'CO2_DRY', 'CO2', 'H2O', 'chamber_status', 'calibration_mode']]
 
 def tz_to_epoch(series: pd.Series) -> pd.Series:
     """
