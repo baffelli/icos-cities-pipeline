@@ -412,8 +412,8 @@ If you set the `--import-all` flag, a bulk import will be triggered, which will 
 
 ## Import Reference sensor data (Picarro CRDS)
 The import is performed in two steps:
-- In a first step, the data is copied on a staging table, which corresponds to the old CarboSense *NABEL_DUE*, *EMPA_LAEG* etc... tables
-- In a second step, the data from these tables is consolidated into a single table called *picarro_data*, where the location of the data is identified by a location column in the table. 
+- ~~In a first step, the data is copied on a staging table, which corresponds to the old CarboSense *NABEL_DUE*, *EMPA_LAEG* etc... tables~~
+- ~~In a second step, the data from these tables is consolidated into a single table called *picarro_data*, where the location of the data is identified by a location column in the table.~~ 
 Below, I will explain how to run the various steps
 ### Import into staging tables
 The reference data from the Picarro CRDS are imported with the script [import_picarro_data.py](./CarbosenseDatabaseTools/import_picarro_data.py). 
@@ -428,7 +428,14 @@ To consolidate the data, the following script is run:
 python3  ./REF_measurement_processing/consolidate_reference_measurements.py ./config/reference_table_mapping.yaml
 ```
 
+### The new way:
+The instruction above refer to a more involved version that included staging tables for the different locations. You can also use a simpler way, by adding a `group` value to the destination configuration and calling this command:
 
+```
+python3  ./REF_measurement_processing/consolidate_reference_measurements.py ./config/reference_table_mapping.yaml DUE
+```
+
+This will run the import for the configuration item `DUE` in `reference_table_mapping.yaml`. Repeat this script 
 
 ## Import Climate Chamber Calibration
 In this section, we will give a short overwiew of the processes / files needed to run a climate chamber / pressure chamber calibration, as this process is more manual than the regular co-located calibration, where the data is automatically imported from the NABEL exports in `K:\Projects\Nabel`
@@ -436,23 +443,24 @@ In this section, we will give a short overwiew of the processes / files needed t
 - *Picarro*:
 When you run a climate chamber calibration, please place the **original** `.dat` files as exported from the Picarro instrument into a folder of your choosing (So far, this was `K:\Carbosense\Data\Klimakammer_Versuche_27022017_XXXXXXXX`). You can then import them into the database  using:
   ```
-  import_climate_chamber_data.py --picarro your_path your_regex
+  import_climate_chamber_data.py picarro your_path your_regex dest_table {dest_location}
   ```
-  Where `your_regex` is a regular expression / glob pattern to find all the files you want to import.
+  Where `your_regex` is a regular expression / glob pattern to find all the files you want to import, `dest_table` is the table where to copy the data to, `{dest_location}` is the optional *LocationName* key, for example if you want the data be copied to the *picarro_data* table, where each location has a different id to distinguish the picarros.
   Do not forget to add the picarro id to the `Deployment` table in the database. Before / after the calibration, run a picarro calibration
   and store the results in `G:\503_Themen\CarboSense`
 - *Climate Chamber*: export the data (as is) from the climate chamber control software and store it in a folder of your choosing. To import the data, use:
   ```
-  import_climate_chamber_data.py --climate your_path your_regex
+  import_climate_chamber_data.py climate your_path your_regex dest_table {dest_location}
   ```
 - *Pressure* as the climate chamber does not have a pressure measurement, ask Nabel to export the pressure data from the calibration lab (same floor as the climate chamber). Place the csv files in a folder and use the following command to import them: 
   ```
-  import_climate_chamber_data.py --pressure your_path your_regex
+  import_climate_chamber_data.py pressure your_path your_regex dest_table {dest_location}
   ```
-  You can specify the target table for importing the data using `--dest NAME`, where `NAME` is the name of the target database table.
-- For data exported from the calibration chamber built by Roger Vonbank (**DUE7** in the *Location* table), use `--climate-new path regex`.
-
-After importing the data, do not forget to consolidate the data using the second step described [above](#import-reference-sensor-data-picarro-crds)
+- For data exported from the calibration chamber built by Roger Vonbank (**DUE7** in the *Location* table), use: `climate-new path regex`.
+  ```
+  import_climate_chamber_data.py climate-new your_path your_regex dest_table {dest_location}
+  ```
+After importing the data, do not forget to consolidate the data using the second step described [above](#import-reference-sensor-data-picarro-crds). This is only needed if you import in a staging table.
 
 
 # Import Meteo data

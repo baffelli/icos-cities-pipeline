@@ -2,7 +2,7 @@ import logging
 from typing import Callable
 
 logger = logging
-logger.basicConfig(format='%(asctime)s - %(message)s', level=logging.DEBUG)
+logger.basicConfig(format='%(asctime)s - %(message)s', level=logging.INFO)
 
 
 def log_execution(fun:Callable) -> Callable:

@@ -422,9 +422,11 @@ def average_df(dt: pd.DataFrame, funs:Dict[str, Callable]={'max':np.max, 'min':n
         dt_grp = dt_ix.groupby(groups)
     else:
         dt_grp = dt_ix
-    dt_agg = dt_grp.resample(av).agg(fns_name)
-    new_names = ["_".join(c) for c in dt_agg.columns]
-    dt_agg.columns = new_names
+    #TODO fix when new numpy is released that can aggregate a resampled groupby
+    # dt_agg = [dt_grp.resample(av).agg(fn) for fn in funs.items()]
+    # new_names = ["_".join(c) for c in dt_agg.columns]
+    # dt_agg.columns = new_names
+    dt_agg = pd.concat([dt_grp.resample(av).agg(fn).add_suffix(f"_{nm}") for nm,fn in funs.items()], axis=1)
     return dt_agg
 
 def date_to_timestamp(dt: pd.DataFrame, dt_col:str, target_name:str='timestamp') -> pd.DataFrame:

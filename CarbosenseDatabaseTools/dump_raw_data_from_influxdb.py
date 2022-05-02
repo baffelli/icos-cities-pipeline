@@ -15,7 +15,7 @@ import sensorutils.db as db_utils
 import sensorutils.secrets as sec
 import sensorutils.files as fu
 import sensorutils.data as du
-
+import sensorutils.command_line as cu
 from datetime import datetime as dt
 from datetime import timedelta 
 import argparse as ap
@@ -41,7 +41,6 @@ def parse_range(input_range:str) -> Optional[List[int]]:
 		case m:
 			match m.groups():
 				case x, None, None:
-					import pdb; pdb.set_trace()
 					rg = [int(x)]
 				case x, _, y:
 					rg = list(range(int(x), int(y)))
@@ -52,7 +51,7 @@ def parse_range(input_range:str) -> Optional[List[int]]:
 #Read command line arguments
 
 parser = ap.ArgumentParser(description='Import raw data from decentlab into database')
-parser.add_argument('config', type=pl.Path, help='Path to the datasource mapping configuration file')
+parser.add_argument('config', type=cu.path_or_config, help='Path to the datasource mapping configuration file or a dict of config')
 parser.add_argument('sensor_type', type=str, choices=['HPP','LP8'], help='Sensor type to import')
 parser.add_argument('id', type=parse_range, nargs='?', help='Sensor id to import: either number or numeric range start-end')
 parser.add_argument('--import-all', default=False, action='store_true', help='Import all data or only incremental import?')
@@ -75,7 +74,7 @@ logger.info('Connecting to the DB')
 engine = db_utils.connect_to_metadata_db()
 db_metadata = db.MetaData(bind=engine)
 db_metadata.reflect()
-mapping = fu.DataMappingFactory.read_config(args.config)[args.sensor_type]
+mapping = fu.DataMappingFactory.create_mapping(**args.config[args.sensor_type])
 #Attach the client to the source and destination
 mapping.source.attach_db(client)
 mapping.dest.attach_db(engine)
