@@ -1,12 +1,12 @@
 HPP:
   source:
     type: influxDB
-    path: measurements
+    table: measurements
     date_from: 2017-01-01T00:00:00.000
     grouping_key: node
   dest:
     type: DB
-    path: hpp_data
+    table: hpp_data
     db_prefix: CarboSense_MySQL
     date_from: 2017-01-01T00:00:00.000
     grouping_key: SensorUnit_ID
@@ -33,12 +33,12 @@ HPP:
 LP8:
   source:
       type: influxDB
-      path: measurements
+      table: measurements
       date_from: 2017-01-01T00:00:00.000
       grouping_key: node
   dest:
       type: DB
-      path: lp8_data
+      table: lp8_data
       db_prefix: CarboSense_MySQL
       date_from: 2017-01-01T00:00:00.000
       grouping_key: SensorUnit_ID

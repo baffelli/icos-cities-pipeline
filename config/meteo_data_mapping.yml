@@ -1,0 +1,32 @@
+MCH:
+  source:
+    type: CSV
+    path: '/project/CarboSense/Data/METEO/MCH_DAILY_DATA_DUMP'
+    sep: ';'
+    re: 'VQEA33.*.csv'
+    date_column: 'Date'
+    date_re: 'VQEA33.(\d{8})'
+    group_re: 'Station/Location'
+    group: ''
+    date_format: '%Y%m%d'
+    date_from: 2022-01-01T00:00:00.000
+    na: '-'
+  dest:
+    type: DB
+    table: meteo_data
+    db_prefix: CarboSense_MySQL
+    date_from: 2022-01-01T00:00:00.000
+    #grouping_key: LocationName
+    date_column: 'CAST(FROM_UNIXTIME(timestamp) AS DATE)'
+    na: -999
+  columns:
+    - {name: LocationName,  source_name: 'Station/Location', datatype: str, na: Null}
+    - {name: timestamp,  source_name: Date, format: '%Y%m%d%H%M%S', tz: 'UTC', output_format: epoch, datatype: int, na: Null}
+    - {name: Radiance, source_name: 'gre000z0', datatype: float, na: Null}
+    - {name: Windspeed, source_name: 'fkl010z0', datatype: float, na: Null}
+    - {name: Winddirection, source_name: 'dkl010z0', datatype: float, na: Null}
+    - {name: Pressure, source_name: 'prestas0', datatype: float, na: Null}
+    - {name: Rain, source_name: 'rre150z0', datatype: float, na: Null}
+    - {name: Temperature, source_name: 'tre200s0', datatype: float, na: Null}
+    - {name: RH, source_name: 'ure200s0', datatype: float, na: Null}
+    - {name: Sunshine, source_name: 'sre000z0', datatype: float, na: Null}
