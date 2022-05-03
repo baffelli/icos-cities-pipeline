@@ -166,6 +166,7 @@ def get_available_measurements_on_db(engine: sqa.engine.Engine, station: str,
                                      date_column: sqa.orm.Query,
                                      grouping_column: Optional[str] = None,
                                      group_id: Optional[Union[str, int]] = None,
+                                     first_date: Optional[dt.datetime] = None
                                      ) -> pd.DataFrame:
     """
     List all available datasets (grouped by date) on the database for the (NABEL) station with the ID `station`.
@@ -174,7 +175,7 @@ def get_available_measurements_on_db(engine: sqa.engine.Engine, station: str,
     SELECT DISTINCT
     CAST(FROM_UNIXTIME({date_column} * %date_mult)) AS date
     FROM {station}
-    (WHERE {grouping_column} = %group_id )
+    (WHERE {grouping_column} = %group_id AND date > {first_date})
     ```
     Where the last part is optional and is used to only select a subgroup from the table.
     To connect to the database, this function assumes that a file called ``.my.cnf`` exists in the user home 
@@ -200,14 +201,19 @@ def get_available_measurements_on_db(engine: sqa.engine.Engine, station: str,
     table = sqa.Table(station, metadata, autoload=True)
     Session = sessionmaker(engine)
     session = Session()
-    dq = date_column.select_from(table).distinct()
+    dq = sqa.select(date_column).distinct().select_from(table)
     if group_id:
         stmt = dq.filter(table.columns[grouping_column] == group_id)
     else:
         stmt = dq
-    qs = stmt.with_session(session).statement.compile(
-        compile_kwargs={"literal_binds": True})
-    return pd.read_sql_query(str(qs), engine, parse_dates=['date'])
+
+    if first_date:
+        stmt_sq = stmt.subquery()
+        stmt_final = sqa.select(stmt_sq).filter(stmt_sq.c.date > first_date)
+    else:
+        stmt_final = stmt
+    qs = stmt_final.compile()
+    return pd.read_sql_query(qs, engine, parse_dates=['date']).reset_index()
 
 
 def get_all_picarro_files(station: str, rexp: str = '.*\.(csv|CSV)') -> List[pl.Path]:
@@ -443,13 +449,11 @@ class DataSource(ABC):
 
     Attributes
     ----------
-    path: str
-        The "path" of the datasource
     date_from: 
         The first date available on the datasource. Used to filter older datasets out
     """
     date_from: Optional[dt.datetime]
-    #path: Optional[str]
+
 
     @abstractmethod
     def list_files(self, *args, **kwargs) -> pd.DataFrame:
@@ -538,14 +542,14 @@ class DBSource(DatabaseSource):
             eng = db_utils.connect_to_metadata_db(group=self.db_prefix)
             self.attach_db(eng)
 
-    def date_expression(self) -> sqa.sql.text:
+    def date_expression(self, label='date') -> sqa.sql.column:
         """
         Safely transforms the :obj:`date_column` expression into
         a SQL statement for sqlalchemy. Used to construct the query in `list_files`
         """
-        return sqa.sql.text(f"{self.date_column}")
+        return sqa.sql.literal_column(f"{self.date_column}").label(label)
 
-    def date_group_query(self, label='date') -> sqa.orm.Query:
+    def date_group_query(self) -> sqa.orm.Query:
         """
         Creates a :obj:`sqlalchem.orm.Query` representation of 
         the query used to identify the files in the database backend
@@ -568,11 +572,12 @@ class DBSource(DatabaseSource):
             A dataframe with the available files
         """
         meas = get_available_measurements_on_db(
-            self.eng, self.table, date_column=self.date_group_query(), grouping_column=self.grouping_key, group_id=group)
+            self.eng, self.table, date_column=self.date_expression(), grouping_column=self.grouping_key, 
+            group_id=group, first_date=self.date_from)
         meas_full = meas
         if self.group:
             meas_full['group_id'] = self.group
-        return meas_full[meas['date'] > self.date_from]
+        return meas_full
 
     @check_db
     def read_file(self, date: dt.datetime, group:Optional[Union[str, int]]=None):
@@ -783,13 +788,20 @@ class CsvSource(DataSource):
     re: str
         The regular expression used to find the files
     date_re: str
-        If needed, use a regex to extract the date part from the filename
+        If needed, use a regex to extract the date part from the filename. The
+        regex should contain one group, which gives the date
+    date_format: str or none
+        A formatting string to interpret the date
     group_re: str or none
         The regex used to read the groupname from the file
     sep: str or none
         The separator of the CSV file
     skip: int or none
         How many lines to skip when reading
+    date_from: date
+        The first date to consider when listing files
+    na: str or float
+        The symbol to represent na
     """
     path: str
     re: str
@@ -800,8 +812,12 @@ class CsvSource(DataSource):
     sep: Optional[str] = ';'
     skip: Optional[int] = 0
     output_format: Optional[str] = None
+    date_format: Optional[str] = '%Y%m%d%H%M'
+    na: Optional[Union[str, float, int, List[str], List[int], List[float]]] = None
+
+
     def list_physical_files(self) -> List[pl.Path]:
-        """
+        """}
         Find all physically available files with the current path and regexp
         """
         return [f for f in pl.Path(self.path).glob(self.re)]
@@ -813,23 +829,35 @@ class CsvSource(DataSource):
         cmd = f"FNR==1 {{ for (i=1;i<=NF;i++) f[$i]=i; next }}{{match($(f[\"{self.date_column}\"]),/{self.date_re}/, dt); st=$(f[\"{self.grouping_key}\"]);a[0]=dt[0];a[1]=st;for (i=1;i<=NF;i++) k=(i>1 ? k FS : \"\") a[i]}}!seen[k]++{{print dt[0]\",\"st}}"
         return cmd
 
-    def get_keys_in_file(self, path: pl.Path) -> pd.DataFrame:
+    def parse_filename(self, fn: pl.Path) -> dt.datetime:
         """
-        Reads only the key columns from a csv file and
-        return their unique values
+        Parses the filename and returns a date using the `date_re` and (optionally)
+        `date_fmt`properties of this object
         """
-        dtypes = {}
-        new_names = {}
-        dtypes[self.date_column] = str
-        new_names[self.date_column] = "date"
-        if self.grouping_key:
-            dtypes[self.grouping_key] = str
-            new_names[self.grouping_key] = "group"
-        pre_keys = pd.read_csv(path, dtype=dtypes, sep=self.sep, usecols=dtypes.keys()).rename(columns=new_names)
-        keys = pre_keys.copy()
-        keys['path'] = path
-        keys['date'] = pd.to_datetime(keys['date'].str.extract(self.date_re, expand=False))
-        return keys.drop_duplicates()
+        matches  = re.match(self.date_re, fn.name)
+        match matches.groups():
+            case (str(x), ):
+                dt_obj = dt.datetime.strptime(x, self.date_format)
+                return dt_obj
+            case _:
+                raise ValueError(f"No matching date in {fn.name} with regex {self.date_re}")
+    # def get_keys_in_file(self, path: pl.Path) -> pd.DataFrame:
+    #     """
+    #     Reads only the key columns from a csv file and
+    #     return their unique values
+    #     """
+    #     dtypes = {}
+    #     new_names = {}
+    #     dtypes[self.date_column] = str
+    #     new_names[self.date_column] = "date"
+    #     if self.grouping_key:
+    #         dtypes[self.grouping_key] = str
+    #         new_names[self.grouping_key] = "group"
+    #     pre_keys = pd.read_csv(path, dtype=dtypes, sep=self.sep, usecols=dtypes.keys()).rename(columns=new_names)
+    #     keys = pre_keys.copy()
+    #     keys['path'] = path
+    #     keys['date'] = pd.to_datetime(keys['date'].str.extract(self.date_re, expand=False))
+    #     return keys.drop_duplicates()
         
 
     def list_files(self, *args, group:Optional[str]=None) -> pd.DataFrame:
@@ -837,16 +865,23 @@ class CsvSource(DataSource):
         List all files in this system
         """
         all_files = self.list_physical_files()
+        parsed = pd.DataFrame([{'path':pt, 'date':self.parse_filename(pt)} for pt in all_files])
         # def parse_with_awk(file: pl.Path) -> pd.DataFrame:
         #     print(f"Processing {file}")
         #     res = process_awk(file, self.awk_command(), F='";"').rename(columns={0:'date',1:'group'})
         #     # res_out = res.copy()
         #     # res_out['date'] = pd.to_datetime(res['date'], format='%Y%m%d')
         #     return 1
-        return pd.concat([self.get_keys_in_file(file) for file in all_files])
+        # return pd.concat([self.get_keys_in_file(file) for file in all_files])
+        return parsed[parsed['date'] > self.date_from]
+    
 
     def read_file(self, date: dt.datetime, group:Optional[str]=None) -> pd.DataFrame:
-        pass
+        fl = self.list_files()
+        fl_to_read  = fl[fl['date']==date]['path']
+        read_file = lambda x: pd.read_csv(x, na_values=self.na,  skiprows=self.skip, sep=self.sep)
+        files = [read_file(f) for f in fl_to_read]
+        return pd.concat(files, axis=0)
     
     def write_file(self, input:pd.DataFrame, temporary: bool = False) -> pd.DataFrame:
         pass
@@ -918,12 +953,33 @@ class NominalColumnMapping(ColumnMapping):
     source_name: str
 
     def make_mapper(self) -> Callable:
-        def rename(df: pd.DataFrame, eng:Optional[sqa.engine.Engine]) -> pd.DataFrame:
+        def rename(df: pd.DataFrame, eng:Optional[sqa.engine.Engine], md:Optional[sqa.MetaData]) -> pd.DataFrame:
             renamed = df.rename(columns={self.source_name:self.name})
             renamed_selected = renamed[self.name] if self.name in renamed.columns else pd.DataFrame()
             return renamed_selected
         return rename
 
+@dataclass 
+class DateColumnMapping(ColumnMapping):
+    """
+    Represents the mapping between text and a datetime
+    object. This is more flexible than a regular `ColumnMapping`
+    as SQLlite supports only a limited number of datetime functions
+    """
+    source_name: str
+    format: str
+    tz: str
+    output_format: str
+
+    def make_mapper(self) -> Callable:
+        def parse(df: pd.DataFrame, eng:Any, md:Any) -> pd.DataFrame:
+            parsed = pd.to_datetime(df[self.source_name], format=self.format).dt.tz_localize(self.tz).rename(self.name)
+            match self.output_format:
+                case "epoch":
+                    return tz_to_epoch(parsed)
+                case str(x):
+                    return parsed.dt.strftime(x)
+        return parse
 
 @dataclass
 class SQLColumnMapping(ColumnMapping):
@@ -959,11 +1015,9 @@ class SQLColumnMapping(ColumnMapping):
         Makes a mapping function that maps
         a column by using a SQL query
         """
-        def mapper(df: pd.DataFrame, eng:sqa.engine.Engine) -> pd.DataFrame:
+        def mapper(df: pd.DataFrame, eng:sqa.engine.Engine, md:sqa.MetaData) -> pd.DataFrame:
             tb = id_generator()
-            df.to_sql(tb, eng,  )
-            # Represent the source as sqlalchemy object
-            md = sqa.MetaData(bind=eng)
+            df.to_sql(tb, eng)
             md.reflect()
             # Apply mapping
             sq = sqa.select([self.make_query()]).select_from(md.tables[tb])
@@ -1102,7 +1156,7 @@ class SourceMapping():
         md = sqa.MetaData(bind=engine)
         md.reflect()
         #Map columns
-        mapped_cols = [s.make_mapper()(file, engine) for s,file,engine in itertools.product(self.columns,[file],[engine])]
+        mapped_cols = [s.make_mapper()(file, engine, md) for s,file,engine in itertools.product(self.columns,[file],[engine])]
         #Exclude empty
         valid_cols = [m for m in mapped_cols if not m.empty]
         mapped = pd.concat(valid_cols, axis=1)
@@ -1130,7 +1184,6 @@ class SourceMapping():
         """
         data = self.source.read_file(date)
         data_mapped = self.map_file(data)
-
         affected = self.dest.write_file(data_mapped, temporary=temporary)
         return affected
 
@@ -1162,15 +1215,15 @@ class DataMappingFactory():
         Creates a new :obj:`sensorutils.files.ColumnMapping` object from a dict.
         """
         em =  f"The input {d} is not a valid configuration of a ColumnMapping"
-        try:
-            if 'query' in d.keys():
+        match d:
+            case {'query': q, **rest} as d:
                 mp = SQLColumnMapping(**d)
-            elif 'source_name' in d.keys():
+            case {'source_name':n, 'output_format': q, **rest} as d:
+                mp = DateColumnMapping(**d)
+            case {'source_name': q, **rest} as d:
                 mp = NominalColumnMapping(**d)
-            else:
+            case _:
                 raise TypeError(em)
-        except TypeError as e:
-            raise TypeError(em)
         return mp
 
     @staticmethod
@@ -1314,7 +1367,6 @@ def read_new_climate_chamber_data(path: pl.Path, tz='CET') -> pd.DataFrame:
     dt_new['T_F'] = flag
     dt_new['RH_F'] = flag
     dt_new['chamber_status'] = dt_new['status'].apply(lambda x: du.ClimateChamberStatusCode(x).name)
-    import pdb; pdb.set_trace()
     setpoints = dt_new['phase'].str.extract(soll_re).rename(columns={0:'T_soll', 1:'RH_soll', 2:'CO2_soll'}).astype(np.float64)
     dt_full = pd.concat([dt_new, setpoints], axis=1)
     return dt_full.reset_index()[['date', 'T', 'T_F', 'RH', 'RH_F', 'CO2_soll', 'RH_soll', 'T_soll', 'CO2_DRY', 'CO2', 'H2O', 'chamber_status', 'calibration_mode']]

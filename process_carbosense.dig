@@ -22,19 +22,22 @@ _export:
 +meteo:
     +copy_meteoswiss:
         sh>: rsync -a amrs503@m2m.empa.ch:/data/meteoschweiz/*.csv ${data_folder}/METEO/MCH_DAILY_DATA_DUMP
+    +import_meteoswiss:
+        sh>: python3 MeteoSwissData4Carbosense/transfer_meteo_data.py ${base_folder}/config/meteo_data_mapping.yml '${data_folder}/METEO/MCH_DAILY_DATA_DUMP/' 'VQEA33*.csv'
 
 +raw_data:
     #Store a list of all sensors in a digdag environment variable
     +list_sensors:
         py>: digdagutils.list_sensors
         dest: 'sensors'
-    +show:
-        echo>: ${sensors['LP8']}
-    +hpp:
-        for_each>: 
-            i: ${sensors['LP8']}
+    +load:
+        for_each>:
+            sens: ['LP8', 'HPP']
         _do:
-            sh>: python3.10 ${base_folder}/CarbosenseDatabaseTools/dump_raw_data_from_influxdb.py ./config/co2_sensor_mapping.yml LP8 ${i}
+            for_each>: 
+                i: ${sensors[sens]}
+            _do:
+                sh>: python3.10 ${base_folder}/CarbosenseDatabaseTools/dump_raw_data_from_influxdb.py ${base_folder}/co2_sensor_mapping.yml ${sens} ${i}
 
 # #need to fix the links to the folder
 # +reference_data:

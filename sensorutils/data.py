@@ -437,6 +437,8 @@ def date_to_timestamp(dt: pd.DataFrame, dt_col:str, target_name:str='timestamp')
     dt[dt_col] = pd.to_datetime(dt[dt_col]).apply(lambda x: x.timestamp())
     return dt.rename(columns={dt_col:target_name})
 
+
+
 def influxql_results_to_df(res: influxdb.client.ResultSet) -> pd.DataFrame:
     """
     Converts an :obj:`influxdb.client.ResultSet` into a pandas.DataFrame
