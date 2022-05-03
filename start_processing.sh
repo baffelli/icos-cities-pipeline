@@ -6,7 +6,7 @@ cd /project/CarboSense/Software
 echo "$(date  --rfc-3339='seconds') [INFO] Moved into processing folder " >> $LOG
 eval "$(conda shell.bash hook)"
 echo "$(date  --rfc-3339='seconds') [INFO] Activating conda environment" >> $LOG
-conda activate carbosense-processing
+conda activate icos-cities
 echo "$(date  --rfc-3339='seconds') [INFO] Conda environment active" >> $LOG
 echo "$(date  --rfc-3339='seconds') [INFO] Conda environment used: $CONDA_PREFIX" >> $LOG
 echo "$(date  --rfc-3339='seconds') [INFO] Starting digdag" >> $LOG
