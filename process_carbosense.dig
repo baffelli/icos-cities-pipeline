@@ -37,7 +37,13 @@ _export:
             for_each>: 
                 i: ${sensors[sens]}
             _do:
-                sh>: python3.10 ${base_folder}/CarbosenseDatabaseTools/dump_raw_data_from_influxdb.py ${base_folder}/co2_sensor_mapping.yml ${sens} ${i}
+                sh>: python3.10 ${base_folder}/CarbosenseDatabaseTools/dump_raw_data_from_influxdb.py ${base_folder}/config/co2_sensor_mapping.yml ${sens} ${i}
+
+#Upload metadata to decentlab-db
++metadata:
+    +upload_metadata:
+        sh>: python3  ${base_folder}/UploadProcessedMeasurementsToDecentlabDB/importer.py
+
 
 # #need to fix the links to the folder
 # +reference_data:

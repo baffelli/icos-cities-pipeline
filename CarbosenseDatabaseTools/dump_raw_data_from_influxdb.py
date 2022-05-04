@@ -1,11 +1,7 @@
 """
 This script dumps the raw data from the decentlab DB into a database table
 """
-from multiprocessing.sharedctypes import Value
-from tkinter import E
-import influxdb
 import pandas as pd
-import pymysql
 import sqlalchemy.engine as eng
 import sqlalchemy as db 
 import itertools as ito
@@ -58,7 +54,7 @@ parser.add_argument('--import-all', default=False, action='store_true', help='Im
 parser.add_argument('--backfill', default=0, type=int, help='Backfill time for incremental import')
 
 args = parser.parse_args()
-
+logger.info('Started')
 #Default date
 default_date = dt.strptime('2017-01-01 00:00:00', '%Y-%m-%d %H:%M:%S') 
 #Mapping table <> sensor type
@@ -72,8 +68,8 @@ client = dl.decentlab_client(token=passw)
 #Connect to  target database
 logger.info('Connecting to the DB')
 engine = db_utils.connect_to_metadata_db()
-db_metadata = db.MetaData(bind=engine)
-db_metadata.reflect()
+#db_metadata = db.MetaData(bind=engine)
+#db_metadata.reflect()
 mapping = fu.DataMappingFactory.create_mapping(**args.config[args.sensor_type])
 #Attach the client to the source and destination
 mapping.source.attach_db(client)

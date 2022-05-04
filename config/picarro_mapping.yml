@@ -10,7 +10,7 @@ DUE:
     table: picarro_data
     db_prefix: CarboSense_MySQL
     date_from: 2018-01-01T00:00:00.000
-    date_column: timestamp
+    date_column: DATE(FROM_UNIXTIME(timestamp))
     grouping_key: LocationName
     group: 'DUE1'
     na: .NAN
@@ -36,7 +36,7 @@ LAEG:
     table: laegern_1min_cal
     date_from: 2018-01-01T00:00:00.000
     na: NULL
-    date_column:  timed / 1000
+    date_column:  DATE(FROM_UNIXTIME(timed / 1000))
   dest:
     type: DB
     table: EMPA_LAEG

@@ -213,6 +213,7 @@ def get_available_measurements_on_db(engine: sqa.engine.Engine, station: str,
     else:
         stmt_final = stmt
     qs = stmt_final.compile()
+    logger.info(f'The query is {qs}')
     return pd.read_sql_query(qs, engine, parse_dates=['date']).reset_index()
 
 
@@ -695,10 +696,10 @@ class InfluxdbSource(DatabaseSource):
             *
             FROM
             (
-            SELECT COUNT("value") FROM "{self.table}" WHERE {gq} sensor =~ /senseair|sensirion|battery|calibration/ AND time > '2017-01-01 00:00:00' GROUP BY time(1d)
+            SELECT FIRST("value") AS value FROM "{self.table}" WHERE {gq} sensor =~ /senseair|sensirion|battery|calibration/ AND time > '{self.date_from}' GROUP BY time(1d)
             )
-            WHERE count > 0
             """
+            logger.info(f"The influxDB Query is: {q}")
             # Send query
             fs = self.eng.query(q, epoch='s', params={
                                 f"{self.grouping_key}": group})
