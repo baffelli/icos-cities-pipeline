@@ -11,9 +11,16 @@ import pymysql
 import influxdb
 from watchdog.observers import Observer
 from watchdog.events import PatternMatchingEventHandler
-import mysql.connector as mariadb
+import sqlalchemy as sqa
 
-PATH = os.environ.get('FTP_DIR', './')
+import sensorutils.db as dbu
+import sensorutils.secrets as sec
+
+import argparse as ap
+parser = ap.ArgumentParser(description="Export ICOS-Cities metadata to influxdb")
+
+
+
 
 loc_query = '''
              SELECT *
@@ -32,12 +39,12 @@ loc_query = '''
                        1 as deployed
                 FROM Deployment AS d
                 LEFT JOIN `Location` AS l ON d.LocationName = l.LocationName AND d.Date_UTC_from > l.Date_UTC_from
-                WHERE SensorUnit_ID = {dev}
+                WHERE SensorUnit_ID = :s1
 
                 UNION
 
                 SELECT SensorUnit_ID,
-                       d.Date_UTC_to as ts,
+                       LEAST(current_timestamp(), d.Date_UTC_to) as ts,
                        d.LocationName as LocationName,
                        Remark,
                        HeightAboveGround,
@@ -50,7 +57,7 @@ loc_query = '''
                        0 as deployed
                 FROM Deployment AS d
                 LEFT JOIN `Location` AS l ON d.LocationName = l.LocationName AND d.Date_UTC_from > l.Date_UTC_from
-                WHERE SensorUnit_ID = {dev}
+                WHERE SensorUnit_ID = :s1 AND d.Date_UTC_to < current_timestamp()
 
                 UNION
 
@@ -67,7 +74,7 @@ loc_query = '''
                              NULL,
                              0 as deployed
                 FROM SensorExclusionPeriods
-                WHERE SensorUnit_ID = {dev}
+                WHERE SensorUnit_ID = :s1
 
                 UNION
 
@@ -84,7 +91,7 @@ loc_query = '''
                              NULL,
                              1 as deployed
                 FROM SensorExclusionPeriods
-                WHERE SensorUnit_ID = {dev}) r
+                WHERE SensorUnit_ID = :s1) r
              ORDER BY ts'''
 
 
@@ -112,46 +119,18 @@ def get_entry(r):
             'fields': {'value': float(r['deployed'])}}
 
 
-def importsql():
-    # print("importing from %s ..." % path)
-    #time.sleep(10)
-    con = pymysql.connect(read_default_file="~/.my.cnf", read_default_group="CarboSense_MySQL",
-                          charset='utf8mb4',
-                          cursorclass=pymysql.cursors.DictCursor)
-    try:
-        # if path.endswith('.gz'):
-        #     openf = gzip.open
-        # elif path.endswith('.sql'):
-        #     openf = open
-        # else:
-        #     print("not supported file: " + path)
-        #     return
+def importsql(eng: sqa.engine.Engine):
 
-        # with openf(path, 'rb') as f:
-        #     sql = f.read()
+    #Get all deployed sensors
+    with eng.connect() as con:
+        all_sens = con.execute(sqa.text('SELECT DISTINCT(SensorUnit_ID) AS SensorUnit_ID FROM Deployment ORDER BY SensorUnit_ID'))
 
-        # with con.cursor() as cur:
-        #     cur.execute(sql)
-        #     con.commit()
+    dps = []
+    with eng.connect() as con:
+        dts = [con.execute(sqa.text(loc_query),  s1=sid) for sid, in all_sens]
+        dps = [get_entry(row._asdict()) for r in dts if (row := r.fetchone())]
 
-        with con.cursor() as cur:
-            cur.execute('SELECT DISTINCT(SensorUnit_ID) '
-                        'FROM Deployment '
-                        'ORDER BY SensorUnit_ID')
-            devs = cur.fetchall()
-
-        dps = []
-        for dev in devs:
-            with con.cursor() as cur:
-                cur.execute(loc_query.format(dev=dev['SensorUnit_ID']))
-                while True:
-                    r = cur.fetchone()
-                    if r is None:
-                        break
-                    dps.append(get_entry(r))
-    finally:
-        con.close()
-    passw = "eyJrIjoiN2lSN1VJQjg1OUkwOWJyeTZUUFBiSVNDRjh5WGxGZTMiLCJuIjoic2ltb25lLmJhZmZlbGxpQGVtcGEuY2giLCJpZCI6MX0="
+    passw = sec.get_key('decentlab')
     client = influxdb.InfluxDBClient("swiss.co2.live",
                                      443,
                                      None,
@@ -164,33 +143,14 @@ def importsql():
     points = [dp for dp
               in dps
               if dp['time'] != 4102444800 * 1000]
+    import pdb; pdb.set_trace()
     print("writing %d points ..." % len(points))
     client.write_points(points, time_precision='ms')
     print("done")
 
 
-if __name__ == "__main__":
-    import sys
-    con = pymysql.connect(read_default_file="~/.my.cnf", read_default_group="CarboSense_MySQL")
-    importsql()
-    sys.exit()
+args = parser.parse_args()
+eng = dbu.connect_to_metadata_db()
 
-    running = []
-    event_handler = PatternMatchingEventHandler(patterns=['*.sql.gz',
-                                                          '*.sql'],
-                                                ignore_directories=True)
-    event_handler.on_created = lambda e: (print(e),
-                                          Thread(target=importsql,
-                                                 args=(e.src_path,)).start())
-    observer = Observer()
-    observer.schedule(event_handler, path=PATH, recursive=False)
-    print("starting observer ...")
-    observer.start()
-    try:
-        while True:
-            time.sleep(10)
-    except KeyboardInterrupt:
-        observer.stop()
-    observer.join()
-    for r in running:
-        r.join()
+importsql(eng)
+  
