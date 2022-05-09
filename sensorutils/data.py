@@ -6,6 +6,8 @@ can be persisted in a format that can be easily exchanged with other systems.
 from curses import meta
 import enum
 import imp
+from statistics import correlation
+from this import d
 from typing import Callable, Iterable, Union, List, Optional, Pattern, Dict, Set
 from dataclasses import dataclass, field
 import influxdb
@@ -19,6 +21,7 @@ import pathlib as pl
 import statsmodels.formula.api as smf
 import openpyxl as opx
 from openpyxl.worksheet.worksheet import Cell
+import statsmodels as sm
 from statsmodels.regression import linear_model
 from statsmodels import tools as sttools
 
@@ -168,7 +171,28 @@ class CalibrationParameters(Base):
         Save the calibration parameters as a dict
         """
         return (self.__dict__)
+    
+    def to_statsmodel(self) -> sm.regression.linear_model.RegressionResultsWrapper:
+        n = 10
+        exog = pd.DataFrame(0, index = np.arange(0, n), columns = self.regressors(), dtype=np.float64, )
+        endog = pd.DataFrame(0, index = np.arange(0, n), columns = [self.species],  dtype=np.float64)
+        mod_obj = linear_model.OLS(endog=endog,exog=exog)
+        params = pd.Series({s.parameter:s.value for s in self.parameters})
+        fit_obj = linear_model.RegressionResults(model=mod_obj, params=params)
+        return fit_obj
+    
+    def regressors(self) -> List[str]:
+        return [s.parameter for s in self.parameters]
 
+@dataclass
+class ModelFitPerformance(Base):
+    __tablename__ = "calibration_performance"
+    __sa_dataclass_metadata_key__ = "sa"
+    id: int = Column(Integer, primary_key=True, autoincrement=True)
+    model_id: int = Column(ForeignKey("calibration_parameters.id"))
+    rmse: float = Column(Float)
+    bias: float = Column(Float)
+    correlation: float = Column(Float)
 
 def cells_to_df(cells: Iterable[Cell]) -> pd.DataFrame:
     return [(c.value, c.row, c.column) for c in cells]

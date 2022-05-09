@@ -72,9 +72,9 @@ def rh_to_ah(rh: float, t:float) -> float:
     C = 2.16679
     return C * pw / t * rh / 100
 
-def rh_to_molar_mixing(rh:float, t:float, p:float):
+def rh_to_molar_mixing(rh:float, t:float, p:float) -> float:
     """
-    Conver the give relative humidity (in 100%)
+    Convert the give relative humidity (in 100%)
     to a molar mixing ratio (in ppm)
     Parameters
     ----------
@@ -85,7 +85,14 @@ def rh_to_molar_mixing(rh:float, t:float, p:float):
     p: float
         Pressure in Pa
     """
-    return saturation_vapor_pressure(t) * rh / 100  * 1/p 
+    return saturation_vapor_pressure(t) * rh / 100  * 1/p
+
+def molar_mixing_to_rh(ppm: float, t: float, p: float) -> float:
+    """
+    Convert the given molar mixing ratio to
+    relative humidity at the given pressure and temperature
+    """
+    return ppm / saturation_vapor_pressure(t)  * p
 
 def dry_to_wet_molar_mixing(conc:float, H2O:float) -> float:
     """
