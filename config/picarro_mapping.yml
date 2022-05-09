@@ -3,13 +3,14 @@ DUE:
     type: NABEL
     re: '((DUE Test .*)|(CarboSens.*)|(DUE O3 .*))\.(csv|CSV)'
     path: DUE
-    date_from: 2018-01-01T00:00:00.000
+    date_from: 2022-01-01T00:00:00.000
     na: ''
+
   dest:
     type: DB
     table: picarro_data
     db_prefix: CarboSense_MySQL
-    date_from: 2018-01-01T00:00:00.000
+    date_from: 2022-01-01T00:00:00.000
     date_column: DATE(FROM_UNIXTIME(timestamp))
     grouping_key: LocationName
     group: 'DUE1'
@@ -34,14 +35,14 @@ LAEG:
     type: DB
     db_prefix: empaGSN
     table: laegern_1min_cal
-    date_from: 2018-01-01T00:00:00.000
+    date_from: 2022-01-01T00:00:00.000
     na: NULL
     date_column:  DATE(FROM_UNIXTIME(timed / 1000))
   dest:
     type: DB
     table: EMPA_LAEG
     db_prefix: CarboSense_MySQL
-    date_from: 2018-01-01T00:00:00.000
+    date_from: 2022-01-01T00:00:00.000
     na: -999
     date_column: timestamp
   columns:

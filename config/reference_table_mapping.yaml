@@ -110,7 +110,7 @@ DUE2:
     - {name: T, query: 'IF(T_F=1 OR T <> -999, T, NULL)', datatype: float, na: NULL}
     - {name: RH, query: 'IF(RH_F=1 OR T <> -999, RH, NULL)', datatype: float, na: NULL}
     - {name: pressure, query: 'IF(pressure_F=1 OR pressure <> -999, pressure, NULL)', datatype: float, na: NULL}
-DUE3:
+DUE4:
   source: 
     type: DB
     path: 'PressureChamber_01_DUE'
@@ -132,6 +132,32 @@ DUE3:
     - {name: H2O_F, query: 'H2O_F', datatype: int, na: -999}
     - {name: T, query: 'IF(T_F=1 OR T <> -999, T, NULL)', datatype: float, na: NULL}
     - {name: pressure, query: 'IF(pressure_F=1 OR pressure <> -999, pressure, NULL)', datatype: float, na: NULL}
+DUE7:
+  source: 
+    type: DB
+    path: 'climate_chamber'
+    date_from: 2022-01-01 00:00:00
+    date_column: timestamp
+  dest:
+    type: DB
+    path: 'picarro_data'
+    date_from: 2017-01-01 00:00:00
+    date_column: timestamp
+    grouping_key: LocationName
+  columns:
+    - {name: timestamp, query: 'timestamp', datatype: int, na: NULL}
+    - {name: CO2, query: 'IF(CO2_F=1 OR CO2 <> -999, CO2, NULL)', datatype: float, na: NULL}
+    - {name: CO2_F, query: 'CO2_F', datatype: int, na: -999}
+    - {name: CO2_DRY, query: 'IF(CO2_DRY_F=1 OR CO2_DRY <> -999, CO2_DRY, NULL)', datatype: float, na: NULL}
+    - {name: CO2_DRY_F, query: 'CO2_DRY_F', datatype: int, na: -999}
+    - {name: H2O, query: 'IF(H2O_F=1 OR H2O <> -999, H2O, NULL)', datatype: float, na: NULL}
+    - {name: H2O_F, query: 'H2O_F', datatype: int, na: -999}
+    - {name: T, query: 'IF(T_F=1 OR T <> -999, T, NULL)', datatype: float, na: NULL}
+    - {name: RH, query: 'IF(RH_F=1 OR T <> -999, T, NULL)', datatype: float, na: NULL}
+    - {name: T_F, query: 'T_F', datatype: int, na: -999}
+    - {name: RH_F, query: 'RH_F', datatype: int, na: -999}
+    - {name: cal_phase, query: 'calibration_mode', datatype: str, na: -999}
+
 LAEG:
   source: 
     type: DB
