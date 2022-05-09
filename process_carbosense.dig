@@ -6,6 +6,10 @@ _export:
     data_folder: '${proj_folder}/Data'
     reference_config: '${base_folder}/config/picarro_mapping.yml'
 
++setup:
+    #Disable python breakpoints
+    sh>: export PYTHONBREAKPOINT=0
+    
 #Load configuration files
 +load_configs:
     +raw_sources:

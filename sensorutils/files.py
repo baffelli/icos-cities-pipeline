@@ -1,5 +1,6 @@
 from argparse import ArgumentError
 import imp
+from pickle import NONE
 from sklearn.exceptions import DataConversionWarning
 from yaml import Loader
 from sys import intern
@@ -162,9 +163,9 @@ def format_nabel_date(date: dt.datetime) -> str:
     return dt.datetime.strftime(date, '%y%m%d')
 
 
-def get_available_measurements_on_db(engine: sqa.engine.Engine, station: str,
-                                     date_column: sqa.orm.Query,
-                                     grouping_column: Optional[str] = None,
+def get_available_measurements_on_db(engine: sqa.engine.Engine, md: sqa.MetaData, station: str,
+                                     date_column: sqa.sql.expression.ColumnElement,
+                                     grouping_column: Optional[sqa.sql.expression.ColumnElement] = None,
                                      group_id: Optional[Union[str, int]] = None,
                                      first_date: Optional[dt.datetime] = None
                                      ) -> pd.DataFrame:
@@ -173,7 +174,8 @@ def get_available_measurements_on_db(engine: sqa.engine.Engine, station: str,
     To determine the available files, the following query is used:
     ```
     SELECT DISTINCT
-    CAST(FROM_UNIXTIME({date_column} * %date_mult)) AS date
+    CAST(FROM_UNIXTIME({date_column} * %date_mult)) AS date,
+    {grouping_column}
     FROM {station}
     (WHERE {grouping_column} = %group_id AND date > {first_date})
     ```
@@ -182,6 +184,8 @@ def get_available_measurements_on_db(engine: sqa.engine.Engine, station: str,
     directory. For more information, see :obj:`db`
     Parameters
     ----------
+    engine: sqlalchemy.engine.Engine
+    md: sqlalchemy.Metadata
     station: str
         The name of the station, which corresponds to the database table of interest
     date_column: sqlalchemy.orm.Query
@@ -197,16 +201,13 @@ def get_available_measurements_on_db(engine: sqa.engine.Engine, station: str,
         A sqlalchemy engine
 
     """
-    metadata = sqa.MetaData(bind=engine)
-    table = sqa.Table(station, metadata, autoload=True)
-    Session = sessionmaker(engine)
-    session = Session()
-    dq = sqa.select(date_column).distinct().select_from(table)
-    if group_id:
-        stmt = dq.filter(table.columns[grouping_column] == group_id)
+    table = sqa.Table(station, md, autoload=True)
+    cols = [date_column, grouping_column] if grouping_column is not None else [date_column]
+    dq = sqa.select(*cols).distinct().select_from(table)
+    if group_id is not None and grouping_column is not None:
+        stmt = dq.filter(grouping_column == group_id)
     else:
         stmt = dq
-
     if first_date:
         stmt_sq = stmt.subquery()
         stmt_final = sqa.select(stmt_sq).filter(stmt_sq.c.date > first_date)
@@ -476,6 +477,19 @@ class DatabaseSource(DataSource):
     Represents a generic DataSource stored in a database. Additionally
     to the usual properties, it also keeps a database connection object and provides
     a method to connect to the db at runtime by passing the connection object.
+    Attributes:
+    -----------
+    table: str 
+        The database table where the data is located
+    date_column: str
+        A column name or SQL expression to generate a date used to group the dats
+    grouping_key: str or none
+        A column name or SQL expression used to generate an additional grouping, eg if
+        data for every value of `date_column` consists of several subgroups and only certain of those groups
+        should be transfered
+    group: str or none
+        The value of the `grouping_key` group that should be used 
+        
     """
     table: str
     date_column: str
@@ -513,16 +527,11 @@ class DBSource(DatabaseSource):
 
     Attributes
     ----------
-    db_prefix: str
+    db_prefix: str or none
         The group of the mariadb options files used to connect to the specific DB. See :obj:`db.connect_to_metadata_db` for more information.
-    date_column: str
-        The database column representing the date (as a unix timestamp) or a SQL expression returning the unix timestamp of the date
     na: str
         A string representing missing values
-    group: str
-        A group id (to handle tables with multiple "files", e.g multiple sensors in a single table)
-    grouping_key: str
-        The column name used to generate the grouping key
+    For the other attributes, see :obj:`DataSource` or :obj:`DatabaseSource`.
     """
     db_prefix: Optional[str] = None
     na: Optional[str | int] = None
@@ -543,12 +552,20 @@ class DBSource(DatabaseSource):
             eng = db_utils.connect_to_metadata_db(group=self.db_prefix)
             self.attach_db(eng)
 
-    def date_expression(self, label='date') -> sqa.sql.column:
+    def date_expression(self, label='date') -> sqa.sql.ColumnElement:
         """
         Safely transforms the :obj:`date_column` expression into
         a SQL statement for sqlalchemy. Used to construct the query in `list_files`
         """
         return sqa.sql.literal_column(f"{self.date_column}").label(label)
+
+    def group_expression(self, label='group') -> Optional[sqa.sql.ColumnElement]:
+        """
+        Safely transforms the :obj:`grouping_key` expression into
+        a SQL statement for sqlalchemy. Used to construct the query in `list_files`
+        """
+        return (sqa.sql.literal_column(f"{self.grouping_key}").label(label) if self.grouping_key else None)
+
 
     def date_group_query(self) -> sqa.orm.Query:
         """
@@ -563,7 +580,7 @@ class DBSource(DatabaseSource):
         return sqa.orm.Query(sqa.cast(sqa.func.from_unixtime(self.date_expression()), sqa.DATE).label(label))
 
     @check_db
-    def list_files(self, group=None, *args) -> pd.DataFrame:
+    def list_files(self, group:str=None, *args) -> pd.DataFrame:
         """
         Lists all available *files* on the data source. One *file* is assumed to be the set of all measurements sharing the same date.
 
@@ -573,11 +590,12 @@ class DBSource(DatabaseSource):
             A dataframe with the available files
         """
         meas = get_available_measurements_on_db(
-            self.eng, self.table, date_column=self.date_expression(), grouping_column=self.grouping_key, 
-            group_id=group, first_date=self.date_from)
+            self.eng, self.metadata, self.table, date_column=self.date_expression(), grouping_column=self.group_expression(), 
+            group_id=(self.group or group), first_date=self.date_from)
         meas_full = meas
         if self.group:
             meas_full['group_id'] = self.group
+        meas_full['path'] = self.table
         return meas_full
 
     @check_db
@@ -954,7 +972,7 @@ class NominalColumnMapping(ColumnMapping):
     source_name: str
 
     def make_mapper(self) -> Callable:
-        def rename(df: pd.DataFrame, eng:Optional[sqa.engine.Engine], md:Optional[sqa.MetaData]) -> pd.DataFrame:
+        def rename(df: pd.DataFrame, eng:Optional[sqa.engine.Engine], tb:Optional[sqa.Table]) -> pd.DataFrame:
             renamed = df.rename(columns={self.source_name:self.name})
             renamed_selected = renamed[self.name] if self.name in renamed.columns else pd.DataFrame()
             return renamed_selected
@@ -973,7 +991,7 @@ class DateColumnMapping(ColumnMapping):
     output_format: str
 
     def make_mapper(self) -> Callable:
-        def parse(df: pd.DataFrame, eng:Any, md:Any) -> pd.DataFrame:
+        def parse(df: pd.DataFrame, eng:Any, tb:Any) -> pd.DataFrame:
             parsed = pd.to_datetime(df[self.source_name], format=self.format).dt.tz_localize(self.tz).rename(self.name)
             match self.output_format:
                 case "epoch":
@@ -1016,12 +1034,9 @@ class SQLColumnMapping(ColumnMapping):
         Makes a mapping function that maps
         a column by using a SQL query
         """
-        def mapper(df: pd.DataFrame, eng:sqa.engine.Engine, md:sqa.MetaData) -> pd.DataFrame:
-            tb = id_generator()
-            df.to_sql(tb, eng)
-            md.reflect()
+        def mapper(df: pd.DataFrame, eng:Optional[sqa.engine.Engine], tb:Optional[sqa.Table]) -> pd.DataFrame:
             # Apply mapping
-            sq = sqa.select([self.make_query()]).select_from(md.tables[tb])
+            sq = sqa.select([self.make_query()]).select_from(tb)
             mapped = pd.read_sql(sq, eng)
             return mapped
         return mapper
@@ -1056,19 +1071,21 @@ class SourceMapping():
         Connect all dbs using the passed arguments `source_eng` and `dest_eng` or
         the specified connection configuration group name as given by `db_prefix`.
         """
-        def connect_db(ds:DatabaseSource, eng:Optional[Union[sqa.engine.Engine, influxdb.client.InfluxDBClient]]=None) ->DatabaseSource:
-            if isinstance(ds, DatabaseSource):
-                if eng:
-                    ds.attach_db(eng)
-            if isinstance(ds, DBSource):
-                if ds.db_prefix:
-                    ds.attach_db_from_config()
-            return ds
+        def connect_db(ds: DatabaseSource, eng:Optional[Union[sqa.engine.Engine, influxdb.client.InfluxDBClient]]=None) -> DatabaseSource:
+            match ds, eng:
+                case DBSource() as dbs, sqa.engine.Engine() as eng:
+                    dbs.attach_db(eng)
+                    return dbs
+                case InfluxdbSource() as ifs, influxdb.client.InfluxDBClient() as eng:
+                    ifs.attach_db(eng)
+                    return ifs
+                case _, _:
+                    raise ValueError(f'The arguments {ds} and {eng} are not valid DatabaseSource and database engines')
+        import pdb; pdb.set_trace()
+        self.source = connect_db(self.source, source_eng)
+        self.dest = connect_db(self.dest, dest_eng)
 
-        self.source = connect_db(self.source)
-        self.dest = connect_db(self.dest)
-
-    def list_files_missing_in_dest(self, group=None, all: bool = False, backfill: int = 3) -> List[dt.datetime]:
+    def list_files_missing_in_dest(self, group=None, all: bool = False, backfill: int = 3) -> List[Tuple[dt.datetime, Optional[pl.Path]]]:
         """
         Lists the files available in the source that are missing in the destination. Using the `backfill` parameter,
         a certain number of files in the past (with respect to current date) is added to the list
@@ -1081,8 +1098,8 @@ class SourceMapping():
             If set to `True`, list all files as missing. Useful for reimporting all data
         Returns
         -------
-        pandas.DataFrame   
-            A :obj:`pandas.DataFrame` object with dates and paths of the missing files
+        List   
+            A list of tuples (date, path)
         """
         source_files = self.source.list_files(group=group).sort_values('date').drop_duplicates()
         destination_files = self.dest.list_files(group=group).sort_values('date').drop_duplicates()
@@ -1097,6 +1114,7 @@ class SourceMapping():
                              ).union(backfill_dates) if not all else source_dates
         else:
             missing_dates = []
+        #files_to_import = source_files[source_files['date'].isin(missing_dates)]
         return sorted(missing_dates)
 
     def mapping_to_query(self) -> List[sqa.sql.text]:
@@ -1152,12 +1170,20 @@ class SourceMapping():
         # and write to a table
         engine = sqa.engine.create_engine('sqlite://', echo=False)
         #Store in engine
-        file.to_sql("source", engine)
+        tb_id = id_generator()
+        file.to_sql(tb_id, engine)
         # Represent the source as sqlalchemy object
         md = sqa.MetaData(bind=engine)
         md.reflect()
+        tb = md.tables[tb_id]
+        import pdb; pdb.set_trace()
         #Map columns
-        mapped_cols = [s.make_mapper()(file, engine, md) for s,file,engine in itertools.product(self.columns,[file],[engine])]
+        def call_mapper(mapper, file, engine, tb) -> Optional[pd.DataFrame]:
+            try:
+                return mapper(file, engine, tb)
+            except sqa.exc.OperationalError as e:
+                return pd.DataFrame() 
+        mapped_cols = [call_mapper(s.make_mapper(), file, engine, tb) for s in self.columns]
         #Exclude empty
         valid_cols = [m for m in mapped_cols if not m.empty]
         mapped = pd.concat(valid_cols, axis=1)
@@ -1184,6 +1210,7 @@ class SourceMapping():
             A dataframe of the affected rows. Useful for testing / debugging. 
         """
         data = self.source.read_file(date)
+        import pdb; pdb.set_trace()
         data_mapped = self.map_file(data)
         affected = self.dest.write_file(data_mapped, temporary=temporary)
         return affected
