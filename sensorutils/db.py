@@ -2,9 +2,11 @@
 import sqlalchemy.engine as eng
 import sqlalchemy as db
 import sqlalchemy.orm as orm
-from typing import Callable
+import sqlalchemy as sqa
+from typing import Callable, Union
 import pandas as pd
 from .log import logger
+import datetime as dt
 """
 This module contains function used to interact with the metadata DB,
 """
@@ -61,7 +63,14 @@ def connect_to_metadata_db(group: str = 'CarboSense_MySQL', conf_path: str = "~/
             sqlachemy.engine.Engine
     """
     logger.debug(f'Attempting connection to db using config file {conf_path} and configuration group {group}')
-    engine = eng.create_engine('mysql+pymysql://', connect_args={'read_default_file': conf_path, 'read_default_group': group})
+    engine = eng.create_engine('mariadb+pymysql://', connect_args={'read_default_file': conf_path, 'read_default_group': group})
+    @sqa.event.listens_for(engine, "connect", insert=True)
+    def connect(dbapi_connection, connection_record):
+        cursor = dbapi_connection.cursor()
+        tz = '+00:00'
+        logger.info(f'Setting session timezone to {tz}')
+        cursor.execute("SET sql_mode = 'ANSI_QUOTES'")
+        cursor.execute(f"SET time_zone = '{tz}'")
     logger.debug(f'Succesfully connected to db')
     return engine
 
@@ -83,3 +92,18 @@ def list_all_sensor_ids(type: str, eng: eng.Engine, id_col:str = 'SensorUnit_ID'
     final_q = session.query(tot_q).join(dep_q, dep_q.columns[id_col] == tot_q.columns[id_col])
     cq = final_q.with_session(session).statement.compile(compile_kwargs={"literal_binds": True})
     return pd.read_sql_query(str(cq), eng)
+
+
+def get_serialnumber(eng: eng.Engine, md: sqa.MetaData, id: Union[int, str], type: str, current:bool=  True, serial_col: str =  'Serialnumber', id_col:str = 'SensorUnit_ID', type_col: str = 'Type', sensors_table: str = 'Sensors', dep_table: str = 'Deployment') -> str:
+    """
+    Get the current sensor serialnumber for the given sensor type
+    """
+    sens_tb = md.tables[sensors_table]
+    st = sqa.select(sens_tb.c[serial_col]).filter((sens_tb.c[id_col] == id) & (sens_tb.c[type_col] == type) & (sens_tb.c['Date_UTC_to'] > dt.datetime.now()))
+    with eng.connect() as con:
+        res = con.execute(st.compile()).fetchall()
+    sn, = res[0]
+    return sn
+
+
+    

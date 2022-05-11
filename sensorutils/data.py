@@ -37,7 +37,7 @@ from statsmodels.regression import linear_model
 from . import base
 
 from . import files as fu
-
+from . import models as mods
 """
 Represents the missing (or unset) time in ICOS-cities database
 """
@@ -74,6 +74,7 @@ class AvailableSensors(enum.Enum):
     """
     HPP:str = "HPP"
     LP8:str = "LP8"
+    PICARRO:str = "Picarro"
 
 
 @dataclass
@@ -90,105 +91,6 @@ class CalType(Enum):
 
 
 
-@dataclass
-class CalibrationParameter(base.Base):
-    """
-    Represents a single component (parameter)
-    of a calibration model for the model with id `model_id` .
-    This classed is used in combination with SQLalchemy to keep the calibration
-    parameters synchronised in the db
-
-    Attributes
-    ----------
-    id: int
-        The unique id of the parameter
-    model_id: int
-        The id of the model
-    parameter: str
-        The name of the parameter (= feature) for the coefficient
-    value: float
-        The value of the coefficient
-    """
-    __tablename__ = "model_parameter"
-    __sa_dataclass_metadata_key__ = "sa"
-    # id: int = field(init=False, metadata={"sa": Column(Integer, primary_key=True)})
-    # #model_id: int = field(init=False, metadata={"sa": Column(ForeignKey("calibration_parameters.id"))})
-    # parameter: str = field(init=False, metadata={"sa": Column(String(64), primary_key=True)})
-    # value: float = field(init=False, metadata={"sa": Column(Float())})
-    id: int = Column(Integer, primary_key=True)
-    model_id: int = Column(ForeignKey("calibration_parameters.id"))
-    parameter: str = Column(String(64))
-    value: float = Column(Float())
-
-
-@dataclass
-class CalibrationParameters(base.Base):
-    """
-    Simple class to represent calibration parameters
-    for a given species and instrument.
-    By using SQLalchemy the instances of this class are syncronised with 
-    the database table with the name `calibration_parameters`
-    Attributes
-    ----------
-    type: CalType
-        The type of calibration
-    species: str
-        The species to be calibrated
-    valid_from: date
-        The start of the validity range of this calibration
-    valid_to:  date
-        The end of the validity range of this calibration
-    computed: date
-        The date of computation of this model
-    device: str
-        The device under calibration
-    computation
-    parameters: list of CalibrationParameter objects
-        A list of parameters, one for each component in the model
-    """
-    __tablename__ = "calibration_parameters"
-    __sa_dataclass_metadata_key__ = "sa"
-    id: int = Column(Integer, primary_key=True, autoincrement=True)
-    type: str = Column(String(64))
-    species: str = Column(String(64))
-    valid_from: dt.datetime = Column(DateTime())
-    valid_to: dt.datetime = Column(DateTime())
-    computed: dt.datetime = Column(DateTime())
-    device: str = Column(String(64))
-    parameters: List[CalibrationParameter] = relationship(
-        "CalibrationParameter")
-
-    def serialise(self, path: Union[str, pl.Path]) -> Dict:
-        """
-        Save the calibration parameters as a dict
-        """
-        return (self.__dict__)
-    
-    def to_statsmodel(self) -> sm.regression.linear_model.RegressionResultsWrapper:
-        n = 10
-        exog = pd.DataFrame(0, index = np.arange(0, n), columns = self.regressors(), dtype=np.float64, )
-        endog = pd.DataFrame(0, index = np.arange(0, n), columns = [self.species],  dtype=np.float64)
-        mod_obj = linear_model.OLS(endog=endog,exog=exog)
-        params = pd.Series({s.parameter:s.value for s in self.parameters})
-        fit_obj = linear_model.RegressionResults(model=mod_obj, params=params)
-        return fit_obj
-    
-    def regressors(self) -> List[str]:
-        return [s.parameter for s in self.parameters]
-
-@dataclass
-class ModelFitPerformance(base.Base):
-    """
-    ORM object to represent the model fit performance and serialise it
-    in the database
-    """
-    __tablename__ = "calibration_performance"
-    __sa_dataclass_metadata_key__ = "sa"
-    id: int = Column(Integer, primary_key=True, autoincrement=True)
-    model_id: int = Column(ForeignKey("calibration_parameters.id"))
-    rmse: float = Column(Float)
-    bias: float = Column(Float)
-    correlation: float = Column(Float)
 
 
 
@@ -274,13 +176,13 @@ def temp_query(table: pd.DataFrame, query: str, name:str='temp') -> pd.DataFrame
         res = pd.read_sql_query(sql=query, con=con)
     return res
 
-def make_calibration_parameters_table(table: pd.DataFrame) -> List[CalibrationParameters]:
+def make_calibration_parameters_table(table: pd.DataFrame) -> List[mods.CalibrationParameters]:
     """
     From  the table of calibration parameters, make
     an object representing the calibration parameters as a InstrumentCalibration type
     with validity periods and bias/sensitivity values
     """
-    def get_cal_params(grp: pd.DataFrame, grouping: tuple) -> CalibrationParameters:
+    def get_cal_params(grp: pd.DataFrame, grouping: tuple) -> mods.CalibrationParameters:
         device, species, valid_from = grouping
         valid_to = grp.iloc[0]['next_date']
         if grp.shape[0] == 1:
@@ -295,9 +197,9 @@ def make_calibration_parameters_table(table: pd.DataFrame) -> List[CalibrationPa
             sensitivity = lm.params['measured_concentration']
             cal_type = CalType.TWO_POINT
         valid_to = grp['next_date'].iloc[0]
-        param_z = CalibrationParameter(parameter='Intercept', value=zero)
-        param_i = CalibrationParameter(parameter=species, value=sensitivity)
-        return CalibrationParameters(species=species, device=device, parameters=[param_z, param_i], valid_from=valid_from, valid_to=valid_to, type=str(cal_type))
+        param_z = mods.CalibrationParameters(parameter='Intercept', value=zero)
+        param_i = mods.CalibrationParameters(parameter=species, value=sensitivity)
+        return mods.CalibrationParameters(species=species, device=device, parameters=[param_z, param_i], valid_from=valid_from, valid_to=valid_to, type=str(cal_type))
     # Add the previous date as begin of validity
 
     # This query add the validity period
@@ -381,14 +283,7 @@ def read_calibration_config(pt: pl.Path) -> List[CalibrationConfiguration]:
         e['reader'] = cal_readers[e['reader']]
     return [CalibrationConfiguration(**c) for c in configs]
 
-def get_calibration_parameters(device: str, metadata: sqa.MetaData, eng: Union[engine.Engine, engine.Connection]) -> pd.DataFrame:
-    """
-    Get the sensor calibration parameters for a given device id
-    """
-    cp = sqa.Table('calibration_parameters', metadata, autoload_with=eng)
-    mp = sqa.Table('model_parameter', metadata, autoload_with=eng)
-    dep = sqa.Table('Deployment', metadata, autoload_with=eng)
-    sens = sqa.Table('Sensors', metadata, autoload_with=eng)
+
 
 def apply_calibration_parameters(table:sqa.Table, session:sqa.orm.Session, compound:str, target_compound:str, zero:float, span:float, valid_from:dt.datetime, valid_to:dt.datetime, temp:bool=True) -> None:
     """
