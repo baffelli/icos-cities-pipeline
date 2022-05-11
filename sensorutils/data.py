@@ -3,49 +3,41 @@ This module contains functions and classes to operate with CarboSense / ICOS-Cit
 It includes classes to map calibration parameters to the DB using SQLalchemy (ORM) so that calibrations
 can be persisted in a format that can be easily exchanged with other systems.
 """
-from curses import meta
+import datetime as dt
 import enum
 import imp
-from statistics import correlation
-from this import d
-from typing import Callable, Iterable, Union, List, Optional, Pattern, Dict, Set
-from dataclasses import dataclass, field
-import influxdb
-from matplotlib.pyplot import axis
-from pyparsing import col
-from . import files as fu
-import yaml
-import pandas as pd
-import datetime as dt
-import pathlib as pl
-import statsmodels.formula.api as smf
-import openpyxl as opx
-from openpyxl.worksheet.worksheet import Cell
-import statsmodels as sm
-from statsmodels.regression import linear_model
-from statsmodels import tools as sttools
-
-from sqlalchemy import Column
-from sqlalchemy import ForeignKey
-from sqlalchemy import Integer
-from sqlalchemy import String
-from sqlalchemy import Float
-from sqlalchemy import DateTime
-from sqlalchemy.orm import relationship
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy import engine 
-import sqlalchemy as sqa
-
-import sqlite3 as sqllite
-
-from enum import Enum
-
-import yaml
-
-import numpy as np
-
 import itertools
-import enum
+import pathlib as pl
+import sqlite3 as sqllite
+from ast import Str
+from curses import meta
+from dataclasses import dataclass, field
+from enum import Enum
+from statistics import correlation
+from typing import (Callable, Dict, Iterable, List, Optional, Pattern, Set,
+                    Union)
+
+import influxdb
+import numpy as np
+import openpyxl as opx
+import pandas as pd
+import sqlalchemy as sqa
+import statsmodels as sm
+import statsmodels.formula.api as smf
+import yaml
+from matplotlib.pyplot import axis
+from openpyxl.worksheet.worksheet import Cell
+from pyparsing import col
+from sqlalchemy import (Column, DateTime, Float, ForeignKey, Integer, String,
+                        engine)
+from sqlalchemy.orm import relationship
+from statsmodels import tools as sttools
+from statsmodels.regression import linear_model
+
+from . import base
+
+from . import files as fu
+
 """
 Represents the missing (or unset) time in ICOS-cities database
 """
@@ -95,11 +87,11 @@ class CalType(Enum):
     OTHER = 3
 
 
-Base = declarative_base()
+
 
 
 @dataclass
-class CalibrationParameter(Base):
+class CalibrationParameter(base.Base):
     """
     Represents a single component (parameter)
     of a calibration model for the model with id `model_id` .
@@ -130,7 +122,7 @@ class CalibrationParameter(Base):
 
 
 @dataclass
-class CalibrationParameters(Base):
+class CalibrationParameters(base.Base):
     """
     Simple class to represent calibration parameters
     for a given species and instrument.
@@ -185,7 +177,11 @@ class CalibrationParameters(Base):
         return [s.parameter for s in self.parameters]
 
 @dataclass
-class ModelFitPerformance(Base):
+class ModelFitPerformance(base.Base):
+    """
+    ORM object to represent the model fit performance and serialise it
+    in the database
+    """
     __tablename__ = "calibration_performance"
     __sa_dataclass_metadata_key__ = "sa"
     id: int = Column(Integer, primary_key=True, autoincrement=True)
@@ -193,6 +189,8 @@ class ModelFitPerformance(Base):
     rmse: float = Column(Float)
     bias: float = Column(Float)
     correlation: float = Column(Float)
+
+
 
 def cells_to_df(cells: Iterable[Cell]) -> pd.DataFrame:
     return [(c.value, c.row, c.column) for c in cells]
