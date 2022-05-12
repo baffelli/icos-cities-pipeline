@@ -4,12 +4,16 @@ to represent database objects
 """
 from abc import ABC, ABCMeta
 from dataclasses import dataclass
+
+import sqlalchemy
 from . import base
 import datetime as dt
 
 from sqlalchemy import (Column, DateTime, Float, ForeignKey, Integer, String,
                         engine)
 from sqlalchemy.orm import relationship
+from sqlalchemy.ext.declarative import declarative_base
+
 
 import pandas as pd
 import numpy as np
@@ -23,32 +27,44 @@ import pathlib as pl
 from typing import List, Union, Dict
 
 
+@dataclass
+class SensorDeploymentBase(object):
+    """
+    Base class for representing
+    either Deployment or Calibration entries,
+    as they use a very similar database format
+    """
+    id: int =  Column("SensorUnit_ID", Integer, primary_key=True)
+    location: str = Column("LocationName", String)
+    start: dt.datetime = Column("Date_UTC_from", DateTime, primary_key=True)
+    end: dt.datetime = Column("Date_UTC_to", DateTime, primary_key=True)
 
+SensBase = declarative_base(cls=SensorDeploymentBase)
 
 @dataclass
-class Deployment(base.Base):
+class Deployment(SensBase):
     """
     ORM class to represent a sensor deployment in the database
     """
     __tablename__ = "Deployment"
     __sa_dataclass_metadata_key__ = "sa"
-    id: int = Column("SensorUnit_ID", String, primary_key=True)
-    start: dt.datetime = Column("Date_UTC_from", DateTime, primary_key=True)
-    end: dt.datetime = Column("Date_UTC_to", DateTime, primary_key=True)
-    location: str = Column("LocationName", String)
+    # id: int = Column("SensorUnit_ID", String, primary_key=True)
+    # location: str = Column("LocationName", String)
+    # start: dt.datetime = Column("Date_UTC_from", DateTime, primary_key=True)
+    # end: dt.datetime = Column("Date_UTC_to", DateTime, primary_key=True)
     height: float = Column("HeightAboveGround", Float)
     inlet_height: float = Column("Inlet_HeightAboveGround", Float)
 
 @dataclass
-class Calibration(base.Base):
+class Calibration(SensBase):
     """
     ORM class to represent a sensor calibration deployment in the database
     """
     __tablename__ = "Calibration"
     __sa_dataclass_metadata_key__ = "sa"
-    id: int = Column("SensorUnit_ID", String, primary_key=True)
-    location: str = Column("LocationName", String)
-    start: dt.datetime = Column("Date_UTC_from", DateTime, primary_key=True)
+    # id: int = Column("SensorUnit_ID", String, primary_key=True)
+    # location: str = Column("LocationName", String)
+    # start: dt.datetime = Column("Date_UTC_from", DateTime, primary_key=True)
     end: dt.datetime = Column("Date_UTC_to", DateTime, primary_key=True)
     mode: int = Column("CalMode", Integer)
     table: str = Column("DBTableNameRefData", String)
@@ -176,7 +192,7 @@ class TimeseriesData(object):
     """
     A base class to represent (grouped) timeseries data.
     The `time`attribute is assumed to be timestamps, the attirbute `id` represents
-    the group
+    the group which is either the sensor id or the location
     """
     __abstract__ = True
     id: Union[int, str]

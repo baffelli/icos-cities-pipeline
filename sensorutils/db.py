@@ -7,6 +7,8 @@ from typing import Callable, Union
 import pandas as pd
 from .log import logger
 import datetime as dt
+
+from . import models as mods
 """
 This module contains function used to interact with the metadata DB,
 """
@@ -75,35 +77,35 @@ def connect_to_metadata_db(group: str = 'CarboSense_MySQL', conf_path: str = "~/
     return engine
 
 
-def list_all_sensor_ids(type: str, eng: eng.Engine, id_col:str = 'SensorUnit_ID', type_col: str = 'Type', sensors_table: str = 'Sensors', dep_table: str = 'Deployment') -> pd.DataFrame:
+def list_all_sensor_ids(type: str, eng: eng.Engine) -> pd.DataFrame:
     """
     List all sensors of a certain type that were previously deployed. 
-    It looks up for the sensor types in the table given by `sensors_table` and for
-    deployment information in `deployment_table`
+    It looks up for the sensor types in the table given by the ORM mapping class :obj:`sensorutils.models.Sensor` and for
+    deployment information in :obj:`sensorutils.models.Deployment`
     """
     md = db.MetaData(bind=eng)
     md.reflect()
-    st = md.tables[sensors_table]
-    dt = md.tables[dep_table]
     Session = orm.sessionmaker(eng)
-    session: orm.Session = Session()
-    dep_q = session.query(dt.columns[id_col]).distinct().subquery()
-    tot_q = session.query(st.columns[id_col]).distinct().filter(st.columns[type_col] == type).subquery()
-    final_q = session.query(tot_q).join(dep_q, dep_q.columns[id_col] == tot_q.columns[id_col])
-    cq = final_q.with_session(session).statement.compile(compile_kwargs={"literal_binds": True})
-    return pd.read_sql_query(str(cq), eng)
+    with Session() as ses:
+        sens = ses.query(mods.Sensor).filter(mods.Sensor.type == type).with_entities(mods.Sensor.id).distinct().subquery()
+        dep = ses.query(mods.Deployment).with_entities(mods.Deployment.id).distinct().subquery()
+        stmt = ses.query(sens).join(dep, dep.c.id == sens.c.id)
+        with ses.connection() as con:
+            df = pd.read_sql_query(stmt.statement, con)
+    return df
 
 
-def get_serialnumber(eng: eng.Engine, md: sqa.MetaData, id: Union[int, str], type: str, current:bool=  True, serial_col: str =  'Serialnumber', id_col:str = 'SensorUnit_ID', type_col: str = 'Type', sensors_table: str = 'Sensors', dep_table: str = 'Deployment') -> str:
+def get_serialnumber(eng: eng.Engine, md: sqa.MetaData, id: Union[int, str], type: str) -> Union[str, int]:
     """
-    Get the current sensor serialnumber for the given sensor type
+    Get the current sensor serialnumber for the given sensor id and sensor type
     """
-    sens_tb = md.tables[sensors_table]
-    st = sqa.select(sens_tb.c[serial_col]).filter((sens_tb.c[id_col] == id) & (sens_tb.c[type_col] == type) & (sens_tb.c['Date_UTC_to'] > dt.datetime.now()))
-    with eng.connect() as con:
-        res = con.execute(st.compile()).fetchall()
-    sn, = res[0]
-    return sn
+    Session = orm.sessionmaker(eng)
+    with Session() as ses:
+        qr = ses.query(mods.Sensor).\
+            filter((mods.Sensor.id == id) & (mods.Sensor.type == type) & (mods.Sensor.end > dt.datetime.now())).\
+                with_entities(mods.Sensor.serial)
+        id, *rest = qr.first()
+    return id
 
 
     
