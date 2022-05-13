@@ -460,11 +460,24 @@ When you run a climate chamber calibration, please place the **original** `.dat`
   ```
   import_climate_chamber_data.py climate-new your_path your_regex dest_table {dest_location}
   ```
-After importing the data, do not forget to consolidate the data using the second step described [above](#import-reference-sensor-data-picarro-crds). This is only needed if you import in a staging table.
+In the latest version, this data directly contains the Picarro measurements, so you do not need any further steps.
+After importing the data, do not forget to consolidate the data using the second step described [above](#import-reference-sensor-data-picarro-crds). However, this is only needed if you import in a staging table. 
+
+If you want to add pressure measurements to the climate chamber from measurements in the Dubendorf NABEL station, run:
+
+```
+REF_measurement_processing/add_pressure_measurement_to_due7.py DUE1 DUE7
+```
+This example copies the pressure measurement from *DUE1* to *DUE7* assuming the pressure to be homogeneous in Dübendorf.
 
 
 # Import Meteo data
-TBD
+To import the meteo data, run:
+
+```
+python3 MeteoSwissData4Carbosense/transfer_meteo_data.py ./config/meteo_data_mapping.yml /project/CarboSense/Data/METEO/MCH_DAILY_DATA_DUMP/' 'VQEA33*.csv'
+```
+The configuration file ` ./config/meteo_data_mapping.yml` follows the same incremental logic as described  [above](#background).
 
 # Process sensor data
 

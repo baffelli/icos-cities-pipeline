@@ -275,20 +275,20 @@ def sensor_info_subquery(
     return sqa.select(cols).select_from(sens_tab)
 
 
-def get_sensor_info(
-        eng: sqa.engine.Engine,
-        md: sqa.MetaData,
-        id: int,
-        sensor_type: du.AvailableSensors) -> List[SensInfoRow]:
-    q = sensor_info_subquery(eng, md).subquery()
-    ct = sqa.select(*q.c).where(
-        (q.c['sensor_id'] == id) & (q.c['sensor_type'] == sensor_type.value)
-    )
-    ct_com = ct.compile()
-    with eng.connect() as con:
-        rs = con.execute(ct_com)
-        res = [cal.SensInfoRow(**rw) for rw in rs]
-    return res
+# def get_sensor_info(
+#         eng: sqa.engine.Engine,
+#         md: sqa.MetaData,
+#         id: int,
+#         sensor_type: du.AvailableSensors) -> List[mods.SensInfoRow]:
+#     q = sensor_info_subquery(eng, md).subquery()
+#     ct = sqa.select(*q.c).where(
+#         (q.c['sensor_id'] == id) & (q.c['sensor_type'] == sensor_type.value)
+#     )
+#     ct_com = ct.compile()
+#     with eng.connect() as con:
+#         rs = con.execute(ct_com)
+#         res = [cal.SensInfoRow(**rw) for rw in rs]
+#     return res
 
 
 def get_calibration_info(session: sqa.orm.Session,
@@ -559,37 +559,37 @@ def get_cal_data(eng: sqa.engine.Engine,
     return list(pd_con.groupby(grps))
 
 
-def get_prediction_data(eng: sqa.engine.Engine,
-                        md: sqa.MetaData,
-                        sensor_id: int,
-                        sensor_type:
-                        du.AvailableSensors,
-                        start: Optional[dt.datetime],
-                        end: dt.datetime,
-                        agg_duration:
-                        int) -> List[Tuple[Tuple[str, pd.Timestamp, pd.Timestamp], pd.DataFrame]]:
-    si = get_sensor_info(eng, md, id, sensor_type)
-    ad = get_averaging_time(sensor_type, fit=False)
-    match sensor_type:
-        case du.AvailableSensors.HPP:
-            getter = get_HPP_data
-        case du.AvailableSensors.LP8:
-            getter = get_LP8_data
+# def get_prediction_data(eng: sqa.engine.Engine,
+#                         md: sqa.MetaData,
+#                         sensor_id: int,
+#                         sensor_type:
+#                         du.AvailableSensors,
+#                         start: Optional[dt.datetime],
+#                         end: dt.datetime,
+#                         agg_duration:
+#                         int) -> List[Tuple[Tuple[str, pd.Timestamp, pd.Timestamp], pd.DataFrame]]:
+#     si = get_sensor_info(eng, md, id, sensor_type)
+#     ad = get_averaging_time(sensor_type, fit=False)
+#     match sensor_type:
+#         case du.AvailableSensors.HPP:
+#             getter = get_HPP_data
+#         case du.AvailableSensors.LP8:
+#             getter = get_LP8_data
 
-    def get_inner(rw: SensInfoRow) -> pd.DataFrame:
-        """
-        Get data for the given sensor and time
-        """
-        query_start = max([rw.sensor_start, start])
-        query_end = min([rw.sensor_end, end])
-        dt = getter(eng, md, rw.sensor_id,  query_start, query_end, ad)
-        dt['serial_number'] = rw.serial_number
-        dt['sensor_start'] = rw.sensor_start
-        dt['sensor_end'] = rw.sensor_end
-        return dt
-    pd_con = pd.concat([get_inner(tw) for tw in si])
-    grps = ["serial_number", "sensor_start", "sensor_end"]
-    return list(pd_con.groupby(grps))
+#     def get_inner(rw: SensInfoRow) -> pd.DataFrame:
+#         """
+#         Get data for the given sensor and time
+#         """
+#         query_start = max([rw.sensor_start, start])
+#         query_end = min([rw.sensor_end, end])
+#         dt = getter(eng, md, rw.sensor_id,  query_start, query_end, ad)
+#         dt['serial_number'] = rw.serial_number
+#         dt['sensor_start'] = rw.sensor_start
+#         dt['sensor_end'] = rw.sensor_end
+#         return dt
+#     pd_con = pd.concat([get_inner(tw) for tw in si])
+#     grps = ["serial_number", "sensor_start", "sensor_end"]
+#     return list(pd_con.groupby(grps))
 
 
 def prepare_features(dt: pd.DataFrame, ir_col: str = "sensor_ir_lpl", fit: bool = True, plt: str = '1d') -> pd.DataFrame:
@@ -1167,12 +1167,8 @@ data_mapping.connect_all_db(source_eng=engine, dest_eng=engine)
 
 # Create ORM session
 Session = sessionmaker(engine)
-with Session() as ses:
-    dp = 
-    pdb.set_trace()
 # List all ids
-ids = filter_valid_sensor_ids(db_utils.list_all_sensor_ids(
-    args.sensor_type.value, engine), args.sensor_type)
+ids = filter_valid_sensor_ids(db_utils.list_all_sensor_ids(args.sensor_type.value, engine), args.sensor_type)
 
 # Make an enum of all valid ids
 valid_ids = make_valid_sensors(ids['SensorUnit_ID'])
@@ -1195,38 +1191,46 @@ for current_id in ids_to_process:
         case "process", (du.AvailableSensors.LP8 as st):
             # Create mapping
             serialnumber = db_utils.get_serialnumber(
-                engine, db_metadata, id, st.value)
+                engine, id, st.value)
             # List files missing in destination (only process them)
             missing_dates = data_mapping.list_files_missing_in_dest(group=id)
+            logger.info(f"The missing dates ")
             # Get calibration parameters
             with Session() as session:
                 pm = deserialize_parameters(session, serialnumber, latest=True)
+                import pdb; pdb.set_trace()
                 if pm is None:
                     #raise ValueError(f'There are no calibration parameters for the sensor with serialnumber {serialnumber} in the database')
-                    continue
+                    break
                 # Remove the dummy if the model has any
                 model_fit = remove_dummies(pm.to_statsmodel(), "time_dummy")
+            #Prepare plot
+            wp_path = b_pth.with_name(f'LP8_predictions_{id}_{serialnumber}.pdf')
+            pdf = PdfPages(wp_path)
             for date in missing_dates:
+                date_start, date_end = du.day_range(date)
                 logger.info(f"Getting raw data for {id} on {date}")
                 # Get data
-                cal_data, *rest = [data for (sn, start, end), data in get_cal_data(
-                    engine, db_metadata, id, date, dt.datetime.now(), st, 600, cal=False) if end > dt.datetime.now()]
+                with Session() as ses:
+                    cal_data, *rest = [data for (sn, start, end), data in cal.get_cal_ts(ses, id, st, date_start, date_start, 600)]
+                    if cal_data.shape[1] < 2:
+                        pass
                 # Prepare regressors
                 prediction_features = prepare_LP8_features(cal_data, fit=True)
                 # Preict
                 predicted = predict_CO2(prediction_features, model_fit)
-            # Plot
-            ts_plot, scatter_plot = plot_CO2_calibration(
-                predicted, model_fit, orig_col="sensor_CO2", ref_col="ref_CO2")
-            wp_path = b_pth.with_name(
-                f'LP8_predictions_{id}_{serialnumber}.pdf')
-            ts_plot.savefig(wp_path)
+                # Plot
+                import pdb; pdb.set_trace()
+                ts_plot, scatter_plot = plot_CO2_calibration(
+                    predicted, model_fit, orig_col="sensor_CO2", ref_col="ref_CO2", extra_res=["ref_H2O"])
+
+                pdf.savefig(ts_plot)
         case "calibrate",  (du.AvailableSensors.LP8 as st):
             # Iterate over calibration data
             av_t = get_averaging_time(st, True)
             try:
-                cal_data_all_serial = get_cal_data(
-                    engine, db_metadata, id, start, st, av_t)
+                with Session() as ses:
+                    cal_data_all_serial = cal.get_cal_ts(ses, id, st, start, dt.datetime.now(), av_t)
             except ValueError as e:
                 logger.info(
                     f"There is not data for sensor {id} between {start} and today")
@@ -1264,7 +1268,7 @@ for current_id in ids_to_process:
                 # Persist parameters
                 computed_when = dt.datetime.now()
                 cal_obj = convert_calibration_parameters(
-                    cal_fit, "CO2", args.sensor_type, sensor_start.to_pydatetime(), sensor_end.to_pydatetime(), computed_when, serialnumber)
+                    cal_fit, "CO2", args.sensor_type, cal_data.date.min(), sensor_end.to_pydatetime(), computed_when, serialnumber)
                 # Compute model statistics
                 model_statistics = compute_quality_indices(co2_pred)
                 # Persist fit and model statistics
@@ -1334,19 +1338,19 @@ for current_id in ids_to_process:
 
                 save_multipage([w for u, w in wp['plot']], wp_path, wp['date'])
                 logger.debug(ref_dt)
-        case "process", _:
-            av_t = get_averaging_time(args.sensor_type, True)
-            logger.info(f"Applying calibration for sensor {id}")
-            si = get_sensor_info(engine, db_metadata, id, args.sensor_type)
-            # Iterate over sensor units
-            for row in si:
-                1
-                # get_sensor_data()
+        # case "process", _:
+        #     av_t = get_averaging_time(args.sensor_type, True)
+        #     logger.info(f"Applying calibration for sensor {id}")
+        #     si = get_sensor_info(engine, db_metadata, id, args.sensor_type)
+        #     # Iterate over sensor units
+        #     for row in si:
+        #         1
+        #         # get_sensor_data()
 
-            # Dates
-            end = dt.datetime.now()
-            start = None if args.full else (end - dt.timedelta(days=30))
-            pred_data = get_prediction_data(
-                engine, db_metadata, id, args.sensor_type, start, end, av_t)
-            pdb.set_trace()
-            # Get sensor data
+        #     # Dates
+        #     end = dt.datetime.now()
+        #     start = None if args.full else (end - dt.timedelta(days=30))
+        #     pred_data = get_prediction_data(
+        #         engine, db_metadata, id, args.sensor_type, start, end, av_t)
+        #     pdb.set_trace()
+        #     # Get sensor data

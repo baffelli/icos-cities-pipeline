@@ -4,6 +4,7 @@ to represent database objects
 """
 from abc import ABC, ABCMeta
 from dataclasses import dataclass
+from sensorutils import data
 
 import sqlalchemy
 from . import base
@@ -52,6 +53,7 @@ class Deployment(SensBase):
     # location: str = Column("LocationName", String)
     # start: dt.datetime = Column("Date_UTC_from", DateTime, primary_key=True)
     # end: dt.datetime = Column("Date_UTC_to", DateTime, primary_key=True)
+    mode: int = 1
     height: float = Column("HeightAboveGround", Float)
     inlet_height: float = Column("Inlet_HeightAboveGround", Float)
 
@@ -65,7 +67,7 @@ class Calibration(SensBase):
     # id: int = Column("SensorUnit_ID", String, primary_key=True)
     # location: str = Column("LocationName", String)
     # start: dt.datetime = Column("Date_UTC_from", DateTime, primary_key=True)
-    end: dt.datetime = Column("Date_UTC_to", DateTime, primary_key=True)
+    #end: dt.datetime = Column("Date_UTC_to", DateTime, primary_key=True)
     mode: int = Column("CalMode", Integer)
     table: str = Column("DBTableNameRefData", String)
 
@@ -76,11 +78,48 @@ class Sensor(base.Base):
     """
     __tablename__ = "Sensors"
     __sa_dataclass_metadata_key__ = "sa"
-    id: int = Column("SensorUnit_ID", String, primary_key=True)
-    serial: int = Column("Serialnumber", String)
+    id: int = Column("SensorUnit_ID", String)
+    serial: int = Column("Serialnumber", String, primary_key=True)
     type: int = Column("Type", String, primary_key=True)
     start: dt.datetime = Column("Date_UTC_from", DateTime)
     end: dt.datetime = Column("Date_UTC_to", DateTime)
+
+@dataclass 
+class Cylinder(base.Base):
+    """
+    ORM class to represent a gas cylinder
+    """
+    __tablename__ = "RefGasCylinder"
+    __sa_dataclass_metadata_key__ = "sa"
+    cylinder_id: str = Column("CylinderID", String, primary_key=True)
+    fill: int = Column("EMPA_fill_number", String)
+    start: dt.datetime = Column("Date_UTC_from", DateTime, primary_key=True)
+    end: dt.datetime = Column("Date_UTC_to", DateTime, primary_key=True)
+    CO2: float  = Column(Float)
+    H2O: float  = Column(Float)
+    analysed: dt.datetime = Column(DateTime)
+
+
+@dataclass
+class CylinderDeployment(base.Base):
+    """
+    ORM class to represent a gas cylinder deployment
+    to a certain location and time range
+    """
+    __tablename__ = "RefGasCylinder_Deployment"
+    __sa_dataclass_metadata_key__ = "sa"
+    cylinder_id: str = Column("CylinderID", String, primary_key=True)
+    start: dt.datetime = Column("Date_UTC_from", DateTime, primary_key=True)
+    end: dt.datetime = Column("Date_UTC_to", DateTime, primary_key=True)
+    sensor_id: int = Column("SensorUnit_ID", Integer, primary_key=True)
+    location: int = Column("LocationName", Integer)
+    inlet: str = Column("inlet", String)
+    cylinders: List[Cylinder] = relationship("Cylinder",  
+    primaryjoin= lambda: (CylinderDeployment.cylinder_id == Cylinder.cylinder_id) & (CylinderDeployment.start > Cylinder.start),
+    foreign_keys= lambda: Cylinder.cylinder_id)
+
+
+
 
 @dataclass
 class CalibrationParameter(base.Base):
@@ -144,7 +183,7 @@ class CalibrationParameters(base.Base):
     computed: dt.datetime = Column(DateTime())
     device: str = Column(String(64))
     parameters: List[CalibrationParameter] = relationship(
-        "CalibrationParameter")
+        CalibrationParameter)
 
     def serialise(self) -> Dict:
         """

@@ -7,7 +7,7 @@ from typing import Callable, Union
 import pandas as pd
 from .log import logger
 import datetime as dt
-
+import sqlite3 as sqllite
 from . import models as mods
 """
 This module contains function used to interact with the metadata DB,
@@ -95,17 +95,33 @@ def list_all_sensor_ids(type: str, eng: eng.Engine) -> pd.DataFrame:
     return df
 
 
-def get_serialnumber(eng: eng.Engine, md: sqa.MetaData, id: Union[int, str], type: str) -> Union[str, int]:
+def get_serialnumber(eng: eng.Engine, id: Union[int, str], type: str) -> Union[str, int]:
     """
     Get the current sensor serialnumber for the given sensor id and sensor type
     """
     Session = orm.sessionmaker(eng)
     with Session() as ses:
-        qr = ses.query(mods.Sensor).\
+        qr = sqa.select(mods.Sensor).\
             filter((mods.Sensor.id == id) & (mods.Sensor.type == type) & (mods.Sensor.end > dt.datetime.now())).\
-                with_entities(mods.Sensor.serial)
-        id, *rest = qr.first()
+                with_only_columns(mods.Sensor.serial)
+        id, *rest = ses.execute(qr).first()
     return id
 
 
-    
+def temp_query(table: pd.DataFrame, query: str, name:str='temp') -> pd.DataFrame:
+    """
+    Applies a query on a dataframe by
+    copying it into an in-memory sqllite db
+    and running the query there.
+    The query must refere
+    """
+    with sqllite.connect(":memory:") as con:
+        table.to_sql(name=name, con=con)
+        res = pd.read_sql_query(sql=query, con=con)
+    return res
+
+
+def alter_all_dates(eng: eng.Engine):
+    """
+    For all tables where date_UTC_to is 2100-01-01, replace with NULL
+    """

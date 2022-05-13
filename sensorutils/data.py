@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from statistics import correlation
 from typing import (Callable, Dict, Iterable, List, Optional, Pattern, Set,
-                    Union)
+                    Union, Tuple)
 
 import influxdb
 import numpy as np
@@ -164,69 +164,6 @@ def read_picarro_parameters_new(path: pl.Path) -> pd.DataFrame:
         ['date', 'cylinder_id', 'variable'])).reset_index().rename(columns={'variable': 'compound'}).reset_index()
     return cal_data.dropna(subset=['measured_concentration', 'target_concentration'], how='all').drop('index', axis=1)
 
-def temp_query(table: pd.DataFrame, query: str, name:str='temp') -> pd.DataFrame:
-    """
-    Applies a query on a dataframe by
-    copying it into an in-memory sqllite db
-    and running the query there.
-    The query must refere
-    """
-    with sqllite.connect(":memory:") as con:
-        table.to_sql(name=name, con=con)
-        res = pd.read_sql_query(sql=query, con=con)
-    return res
-
-def make_calibration_parameters_table(table: pd.DataFrame) -> List[mods.CalibrationParameters]:
-    """
-    From  the table of calibration parameters, make
-    an object representing the calibration parameters as a InstrumentCalibration type
-    with validity periods and bias/sensitivity values
-    """
-    def get_cal_params(grp: pd.DataFrame, grouping: tuple) -> mods.CalibrationParameters:
-        device, species, valid_from = grouping
-        valid_to = grp.iloc[0]['next_date']
-        if grp.shape[0] == 1:
-            zero = grp['measured_concentration'].iloc[0] - \
-                grp['target_concentration'].iloc[0]
-            sensitivity = 1
-            cal_type = CalType.ONE_POINT
-        else:
-            lm = linear_model.OLS(grp['target_concentration'], sttools.add_constant(
-                grp['measured_concentration'])).fit()
-            zero = lm.params['const']
-            sensitivity = lm.params['measured_concentration']
-            cal_type = CalType.TWO_POINT
-        valid_to = grp['next_date'].iloc[0]
-        param_z = mods.CalibrationParameters(parameter='Intercept', value=zero)
-        param_i = mods.CalibrationParameters(parameter=species, value=sensitivity)
-        return mods.CalibrationParameters(species=species, device=device, parameters=[param_z, param_i], valid_from=valid_from, valid_to=valid_to, type=str(cal_type))
-    # Add the previous date as begin of validity
-
-    # This query add the validity period
-    q = \
-    """
-    WITH cg as
-    (
-        SELECT
-            *,
-            DENSE_RANK() OVER (PARTITION BY compound,device ORDER BY date) AS cal_group
-        FROM temp
-    ) 
-    SELECT
-        c.*,
-        d.cal_group,
-        d.date AS next_date
-        FROM cg AS c
-    LEFT JOIN cg AS d ON c.cal_group = d.cal_group - 1 AND c.compound = d.compound AND c.device = d.device
-    """
-    res = temp_query(table, q).drop_duplicates()
-    res['next_date'] = pd.to_datetime(res['next_date'].fillna(NAT))
-    res['date'] = pd.to_datetime(res['date'])
-    import pdb; pdb.set_trace()
-    objs = res.reset_index().groupby(["device", "compound", "date"]).apply(
-        lambda x: get_cal_params(x, x.name))
-    return objs
-
 
 """
 Dictionary of file readers
@@ -353,6 +290,12 @@ def date_to_timestamp(dt: pd.DataFrame, dt_col:str, target_name:str='timestamp')
     """
     dt[dt_col] = pd.to_datetime(dt[dt_col]).apply(lambda x: x.timestamp())
     return dt.rename(columns={dt_col:target_name})
+
+
+def day_range(moment: dt.datetime) -> Tuple[dt.datetime, dt.datetime]:
+    start = moment.replace(hour=0, minute=0, second=0, microsecond=0)
+    end = start + dt.timedelta(1)
+    return (start, end)
 
 
 

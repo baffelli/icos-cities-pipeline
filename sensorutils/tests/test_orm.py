@@ -22,7 +22,7 @@ class TestOrm(unittest.TestCase):
         self.md = md
     
     def testGetSerialnumber(self):
-        sn = du.get_serialnumber(self.eng, self.md, 1051, 'LP8')
+        sn = du.get_serialnumber(self.eng, 1051, 'LP8')
         print(sn)
 
     def testListSensors(self):
@@ -31,7 +31,7 @@ class TestOrm(unittest.TestCase):
 
     def testGetCalibration(self):
         with self.session() as ses:
-            ci = cal.get_calibration_info(ses, 1151, 'LP8', dt.datetime.now())
+            ci = cal.get_calibration_info(ses, 1151, sda.AvailableSensors.LP8)
         print(ci)
 
     def testGetLP8Data(self):
@@ -53,6 +53,18 @@ class TestOrm(unittest.TestCase):
         with self.session() as ses:
             ci = cal.get_sensor_data(ses, 445, sda.AvailableSensors.HPP, fd, dt.datetime.now())
         print(ci)
+    
+    def testGetCalData(self):
+        fd = dt.datetime.now() - dt.timedelta(days=60)
+        with self.session() as ses:
+            cd = cal.get_cal_ts(ses, 1151, sda.AvailableSensors.LP8, fd, dt.datetime.now(), 600)
+            print(cd)
+
+    def testGetCylinder(self):
+        with self.session() as ses:
+            sel = sqlalchemy.select(mods.CylinderDeployment)
+            ses.execute(sel)
+            import pdb; pdb.set_trace()
 
 if __name__ == '__main__':
     unittest.main()

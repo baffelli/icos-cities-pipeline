@@ -795,6 +795,10 @@ def process_awk(file: pl.Path, command: str, **kwargs) -> pd.DataFrame:
     return df
 
 @dataclass
+class ParquetSource(DataSource):
+    pass
+
+@dataclass
 class CsvSource(DataSource):
     """    
     This subclass of :obj:`DataSource`represents a datasource located in a CSV file in the `str` path, which specifies the glob pattern
@@ -1081,7 +1085,6 @@ class SourceMapping():
                     return ifs
                 case _, _:
                     raise ValueError(f'The arguments {ds} and {eng} are not valid DatabaseSource and database engines')
-        import pdb; pdb.set_trace()
         self.source = connect_db(self.source, source_eng)
         self.dest = connect_db(self.dest, dest_eng)
 
@@ -1176,7 +1179,6 @@ class SourceMapping():
         md = sqa.MetaData(bind=engine)
         md.reflect()
         tb = md.tables[tb_id]
-        import pdb; pdb.set_trace()
         #Map columns
         def call_mapper(mapper, file, engine, tb) -> Optional[pd.DataFrame]:
             try:
@@ -1210,7 +1212,6 @@ class SourceMapping():
             A dataframe of the affected rows. Useful for testing / debugging. 
         """
         data = self.source.read_file(date)
-        import pdb; pdb.set_trace()
         data_mapped = self.map_file(data)
         affected = self.dest.write_file(data_mapped, temporary=temporary)
         return affected
@@ -1390,13 +1391,14 @@ def read_new_climate_chamber_data(path: pl.Path, tz='CET') -> pd.DataFrame:
     soll_re = re.compile(r"(\d+)\/(\d+)\s* (\d+)")
     dt = pd.read_excel(path)
     dt_new = dt.copy().rename(columns=name_mapping)
-    dt_new['date'] = dt_new['time'].dt.tz_localize(tz='CET').dt.tz_convert('UTC')
-    flag = dt_new['status'].apply(lambda x: du.map_climate_chamber_status_code(du.ClimateChamberStatusCode(x)))
-    dt_new['T_F'] = flag
-    dt_new['RH_F'] = flag
-    dt_new['chamber_status'] = dt_new['status'].apply(lambda x: du.ClimateChamberStatusCode(x).name)
-    setpoints = dt_new['phase'].str.extract(soll_re).rename(columns={0:'T_soll', 1:'RH_soll', 2:'CO2_soll'}).astype(np.float64)
-    dt_full = pd.concat([dt_new, setpoints], axis=1)
+    dt_valid = dt_new.dropna(subset=['status'])
+    dt_valid['date'] = dt_valid['time'].dt.tz_localize(tz='CET').dt.tz_convert('UTC')
+    flag = dt_valid['status'].apply(lambda x: du.map_climate_chamber_status_code(du.ClimateChamberStatusCode(x)))
+    dt_valid['T_F'] = flag
+    dt_valid['RH_F'] = flag
+    dt_valid['chamber_status'] = dt_valid['status'].apply(lambda x: du.ClimateChamberStatusCode(x).name)
+    setpoints = dt_valid['phase'].str.extract(soll_re).rename(columns={0:'T_soll', 1:'RH_soll', 2:'CO2_soll'}).astype(np.float64)
+    dt_full = pd.concat([dt_valid, setpoints], axis=1)
     return dt_full.reset_index()[['date', 'T', 'T_F', 'RH', 'RH_F', 'CO2_soll', 'RH_soll', 'T_soll', 'CO2_DRY', 'CO2', 'H2O', 'chamber_status', 'calibration_mode']]
 
 def tz_to_epoch(series: pd.Series) -> pd.Series:
