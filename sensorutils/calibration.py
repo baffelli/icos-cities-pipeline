@@ -2,6 +2,7 @@
 Functions used for calibration / sensor data processing
 """
 from operator import mod
+import pdb
 from tkinter import W
 from . import models as mods
 from . import data as du
@@ -117,7 +118,7 @@ def get_calibration_info(session: sqa.orm.Session,
         join_from(filtered_sens, tb,
                   (filtered_sens.id == tb.id) &
                   (tb.start >= filtered_sens.start) &
-                  (filtered_sens.end > tb.end)
+                  (filtered_sens.end >= tb.end)
                   ).\
         filter(tb.start >= filtered_sens.start).\
         order_by(tb.start.desc())
@@ -194,6 +195,7 @@ def limit_cal_entry(entries: List[CalDataRow], start: dt.datetime, end: dt.datet
     """
     valid = [CalDataRow(sensor_id=e.sensor_id, location=e.location, sensor_type=e.sensor_type, serial_number=e.serial_number, sensor_start=e.sensor_start,
                         sensor_end=e.sensor_end, cal_mode=e.cal_mode, cal_start=max([e.cal_start, start]), cal_end=min([e.cal_end, end])) for e in entries if e.cal_start < end and e.cal_end > start]
+    breakpoint()
     return valid
 
 
