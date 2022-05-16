@@ -1194,7 +1194,8 @@ class SourceMapping():
         mapped_na = mapped_dedup.fillna({k:v for k,v in self.na_mapping().items() if k in mapped_dedup.columns})
         # Replace nas and convert columns to proper type
         dt_mapping = {k:v for k,v in self.data_type_mapping().items() if k in mapped_na.columns}
-        mapped_new_types = mapped_na.astype(dt_mapping)
+
+        mapped_new_types = mapped_na.astype(dt_mapping, errors='ignore')
         return mapped_new_types
 
     def transfer_file(self, date: dt.datetime, temporary: bool = False) -> pd.DataFrame:
