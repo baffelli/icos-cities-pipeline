@@ -16,6 +16,7 @@ from xml.dom import ValidationErr
 import sensorutils.db as db_utils
 import sensorutils.files as fu
 import sensorutils.data as du
+import sensorutils.log as log
 import pathlib as pl
 import pandas as pd
 from sqlalchemy import create_engine
@@ -99,10 +100,11 @@ for p in cn_paths:
     data = rename_and_subset(du.date_to_timestamp(du.average_df(orig_data, groups=grouping).reset_index(), 'date'), cols).dropna(subset=cols.values())
     #Set the destination location to write in the table
     data["LocationName"] = args.dest_loc
+    log.logger.info(f"Importing {p}")
     with eng.connect() as con:
         md = sqa.MetaData(bind=con)
         md.reflect()
         with con.begin() as tr:
             mt = db_utils.create_upsert_metod(md)
-            import pdb; pdb.set_trace()
+
             data.to_sql(args.dest, con, index=False, if_exists='append', method=mt)

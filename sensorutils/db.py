@@ -3,7 +3,7 @@ import sqlalchemy.engine as eng
 import sqlalchemy as db
 import sqlalchemy.orm as orm
 import sqlalchemy as sqa
-from typing import Callable, Union
+from typing import Callable, Union, Optional
 import pandas as pd
 from .log import logger
 import datetime as dt
@@ -41,7 +41,6 @@ def create_upsert_metod(meta: db.MetaData) -> Callable:
         try:
             conn.execute(upsert_stmt)
         except db.exc.SQLAlchemyError as e:
-            import pdb; pdb.set_trace()
             raise db.exc.SQLAlchemyError((str(e)[1:100]))
     return method
 
@@ -95,16 +94,21 @@ def list_all_sensor_ids(type: str, eng: eng.Engine) -> pd.DataFrame:
     return df
 
 
-def get_serialnumber(eng: eng.Engine, id: Union[int, str], type: str) -> Union[str, int]:
+def get_serialnumber(eng: eng.Engine, id: Union[int, str], type: str, start: Optional[dt.datetime], end: Optional[dt.datetime]) -> Union[str, int]:
     """
-    Get the current sensor serialnumber for the given sensor id and sensor type
+    Get the  serialnumber for the given sensor id and sensor type. If `start` and `end` are set,
+    find the serial number of the given date period.
     """
     Session = orm.sessionmaker(eng)
     with Session() as ses:
         qr = sqa.select(mods.Sensor).\
-            filter((mods.Sensor.id == id) & (mods.Sensor.type == type) & (mods.Sensor.end > dt.datetime.now())).\
-                with_only_columns(mods.Sensor.serial)
-        id, *rest = ses.execute(qr).first()
+            filter((mods.Sensor.id == id) & (mods.Sensor.type == type))
+        if start and end:
+            qr_when = qr.filter((mods.Sensor.end >= end) & (mods.Sensor.start <= start))
+        else: 
+           qr_when = qr.filter(mods.Sensor.end > dt.datetime.now())
+        qr_final = qr_when.with_only_columns(mods.Sensor.serial)
+        id, *rest = ses.execute(qr_final).first()
     return id
 
 

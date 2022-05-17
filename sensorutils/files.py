@@ -1,6 +1,7 @@
 from argparse import ArgumentError
 import imp
 from pickle import NONE
+from pymysql import Timestamp
 from sklearn.exceptions import DataConversionWarning
 from yaml import Loader
 from sys import intern
@@ -214,7 +215,7 @@ def get_available_measurements_on_db(engine: sqa.engine.Engine, md: sqa.MetaData
     else:
         stmt_final = stmt
     qs = stmt_final.compile()
-    logger.info(f'The query is {qs}')
+    logger.debug(f'The query is {qs}')
     return pd.read_sql_query(qs, engine, parse_dates=['date']).reset_index()
 
 
@@ -1353,11 +1354,17 @@ def read_picarro_data(path: Union[str, pl.Path], tz:Union[str, pytz.tzinfo.BaseT
         'EPOCH_TIME': 'timestamp',
         'DATE_TIME': 'date',
         'CO2_sync': 'CO2',
+        'CO2_dry': 'CO2_DRY',
+        'CO2':"CO2",
+        'H2O': 'H2O',
         'CO2_dry_sync': 'CO2_DRY',
         'H2O_sync': 'H2O',
         'ALARM_STATUS': 'status'
     }
-    data_map = data.rename(columns=col_map)[[l for l in col_map.values()]]
+    data_map = data.rename(columns=col_map)[[l for k, l in col_map.items() if k in data.columns]]
+    if 'timestamp' not in data_map.columns:
+        data_map = du.date_to_timestamp(data_map, 'date')
+    breakpoint()
     data_map['date'] = pd.to_datetime(data_map['timestamp'], unit='s')
     data_map['valid'] = data_map['status'].eq(0).astype(int)
     data_map['CO2_DRY_F'] = data_map['valid']
