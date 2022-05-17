@@ -45,7 +45,7 @@ class TestOrm(unittest.TestCase):
         aggs = {'CO2': 'AVG(senseair_lp8_co2)', 'CO2_MIN': 'MIN(senseair_lp8_co2)', 'CO2_MAX': 'MAX(senseair_lp8_co2)'}
         with self.session() as ses:
             grouped = cal.get_sensor_data_agg(ses, 1151, sda.AvailableSensors.LP8, fd, dt.datetime.now(), 3600*24, aggs)
-            self.assertEqual(grouped.diff()['time'].iloc[1], dt.timedelta(days=1).total_seconds())
+            self.assertEqual(grouped.reset_index().diff()['time'].iloc[1], dt.timedelta(days=1).total_seconds())
             print(grouped)
     
     def testGetHPPData(self):
@@ -59,12 +59,20 @@ class TestOrm(unittest.TestCase):
         with self.session() as ses:
             cd = cal.get_cal_ts(ses, 1151, sda.AvailableSensors.LP8, fd, dt.datetime.now(), 600)
             print(cd)
+    
+    def testGetCalDataDep(self):
+        fd = dt.datetime.now() - dt.timedelta(days=60)
+        with self.session() as ses:
+            
+            cd = cal.get_cal_ts(ses, 1151, sda.AvailableSensors.LP8, fd, dt.datetime.now(), 600, dep=True)
+            breakpoint()
+            print(cd)
 
     def testGetCylinder(self):
         with self.session() as ses:
             sel = sqlalchemy.select(mods.CylinderDeployment)
             ses.execute(sel)
-            import pdb; pdb.set_trace()
+
 
 if __name__ == '__main__':
     unittest.main()
