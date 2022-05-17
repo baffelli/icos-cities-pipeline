@@ -25,7 +25,6 @@ source_query = sqa.select(tb.c.pressure, tb.c.timestamp).where((tb.c['LocationNa
 
 
 
-import pdb; pdb.set_trace()
 update_stmt = tb.update().values(pressure = sqa.select(source_query.c.pressure).where(source_query.c.timestamp == tb.c.timestamp).scalar_subquery()).where(tb.c['LocationName']==args.dest)
 
 with eng.connect() as con:
