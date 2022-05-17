@@ -5,7 +5,7 @@ import yaml
 import pathlib as pl
 import digdag
 
-
+from typing import Any
 def list_sensors(dest:str) -> None:
     """
     List all available sensors in the database and writes  them
@@ -18,6 +18,9 @@ def list_sensors(dest:str) -> None:
     env[dest] = lst
     print(dest)
     digdag.env.store(env)
+
+def store_env(param:Any, key:str) -> None:
+    pass
 
 def load_config(file_path: pl.Path, var_name: str) -> None:
     """

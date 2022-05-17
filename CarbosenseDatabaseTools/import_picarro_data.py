@@ -42,7 +42,7 @@ def load_and_map(mapping: fu.SourceMapping, temporary: bool=False, import_all: b
     #Iterate over the mapping
     log.logger.info(f'Listing missing files for {mapping.dest}')
     #Get Missing files
-    missing_files = mapping.list_files_missing_in_dest(backfill=5, all=import_all)
+    missing_files = mapping.list_files_missing_in_dest(backfill=5, all=import_all, group=mapping.dest.group)
     #Iterate over files
     for date in missing_files:
         log.logger.info(f'Transfering file for {mapping.dest} at date {date}')
