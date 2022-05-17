@@ -43,8 +43,8 @@ dbDisconnect(con)
 tbl_depl$Date_UTC_from  <- strptime(tbl_depl$Date_UTC_from, "%Y-%m-%d %H:%M:%S", tz="UTC")
 tbl_depl$Date_UTC_to    <- strptime(tbl_depl$Date_UTC_to,   "%Y-%m-%d %H:%M:%S", tz="UTC")
 
-tbl_depl$timestamp_from <- as.numeric(difftime(time1=tbl_depl$Date_UTC_from,time2=strptime("1970-01-01 00:00:00", "%Y-%m-%d %H:%M:%S", tz="UTC"),units="secs",tz="UTC"))
-tbl_depl$timestamp_to   <- as.numeric(difftime(time1=tbl_depl$Date_UTC_to,  time2=strptime("1970-01-01 00:00:00", "%Y-%m-%d %H:%M:%S", tz="UTC"),units="secs",tz="UTC"))
+tbl_depl$timestamp_from <- as.numeric(tbl_depl$Date_UTC_from)
+tbl_depl$timestamp_to   <- as.numeric(tbl_depl$Date_UTC_to)
 
 ### ----------------------------------------------------------------------------------------------------------------------------
 
@@ -61,19 +61,30 @@ if(ANALYSE_WINDSIT){
 ### ----------------------------------------------------------------------------------------------------------------------------
 
 for(ith_depl in 1:dim(tbl_depl)[1]){
+  timestamp_from <- tbl_depl$timestamp_from[ith_depl]
+  timestamp_to <- min(c(as.numeric(lubridate::now()), tbl_depl$timestamp_to[ith_depl]))
   print(paste("Deployment row", ith_depl))
-  print(paste("Processing deployment", paste(tbl_depl[ith_depl,])))
+  print(paste("Processing deployment", paste(tbl_depl[ith_depl,], collapse='')))
+  print(paste("Between", tbl_depl$Date_UTC_from[ith_depl], "and",  tbl_depl$Date_UTC_to[ith_depl]))
 
   # Compare CO2 measurements
   # ------------------------
   
-  query_str         <- paste("SELECT timestamp, CO2_CAL_ADJ as HPP_CO2, H2O as HPP_H2O FROM ",HPP_ProcDataTblName," ",sep="")
-  query_str         <- paste(query_str,"WHERE LocationName = '",tbl_depl$LocationName[ith_depl],"' and SensorUnit_ID = ",tbl_depl$SensorUnit_ID[ith_depl]," ",sep="")
-  query_str         <- paste(query_str,"AND CO2_CAL_ADJ != -999 and Valve = 0 ",sep="")
-  query_str         <- paste(query_str,"AND timestamp >= ",tbl_depl$timestamp_from[ith_depl]," and timestamp <= ",tbl_depl$timestamp_to[ith_depl],";",sep="")
-  drv               <- dbDriver("MySQL")
+  HPP_query <- "SELECT 
+                  timestamp, 
+                  CO2_CAL_ADJ AS HPP_CO2, 
+                  H2O AS HPP_H2O 
+                FROM {`HPP_ProcDataTblName`}
+                WHERE LocationName = {tbl_depl$LocationName[ith_depl]} AND SensorUnit_ID = {tbl_depl$SensorUnit_ID[ith_depl]} 
+                AND timestamp BETWEEN {timestamp_from} AND {timestamp_to}"
+  # query_str         <- paste("SELECT timestamp, CO2_CAL_ADJ as HPP_CO2, H2O as HPP_H2O FROM ",HPP_ProcDataTblName," ",sep="")
+  # query_str         <- paste(query_str,"WHERE LocationName = '",tbl_depl$LocationName[ith_depl],"' and SensorUnit_ID = ",tbl_depl$SensorUnit_ID[ith_depl]," ",sep="")
+  # query_str         <- paste(query_str,"AND CO2_CAL_ADJ != -999 and Valve = 0 ",sep="")
+  # query_str         <- paste(query_str,"AND timestamp >= ",timestamp_from," and timestamp <= ",tbl_depl$timestamp_to[ith_depl],";",sep="")
+  # drv               <- dbDriver("MySQL")
   con <-carboutil::get_conn()
-  res               <- dbSendQuery(con, query_str)
+  HPP_query_interp <- glue::glue_sql(HPP_query, .con = con)
+  res               <- dbSendQuery(con, HPP_query_interp)
   tbl_HPP           <- dbFetch(res, n=-1)
   dbClearResult(res)
   dbDisconnect(con)
@@ -83,10 +94,10 @@ for(ith_depl in 1:dim(tbl_depl)[1]){
   }
   
   tbl_HPP      <- tbl_HPP[order(tbl_HPP$timestamp),]
-  tbl_HPP$date <- strptime("19700101000000","%Y%m%d%H%M%S",tz="UTC") + tbl_HPP$timestamp
+  tbl_HPP$date <- lubridate::as_datetime(tbl_HPP$timestamp, tz="UTC")
   
   
-  for(ref_site in c("DUE","PAY","LAEG","RIG","BRM","HAE")){
+  for(ref_site in c("DUE","PAY","LAEG","RIG","BRM","HAE")){x
     
     if(ref_site %in% c("DUE","PAY","RIG","HAE")){
       query_str         <- paste("SELECT timestamp, CO2_WET_COMP, H2O FROM ",paste("NABEL_",ref_site,sep="")," ",sep="")
@@ -136,23 +147,27 @@ for(ith_depl in 1:dim(tbl_depl)[1]){
     
     #
     
-    tbl_REF$date <- strptime("19700101000000","%Y%m%d%H%M%S",tz="UTC") + tbl_REF$timestamp
-    
+    tbl_REF$date <- lubridate::as_datetime(tbl_REF$timestamp, tz="UTC")
+  
     #
+     
+    save.image("a.RData")
+    quit()
     print("combining data with reference")
-    data <- dplyr::left_join(tbl_HPP,tbl_REF, by=c("timestamp","date"))
+    data <- dplyr::left_join(timeAverage(mydata = tbl_HPP ,avg.time = "10 min",statistic = "mean"),
+    timeAverage(mydata = tbl_REF ,avg.time = "10 min",statistic = "mean"), by=c("date"))
+    print(data)
     if(dim(data)[1]==0){
       next()
     }
 
     #
-    print("Averaging")
-    data <- timeAverage(mydata = data,avg.time = "10 min",statistic = "mean")
     
     #
     if(dim(data)[1]==0){
       next()
     }
+
     if (T){
 
     id_ok   <- which(!is.na(data$CO2) & !is.na(data$HPP_CO2))

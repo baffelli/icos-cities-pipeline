@@ -278,12 +278,12 @@ for(ith_SUID in 1:n_u_SensorUnit_ID){
       }
 
       #
-
       id_caldepl <- which(tbl_deployment$Date_UTC_from[id_depl]<=tbl_calibration$Date_UTC_from[id_cal[ith_cal]]
                           & tbl_deployment$Date_UTC_to[id_depl]>=tbl_calibration$Date_UTC_to[id_cal[ith_cal]]
                           & tbl_deployment$LocationName[id_depl]==tbl_calibration$LocationName[id_cal[ith_cal]])
 
-      if(id_caldepl==0){
+
+      if(length(id_caldepl) && !is.null(id_caldepl)  > 0 && id_caldepl==0){
         stop(paste(u_SensorUnit_ID[ith_SUID])," >> DEPL and CAL periods do not agree <<")
       }
     }

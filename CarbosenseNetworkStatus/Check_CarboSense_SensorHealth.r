@@ -102,6 +102,8 @@ if(length(id)>0){
 
 #
 
+
+
 query_str       <- paste("SELECT * FROM Sensors;",sep="")
 drv             <- dbDriver("MySQL")
 #con<-carboutil::get_conn(group="CarboSense_MySQL")
