@@ -1,14 +1,19 @@
 """
 Functions used for calibration / sensor data processing
 """
+from asyncio.log import logger
+from dataclasses import dataclass
 from operator import mod
 import pdb
 from tkinter import W
+
+import sqlalchemy
 from . import models as mods
 from . import data as du
 from . import base
 from . import log
 from . import db
+from . import utils
 
 from typing import List, NamedTuple, Optional, Union, Dict, Tuple
 
@@ -51,6 +56,17 @@ class SensInfoRow(CalDataRow):
     sensor_type: du.AvailableSensors
 
 
+@dataclass
+class CalData:
+    """
+    Class to represent a calibration entry
+    """
+    data: pd.DataFrame
+    start: pd.Timestamp
+    end: pd.Timestamp
+    serial: Union[int, str]
+
+
 def make_aggregate_columns(aggregations: Dict[str, str]) -> List[sqa.sql.expression.ColumnClause]:
     """
     Given a table and a dictionary of functions (one per each column),
@@ -81,9 +97,9 @@ def get_table(type: du.AvailableSensors) -> mods.TimeseriesData:
             return mods.PicarroData
 
 
-def get_sensor_data_agg(session: sqa.orm.Session, id: Union[int, str], 
-                        type: du.AvailableSensors, start: dt.datetime, end: dt.datetime, 
-                        averaging_time: int, aggregations: Dict):
+def get_sensor_data_agg(session: sqa.orm.Session, id: Union[int, str],
+                        type: du.AvailableSensors, start: dt.datetime, end: dt.datetime,
+                        averaging_time: int, aggregations: Dict) -> pd.DataFrame:
     """
     Get the sensor data and aggregate it by :obj:`averaging_time` (in seconds), returning a :obj:`pandas.DataFrame`
     aggregated according to the SQL expression in the `aggregations` dictionary.
@@ -93,8 +109,8 @@ def get_sensor_data_agg(session: sqa.orm.Session, id: Union[int, str],
     ae = make_aggregate_expression(tb.time, "time", avg_time=averaging_time)
     qr = query_sensor_data(session, id, type, start, end)
     qr_agg = qr.with_only_columns(*(aggs + [ae])).group_by(ae)
-    log.logger.info(f"The query is {qr_agg}")
-    dt = pd.read_sql(qr_agg, session.connection())
+    log.logger.debug(f"The query is {qr_agg}")
+    dt = pd.read_sql(qr_agg, session.connection(), index_col=ae.key)
     return dt
 
 
@@ -110,6 +126,7 @@ def get_calibration_info(session: sqa.orm.Session,
             tb = mods.Deployment
         case _:
             raise ValueError("Dep can be only boolean")
+    logger.info(tb)
     ss = sqa.select(mods.Sensor).filter(
         (mods.Sensor.type == type.value) & (mods.Sensor.id == id)).subquery()
     tb = aliased(tb)
@@ -130,7 +147,7 @@ def get_calibration_info(session: sqa.orm.Session,
     return sd
 
 
-def query_sensor_data(session: sqa.orm.Session, id: Union[str, int], type: du.AvailableSensors, start: dt.datetime, end: dt.datetime):
+def query_sensor_data(session: sqa.orm.Session, id: Union[str, int], type: du.AvailableSensors, start: dt.datetime, end: dt.datetime) -> sqlalchemy.sql.expression.Selectable:
     """
     Gets the sensor data for a given id and time period. Returns a :obj:`sqalchemy.orm.Query` to be
     used downstream in other queries.
@@ -188,49 +205,61 @@ def get_sensor_data(session: sqa.orm.Session, id: int, type: du.AvailableSensors
     return dt
 
 
-def limit_cal_entry(entries: List[CalDataRow], start: dt.datetime, end: dt.datetime) -> List[CalDataRow]:
+def limit_cal_entry(entries: List[CalDataRow], start: dt.datetime, end: dt.datetime, modes: Optional[List[int]] = None, replace_dates:bool = True) -> List[CalDataRow]:
     """
     Iterate through a list of :obj:`CalDataRow` objects and keep only those that overlap with :obj:`start` and 
-     :obj:`end`
+     :obj:`end`.
+    If `mode` is set, only return the calibration entries with the choosen calibration modes 
     """
+    entries_sort = sorted(entries, key=lambda x: x.cal_start, reverse=True)
+    di = utils.TimeInterval(start, end)
+    periods = [utils.TimeInterval(e.cal_start, e.cal_end) for e in entries_sort]
+    # valid = [CalDataRow(sensor_id=e.sensor_id, location=e.location, sensor_type=e.sensor_type, serial_number=e.serial_number, sensor_start=e.sensor_start,
+    #                     sensor_end=e.sensor_end, cal_mode=e.cal_mode, cal_start=max([e.cal_start, start]), cal_end=min([e.cal_end, end])) 
+    #                     for e in entries_sort if di.contains(utils.TimeInterval(e.cal_start, e.cal_end)) or di.overlaps(utils.TimeInterval(e.cal_start, e.cal_end)) or di.starts(utils.TimeInterval(e.cal_start, e.cal_end))]
     valid = [CalDataRow(sensor_id=e.sensor_id, location=e.location, sensor_type=e.sensor_type, serial_number=e.serial_number, sensor_start=e.sensor_start,
-                        sensor_end=e.sensor_end, cal_mode=e.cal_mode, cal_start=max([e.cal_start, start]), cal_end=min([e.cal_end, end])) for e in entries if e.cal_start < end and e.cal_end > start]
-    breakpoint()
+                        sensor_end=e.sensor_end, cal_mode=e.cal_mode, cal_start=max([e.cal_start, start]), cal_end=min([e.cal_end, end])) 
+                        for e in entries_sort if (o:=utils.TimeInterval(e.cal_start, e.cal_end)) and (o.contains(di) or di.contains(o))
+                        ]
+    if valid:
+        breakpoint()
+    if modes:
+        valid = [v for v in valid if v.cal_mode in modes]
     return valid
 
 
-def get_cal_ts(session: sqa.orm.Session, id: int, type: du.AvailableSensors, start: dt.datetime, end: dt.datetime, averaging_time: int) -> List[Tuple[Tuple[str, pd.Timestamp, pd.Timestamp], pd.DataFrame]]:
+def get_cal_ts(session: sqa.orm.Session, id: int, type: du.AvailableSensors, start: dt.datetime, end: dt.datetime, averaging_time: int, dep: bool = False, modes: Optional[List[int]] = None) -> List[Optional[CalData]]:
     """
     Gets the timeseries of (raw) calibration data for a given `id` between the `start` and `end`
     times. If the sensor is collocated with a picarro instrument, also returns the data
-    for the calibration sensor.
+    for the calibration sensor. If `dep` is set, gets the data from the `Deployment` table
+    instead than from the calibration.
+    If modes
     """
-    cal_entries = get_calibration_info(session, id, type)
-    valid = limit_cal_entry(cal_entries, start, end)
+    cal_entries = get_calibration_info(session, id, type, dep=dep)
+    valid = limit_cal_entry(cal_entries, start, end, modes=modes)
     aggs = get_aggregations(type)
     picarro_aggs = get_aggregations(du.AvailableSensors.PICARRO)
-    # Get sensor data
-    data_agg = get_sensor_data_agg(
-        session, id, type, start, end,  averaging_time, aggs)
-    # Get reference data
 
     def iterate_cal_info(e: CalDataRow) -> pd.DataFrame:
-        res = get_sensor_data_agg(session, e.location, du.AvailableSensors.PICARRO,
-                                  e.cal_start, e.cal_end, averaging_time, picarro_aggs)
-        return res.assign(**e._asdict())
-    picarro_data = pd.concat([iterate_cal_info(e) for e in valid], axis=0)
-    all_dt = data_agg.set_index('time').join(
-        picarro_data.set_index('time'), how='left').reset_index()
-    grps = ["serial_number", "sensor_start", "sensor_end"]
-    return list(all_dt.groupby(grps))
-    # for d in query_dates:
-    #     cal = [c for c in cal_entries if c.cal_start < d < c.cal_end]
-    #     match cal:
-    #         case CalDataRow() as cd:
-    #             get_sensor_data_agg(id, type, d)
-    #         case _:
-    #             print("No valid dates")
-    #     import pdb; pdb.set_trace()
+        picarro_res = get_sensor_data_agg(session, e.location, du.AvailableSensors.PICARRO,
+                                          e.cal_start, e.cal_end, averaging_time, picarro_aggs)
+        st = du.AvailableSensors[e.sensor_type]
+        sensor_res = get_sensor_data_agg(session, e.sensor_id, st,
+                                         e.cal_start, e.cal_end, averaging_time, aggs)
+        if not picarro_res.empty:
+            all_dt = sensor_res.join(picarro_res, how='left').reset_index()
+        else:
+            all_dt = sensor_res.reset_index()
+        return all_dt.assign(**e._asdict())
+    if len(valid) > 0:
+        all_dt = pd.concat([iterate_cal_info(e) for e in valid], axis=0)
+        grps = ["serial_number", "sensor_start", "sensor_end"]
+        cd = [CalData(data=data, serial=serial, start=start, end=end)
+              for (serial, start, end), data in all_dt.groupby(grps)]
+    else:
+        cd = []
+    return cd
 
 
 def make_calibration_parameters_table(table: pd.DataFrame) -> List[mods.CalibrationParameters]:
@@ -285,3 +314,32 @@ def make_calibration_parameters_table(table: pd.DataFrame) -> List[mods.Calibrat
     objs = res.reset_index().groupby(["device", "compound", "date"]).apply(
         lambda x: get_cal_params(x, x.name))
     return objs
+
+
+def prepare_level2_data(dt_in: pd.DataFrame, model_id: Union[str, int]) -> List[mods.Level2Data]:
+    """
+    Rename columns to store and produce a Leve2Data object
+    """
+    new_names = {
+        'location': 'location',
+        'time': 'time',
+        'sensor_id': 'id',
+        'CO2_pred': 'CO2',
+        'H2O': 'H2O',
+        'sensor_RH': 'relative_humidity',
+        'sensor_t': 'temperature',
+        'sensor_pressure': 'pressure'
+    }
+    dt_out = dt_in.copy()[[k for k, v in new_names.items()
+                           if k in dt_in.columns]].rename(columns=new_names)
+    dt_out['model_id'] = model_id
+    du_clean = du.replace_inf(dt_out)
+    return [mods.Level2Data(**tup) for tup in du_clean.to_dict(orient="records")]
+
+
+def persist_level2_data(session: sqa.orm.Session, data: List[mods.Level2Data]) -> None:
+    """
+    Persists the level2 data to the database
+    """
+    for row in data:
+        session.merge(row)

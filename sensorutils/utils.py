@@ -30,24 +30,25 @@ class TimeInterval:
         return space
 
     def precedes(self, y: 'TimeInterval') -> bool:
-        return self.start < y.start and self.end < y.end
+        return (self.start < y.start) and (self.end < y.end)
     
     def meets(self, y: 'TimeInterval') -> bool:
         return self.end == y.start
     
     def overlaps(self, y: 'TimeInterval') -> bool:
-        return self.start < y.start  and y.end > self.end
+
+        return (self.start < y.start)  and (y.end > self.end)
     
     def contains(self,  y: 'TimeInterval') -> bool:
-        return self.start < y.start  and  self.end > y.end
+        return (self.start < y.start)  and  (self.end > y.end)
     
     def starts(self, y: 'TimeInterval'):
-        return self.start == y.start  and y.end > self.end
+        return (self.start == y.start)  and (y.end > self.end)
     
     def equals(self, y: 'TimeInterval'):
-        return self.start == y.start and self.end == y.end
+        return (self.start == y.start) and (self.end == y.end)
     
-    def finishes(self, y: 'TimeInterval') -> bool:
-        return y.start < self.start < self.end == y.end
+    def finished_by(self, y: 'TimeInterval') -> bool:
+        return (self.start < y.start) and (self.end == y.end)
 
 

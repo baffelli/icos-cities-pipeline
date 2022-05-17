@@ -25,7 +25,7 @@ from statsmodels.regression import linear_model
 
 import pathlib as pl
 
-from typing import List, Union, Dict
+from typing import List, Union, Dict, Optional
 
 
 @dataclass
@@ -51,9 +51,9 @@ class Deployment(SensBase):
     __sa_dataclass_metadata_key__ = "sa"
     # id: int = Column("SensorUnit_ID", String, primary_key=True)
     # location: str = Column("LocationName", String)
-    # start: dt.datetime = Column("Date_UTC_from", DateTime, primary_key=True)
-    # end: dt.datetime = Column("Date_UTC_to", DateTime, primary_key=True)
-    mode: int = 1
+    start: dt.datetime = Column("Date_UTC_from", DateTime, primary_key=True)
+    end: dt.datetime = Column("Date_UTC_to", DateTime, primary_key=True)
+    mode: Optional[int] = Column('cal_mode', Integer)
     height: float = Column("HeightAboveGround", Float)
     inlet_height: float = Column("Inlet_HeightAboveGround", Float)
 
@@ -64,10 +64,6 @@ class Calibration(SensBase):
     """
     __tablename__ = "Calibration"
     __sa_dataclass_metadata_key__ = "sa"
-    # id: int = Column("SensorUnit_ID", String, primary_key=True)
-    # location: str = Column("LocationName", String)
-    # start: dt.datetime = Column("Date_UTC_from", DateTime, primary_key=True)
-    #end: dt.datetime = Column("Date_UTC_to", DateTime, primary_key=True)
     mode: int = Column("CalMode", Integer)
     table: str = Column("DBTableNameRefData", String)
 
@@ -143,7 +139,7 @@ class CalibrationParameter(base.Base):
     __tablename__ = "model_parameter"
     __sa_dataclass_metadata_key__ = "sa"
     id: int = Column(Integer, primary_key=True)
-    model_id: int = Column(ForeignKey("calibration_parameters.id"))
+    model_id: int = Column(Integer)
     parameter: str = Column(String(64))
     value: float = Column(Float())
 
@@ -183,7 +179,7 @@ class CalibrationParameters(base.Base):
     computed: dt.datetime = Column(DateTime())
     device: str = Column(String(64))
     parameters: List[CalibrationParameter] = relationship(
-        CalibrationParameter)
+        CalibrationParameter, foreign_keys= lambda: CalibrationParameter.model_id, primaryjoin=lambda: CalibrationParameter.model_id == CalibrationParameters.id)
 
     def serialise(self) -> Dict:
         """
@@ -308,3 +304,18 @@ class PicarroData(base.Base, TimeseriesData):
     RH_F: int = Column(Integer)
     calibration_mode: str = Column(String)
     chamber_status: int = Column(Integer)
+
+@dataclass
+class Level2Data(base.Base, TimeseriesData):
+    __tablename__ = "co2_level2"
+    __sa_dataclass_metadata_key__ = "sa"
+    id: str = Column("sensor_id", String, primary_key=True)
+    location: str = Column("location", String, primary_key=True)
+    time: int = Column("timestamp", Integer, primary_key=True)
+    model_id: int = Column("calibration_model_id", Integer)
+    CO2: float = Column(Float)
+    H2O: float = Column(Float)
+    temperature: float = Column(Float)
+    relative_humidity: float = Column(Float)
+    pressure: float = Column(Float)
+    inlet: float = Column(String)
