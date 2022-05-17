@@ -143,7 +143,7 @@ def importsql(eng: sqa.engine.Engine):
     points = [dp for dp
               in dps
               if dp['time'] != 4102444800 * 1000]
-    import pdb; pdb.set_trace()
+
     print("writing %d points ..." % len(points))
     client.write_points(points, time_precision='ms')
     print("done")
