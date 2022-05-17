@@ -55,7 +55,56 @@ LAEG:
     - {name: CO_F, query: 1 - isnull(CO), datatype: int, na: 0}
     - {name: H2O, query: H2O, datatype: float, na: -999}
     - {name: H2O_F, query:  1 - isnull(H2O), datatype: int, na: 0}
-
+DUE2:
+  source:
+    type: DB
+    db_prefix: empaGSN
+    table: beromuenster_12m_1min_cal
+    date_from: 2018-01-01T00:00:00.000
+    na: NULL
+    date_column:  timed / 1000
+  dest:
+    type: DB
+    table: UNIBE_BRM
+    db_prefix: CarboSense_MySQL
+    date_from: 2018-01-01T00:00:00.000
+    date_column: timestamp
+    na: -999
+  columns:
+    - {name: timestamp, query: timed / 1000, datatype: int, na: 0}
+    - {name: CO2, query: CO2_DRY * (1 - H2O/100), datatype: float, na: -999}
+    - {name: CO2_F, query:  1 - (isnull(CO2_DRY) or isnull(H2O) or CO2_DRY > 2000 OR CO2_DRY < 200), datatype: int, na: 0}
+    - {name: CO2_DRY, query: CO2_DRY, datatype: float, na: -999}
+    - {name: CO2_DRY_F, query: 1 - (isnull(CO2_DRY) or CO2_DRY > 2000 OR CO2_DRY < 200), datatype: int, na: 0}
+    - {name: CO, query: CO, datatype: float, na: -999}
+    - {name: CO_F, query: 1 - isnull(CO), datatype: int, na: 0}
+    - {name: H2O, query: H2O, datatype: float, na: -999}
+    - {name: H2O_F, query:  1 - isnull(H2O), datatype: int, na: 0}
+# GIMM:
+#   source:
+#     type: DB
+#     db_prefix: empaGSN
+#     table: gimmiz_1min_cal
+#     date_from: 2018-01-01T00:00:00.000
+#     na: NULL
+#     date_column:  timed / 1000
+#   dest:
+#     type: DB
+#     table: UNIBE_GIMM
+#     db_prefix: CarboSense_MySQL
+#     date_from: 2018-01-01T00:00:00.000
+#     na: -999
+#     date_column:  timestamp
+#   columns:
+#     - {name: timestamp, query: timed / 1000, datatype: int, na: 0}
+#     - {name: CO2, query: CO2_DRY * (1 - H2O/100), datatype: float, na: -999}
+#     - {name: CO2_F, query:  1 - (((VALVEPOS = 5) OR (CO2_DRY IS NULL) OR (H2O IS NULL))), datatype: int, na: 0}
+#     - {name: CO2_DRY, query: CO2_DRY, datatype: float, na: -999}
+#     - {name: CO2_DRY_F, query: 1 - (((VALVEPOS = 5) OR (CO2_DRY IS NULL))), datatype: int, na: 0}
+#     - {name: CO, query: CO, datatype: float, na: -999}
+#     - {name: CO_F, query: 1 - isnull(CO), datatype: int, na: 0}
+#     - {name: H2O, query: H2O, datatype: float, na: -999}
+#     - {name: H2O_F, query:  1 - isnull(H2O), datatype: int, na: 0}
 # RIG:
 #   source:
 #     type: NABEL
