@@ -14,8 +14,9 @@ from curses import meta
 from dataclasses import dataclass, field
 from enum import Enum
 from statistics import correlation
-from typing import (Callable, Dict, Iterable, List, Optional, Pattern, Set,
+from typing import (Callable, Dict, Iterable, List, Optional, Pattern, Set, TypeVar,
                     Union, Tuple)
+from typing_extensions import Self
 
 import influxdb
 import numpy as np
@@ -86,9 +87,6 @@ class CalType(Enum):
     ONE_POINT = 1
     TWO_POINT = 2
     OTHER = 3
-
-
-
 
 
 
@@ -324,3 +322,11 @@ def map_climate_chamber_status_code(ec: ClimateChamberStatusCode) -> int:
         case ClimateChamberStatusCode.MEASURE:
             value = 1
     return value
+
+
+def replace_inf(dt: pd.DataFrame) -> pd.DataFrame:
+    """
+    Remove all inf values from the DataFrame and replaces
+    them with None
+    """
+    return dt.replace([np.inf, -np.inf, np.nan], None)
