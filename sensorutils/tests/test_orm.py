@@ -31,6 +31,12 @@ class TestOrm(unittest.TestCase):
 
     def testGetCalibration(self):
         with self.session() as ses:
+            stm = sqlalchemy.select(mods.Deployment)
+            dt = ses.execute(stm).first()
+            breakpoint()
+
+    def testGetCalibrationInfo(self):
+        with self.session() as ses:
             ci = cal.get_calibration_info(ses, 1151, sda.AvailableSensors.LP8)
         print(ci)
 

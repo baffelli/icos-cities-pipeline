@@ -598,7 +598,7 @@ def prepare_features(dt: pd.DataFrame, ir_col: str = "sensor_ir_lpl", fit: bool 
     dt_new['date'] = pd.to_datetime(dt_new['time'], unit='s')
     dt_new["sensor_ir_log"] = - np.log(dt_new[ir_col])
     dt_new["sensor_ir_inverse"] = 1/(dt_new[ir_col])
-    dt_new["sensor_ir_interaction_t"] = dt_new[f"sensor_t"] * \
+    dt_new["sensor_ir_interaction_t"] = dt_new[f"sensor_t"] / \
         dt_new[ir_col]
     dt_new["sensor_ir_interaction_inverse_pressure"] = dt_new['sensor_pressure'] / \
         (dt_new[ir_col])
@@ -643,30 +643,32 @@ def prepare_LP8_features(dt: pd.DataFrame, fit: bool = True,  plt: str = '1d') -
     dt_new = dt.copy().reset_index()
     dt_new['date'] = pd.to_datetime(dt_new['time'], unit='s')
     dt_new["sensor_ir_log"] = - np.log(dt_new["sensor_ir"])
-    dt_new["sensor_ir_interaction_t"] = dt_new[f"sensor_t"] * \
+    dt_new["sensor_t_sq"] = dt_new[f"sensor_t"]**2
+    dt_new["sensor_t_cub"] = dt_new[f"sensor_t"]**3
+    dt_new["sensor_ir_interaction_t"] = dt_new[f"sensor_t"] / \
         dt_new["sensor_ir"]
-    dt_new["sensor_ir_interaction_t_sq"] = dt_new[f"sensor_t"]**2 * \
+    dt_new["sensor_ir_interaction_t_sq"] = dt_new[f"sensor_t_sq"] / \
         dt_new["sensor_ir"]
-    dt_new["sensor_ir_interaction_t_cub"] = dt_new[f"sensor_t"]**3 * \
+    dt_new["sensor_ir_interaction_t_cub"] = dt_new[f"sensor_t_cub"] / \
         dt_new["sensor_ir"]
     dt_new['sensor_CO2_interaction_t'] = dt_new[f"sensor_CO2"] / \
         dt_new[f"sensor_t"]
+    #dt_new["sensor_pressure"] = dt_new[f"ref_pressure"] 
     dt_new["sensor_t_abs"] = calc.absolute_temperature(dt_new['sensor_t'])
-    dt_new["sensor_t_sq"] = dt_new[f"sensor_t"]**2
-    dt_new["sensor_t_cub"] = dt_new[f"sensor_t"]**3
     dt_new['time_dummy'] = dt_new['date'].dt.round(plt).dt.date.astype('str')
     dt_new['const'] = 1
+    dt_new['sensor_H2O'] = calc.rh_to_molar_mixing(dt_new['sensor_RH'], dt_new['sensor_t_abs'], calc.P0)
+    dt_new['sensor_ir_interaction_H2O'] = dt_new["sensor_ir"] /  dt_new['sensor_H2O']
     # Additional features needed for fitting but not for prediction
     if fit:
         try:
             dt_new['ref_t_abs'] = calc.absolute_temperature(dt_new['ref_T'])
             # Normalisation constant
-            nc = calc.T0 / dt_new['ref_t_abs']  * dt_new['ref_pressure'] / calc.P0
+            dt_new["nc"] = calc.T0 / dt_new['sensor_t_abs']  * dt_new['ref_pressure'] / calc.P0
             # Compute normalised concentrations using ideal gas law
             dt_new['ref_CO2'] = calc.dry_to_wet_molar_mixing(
                 dt_new['ref_CO2_DRY'], dt_new['ref_H2O'])
-            dt_new['ref_CO2_comp'] = calc.dry_to_wet_molar_mixing(
-                dt_new['ref_CO2_DRY'], dt_new['ref_H2O']) * nc 
+            dt_new['ref_CO2_comp'] = dt_new['ref_CO2'] * dt_new["nc"]
         except KeyError:
             pass
     return dt_new
@@ -737,13 +739,14 @@ def HPP_CO2_calibration(dt_in: pd.DataFrame):
     return CO2_calibration(dt_in, reg)
 
 
-def LP8_CO2_calibration(dt_in: pd.DataFrame, target: str = 'ref_CO2_comp') -> sm.regression.linear_model.RegressionResultsWrapper:
+def LP8_CO2_calibration(dt_in: pd.DataFrame, regs: List[str], target: str = 'ref_CO2_comp', dummy:bool  = False) -> sm.regression.linear_model.RegressionResultsWrapper:
     """
+    Linear regression model for LP8 calibration.
+    The names of `reg` correspond to the values of the column `parameter` in the
+    `model_parameters` table. How the features are computed is found in :obj:`prepare_LP8_features`.
     """
-    reg = ["sensor_ir_log", "const", "sensor_t", "sensor_t_sq", "sensor_t_cub",
-           "sensor_ir_interaction_t", "sensor_ir_interaction_t_sq"]
-    #reg = ["sensor_ir_log", "sensor_ir_interaction_t", "sensor_t", "sensor_t_sq"]
-    return CO2_calibration(dt_in, reg, target=target, dummy=None)
+    dummies = "time_dummy" if dummy else None
+    return CO2_calibration(dt_in, regs, target=target, dummy=dummies)
 
 
 def predict_CO2(dt_in: pd.DataFrame, model: sm.regression.linear_model.RegressionResultsWrapper) -> pd.DataFrame:
@@ -752,8 +755,8 @@ def predict_CO2(dt_in: pd.DataFrame, model: sm.regression.linear_model.Regressio
     predict the CO2 concentration
     """
     dt_out = dt_in.copy()
-    nc = dt_out['sensor_t_abs'] / calc.T0 
-    dt_out["CO2_pred"] = model.predict(dt_out[model.model.exog_names]) * nc
+    #nc = dt_out['sensor_t_abs'] / calc.T0 
+    dt_out["CO2_pred"] = model.predict(dt_out[model.model.exog_names]) *  1/dt_out["nc"]
 
     return dt_out
 
@@ -776,7 +779,7 @@ def rmse(ref: pd.Series, value: pd.Series) -> float:
 
 def plot_CO2_calibration(dt: pd.DataFrame,
                          model: sm.regression.linear_model.RegressionResults,
-                         ref_col='ref_CO2',
+                         ref_col='ref_CO2_DRY',
                          pred_col='CO2_pred',
                          orig_col="sensor_CO2",
                          extra_res: Optional[List[str]] = None) -> Tuple[plt.Figure, plt.Figure]:
@@ -828,7 +831,7 @@ def plot_CO2_calibration(dt: pd.DataFrame,
     # Plot residuals vs various parameters
     fig2: mpl.Figure = mpl.figure.Figure()
     reg_names = [k for k, n in model.params.items()] + [ref_col, ] + extra_res
-    nr = math.ceil(math.log2(len(reg_names))) + 1
+    nr = math.ceil(math.log2(len(reg_names))) + 4
     for i, par_name in enumerate(reg_names, start=1):
         current_ax = fig2.add_subplot(nr, nr, i)
         current_ax.scatter(dt[par_name], residuals, 0.4)
@@ -836,7 +839,7 @@ def plot_CO2_calibration(dt: pd.DataFrame,
         current_ax.set_ylabel('Residual [ppm]')
         current_ax.set_ylim(-30, 30)
     fig2.tight_layout()
-    fig.tight_layout()
+    #Plot timeseries of regressors
     return fig, fig2
 
 
@@ -952,6 +955,7 @@ def cal_cv_split(dt_in: pd.DataFrame,
             # For each "plateau", take 1/4 of the sample for training and half for testing
             plateaus = dt_copy.groupby("mode_change").apply(
                 lambda x:  x.reset_index().index.to_series() < len(x) * 0.25).reset_index()[0]
+            #Find periods where RH does not vary
             fit = (train & stable_cols & plateaus) | (train & plateaus)
             test = (train & stable_cols & ~plateaus) | (train & ~plateaus)
         case du.AvailableSensors.HPP:
@@ -1188,7 +1192,6 @@ for current_id in ids_to_process:
         case "process", (du.AvailableSensors.LP8 as st):
             # List files missing in destination (only process them)
             missing_dates = data_mapping.list_files_missing_in_dest(group=id, all=args.full)
-            breakpoint()
             logger.info(f"The missing dates for {id} are {missing_dates}")
             # Get calibration parameters
             wp_path = b_pth.with_name(f'LP8_predictions_{id}.pdf')
@@ -1231,8 +1234,13 @@ for current_id in ids_to_process:
 
                 
         case "calibrate",  (du.AvailableSensors.LP8 as st):
+            #Define regressors
+            reg = ["sensor_ir_log", "const", "sensor_t", "sensor_t_sq", "sensor_t_cub",
+           "sensor_ir_interaction_t", "sensor_ir_interaction_t_sq", 
+           "sensor_ir_interaction_t_cub",
+           "sensor_H2O", "sensor_ir_interaction_H2O"]
             # Get averaging time for calibration mode
-            av_t = get_averaging_time(st, True)
+            av_t = get_averaging_time(st, fit = True)
             #Get galibration data
             logger.info(f"Getting calibration data for {id}")
             try:
@@ -1240,7 +1248,7 @@ for current_id in ids_to_process:
                     cal_data_all_serial = cal.get_cal_ts(ses, id, st, start, dt.datetime.now(), av_t, modes=[2], dep=True)
             except ValueError as e:
                 logger.info(
-                    f"There is not data for sensor {id} between {start} and today")
+                    f"There is not measurement data for sensor {id} between {start} and {dt.datetime.now()}")
                 continue
             for cd in cal_data_all_serial:
                 logger.info(f"Processing sensor {cd.serial} of unit {id}")
@@ -1252,7 +1260,7 @@ for current_id in ids_to_process:
                     cal_df, train_df = cal_cv_split(
                         cal_features, duration=dur.days, mode=CalModes.CHAMBER, sensor=args.sensor_type)
                     
-                    cal_fit = LP8_CO2_calibration(cal_df)
+                    cal_fit = LP8_CO2_calibration(cal_df, reg, dummy=False)
                 except (ValueError, DataError) as E:
                     logger.exception(E)
                     logger.info("No valid data for {id}")
@@ -1266,18 +1274,17 @@ for current_id in ids_to_process:
                 # fit_rh_threshold(co2_pred_all)
                 # #Plot and save
                 ts_plot, scatter_plot = plot_CO2_calibration(
-                    co2_pred, cal_fit, orig_col="sensor_CO2", extra_res=['ref_H2O'])
-                wp_path = b_pth.with_name(f'LP8_{id}_{cd.serial}.pdf')
-                wp_path_res = b_pth.with_name(
-                    f'LP8_res_{id}_{cd.serial}.pdf')
+                    co2_pred, cal_fit_nd, orig_col="sensor_CO2", extra_res=['ref_H2O'])
+                base_name = f"{st.name}_{id}_{cd.serial}_{cd.start:%Y%m%d}_{cd.end:%Y%m%d}"
+                wp_path = b_pth.with_name(f'{base_name}.pdf')
+                wp_path_res = b_pth.with_name(f'{base_name}_res.pdf')
+                wp_path_reg = b_pth.with_name(f'{base_name}_res_ts.pdf')
                 ts_plot.savefig(wp_path)
                 scatter_plot.savefig(wp_path_res)
-
-                # Persist
                 # Persist parameters
                 computed_when = dt.datetime.now()
                 cal_obj = convert_calibration_parameters(
-                    cal_fit, "CO2", args.sensor_type, cd.data.cal_end.max(), cd.end.to_pydatetime(), computed_when, cd.serial)
+                    cal_fit, "CO2", args.sensor_type, cd.data.cal_end.max(), cd.next, computed_when, cd.serial)
                 # Compute model statistics
                 model_statistics = compute_quality_indices(co2_pred)
                 # Persist fit and model statistics
@@ -1288,6 +1295,8 @@ for current_id in ids_to_process:
                     session.commit()
                     cal_performance = mods.ModelFitPerformance(
                         model_id=cal_obj.id, **model_statistics)
+                    if np.any([np.isnan(k) for k in model_statistics.values()]):
+                        continue
                     session.add(cal_performance)
                     session.commit()
 

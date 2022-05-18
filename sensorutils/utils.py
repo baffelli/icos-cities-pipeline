@@ -1,6 +1,8 @@
 import datetime as dt
 from dataclasses import dataclass
-from typing import Optional
+from typing import NamedTuple, Optional, Tuple
+import pandas as pd
+
 
 @dataclass
 class TimeInterval:

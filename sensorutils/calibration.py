@@ -31,7 +31,32 @@ import pandas as pd
 class CalDataRow(NamedTuple):
     """
     Class to represent a row in the calibration table or in the deployment table
-    *
+    Attributes:
+    ----------
+    sensor_id: int
+        The sensor id
+    serial_number: int
+        The sensor serialnumber
+    location: int
+        The location of deployment / calibration. Serves as a key to find reference
+        data in `picarro_data`
+    cal_start: date
+        Start of calibration
+    cal_end: date 
+        End of calibration
+    cal_mode: int
+        The calibration mode (2 = Chamber, 1 = Co-Location, 3 = Pressure chamber)
+    sensor_start: date
+        Start of sensor validity period
+    sensor_end: date
+        End of sensor validity period
+    sensor_type: sensorutils.data.AvailableSensors
+        The type of sensor being calibrated
+    next_cal: date or none
+        Date of the next calibration if available
+        (used to limit validity period of computed parameters until the next
+        calibration)
+
     """
     sensor_id: int
     serial_number: str
@@ -42,6 +67,7 @@ class CalDataRow(NamedTuple):
     sensor_start: dt.datetime
     sensor_end: dt.datetime
     sensor_type: du.AvailableSensors
+    next_cal: Optional[dt.datetime]
 
 
 class SensInfoRow(CalDataRow):
@@ -64,6 +90,7 @@ class CalData:
     data: pd.DataFrame
     start: pd.Timestamp
     end: pd.Timestamp
+    next: pd.Timestamp
     serial: Union[int, str]
 
 
@@ -127,23 +154,24 @@ def get_calibration_info(session: sqa.orm.Session,
         case _:
             raise ValueError("Dep can be only boolean")
     logger.info(tb)
-    ss = sqa.select(mods.Sensor).filter(
-        (mods.Sensor.type == type.value) & (mods.Sensor.id == id)).subquery()
-    tb = aliased(tb)
+    ss = sqa.select(
+        mods.Sensor
+    ).filter(
+        (mods.Sensor.type == type.value) & (mods.Sensor.id == id)).cte()
+    tb1 = aliased(tb)
     filtered_sens = aliased(mods.Sensor, alias=ss)
-    objects = sqa.select(filtered_sens, tb).\
-        join_from(filtered_sens, tb,
-                  (filtered_sens.id == tb.id) &
-                  (tb.start >= filtered_sens.start) &
-                  (filtered_sens.end >= tb.end)
+    objects = sqa.select(filtered_sens, tb1).\
+        join_from(filtered_sens, tb1,
+                  (filtered_sens.id == tb1.id) &
+                  (tb1.start >= filtered_sens.start) &
+                  (filtered_sens.end >= tb1.end)
                   ).\
-        filter(tb.start >= filtered_sens.start).\
-        order_by(tb.start.desc())
-
+        filter(tb1.start >= filtered_sens.start).\
+        order_by(tb1.start.desc())
     sd = [CalDataRow(sensor_id=c.id, serial_number=s.serial,
                      location=c.location, sensor_type=s.type,
                      cal_start=c.start, cal_end=c.end,
-                     sensor_start=s.start, sensor_end=s.end, cal_mode=c.mode) for s, c in session.execute(objects)]
+                     sensor_start=s.start, sensor_end=s.end, cal_mode=c.mode, next_cal=c.next_cal) for s, c in session.execute(objects)]
     return sd
 
 
@@ -205,7 +233,7 @@ def get_sensor_data(session: sqa.orm.Session, id: int, type: du.AvailableSensors
     return dt
 
 
-def limit_cal_entry(entries: List[CalDataRow], start: dt.datetime, end: dt.datetime, modes: Optional[List[int]] = None, replace_dates:bool = True) -> List[CalDataRow]:
+def limit_cal_entry(entries: List[CalDataRow], start: dt.datetime, end: dt.datetime, modes: Optional[List[int]] = None, replace_dates: bool = True) -> List[CalDataRow]:
     """
     Iterate through a list of :obj:`CalDataRow` objects and keep only those that overlap with :obj:`start` and 
      :obj:`end`.
@@ -213,16 +241,15 @@ def limit_cal_entry(entries: List[CalDataRow], start: dt.datetime, end: dt.datet
     """
     entries_sort = sorted(entries, key=lambda x: x.cal_start, reverse=True)
     di = utils.TimeInterval(start, end)
-    periods = [utils.TimeInterval(e.cal_start, e.cal_end) for e in entries_sort]
+    periods = [utils.TimeInterval(e.cal_start, e.cal_end)
+               for e in entries_sort]
     # valid = [CalDataRow(sensor_id=e.sensor_id, location=e.location, sensor_type=e.sensor_type, serial_number=e.serial_number, sensor_start=e.sensor_start,
-    #                     sensor_end=e.sensor_end, cal_mode=e.cal_mode, cal_start=max([e.cal_start, start]), cal_end=min([e.cal_end, end])) 
+    #                     sensor_end=e.sensor_end, cal_mode=e.cal_mode, cal_start=max([e.cal_start, start]), cal_end=min([e.cal_end, end]))
     #                     for e in entries_sort if di.contains(utils.TimeInterval(e.cal_start, e.cal_end)) or di.overlaps(utils.TimeInterval(e.cal_start, e.cal_end)) or di.starts(utils.TimeInterval(e.cal_start, e.cal_end))]
     valid = [CalDataRow(sensor_id=e.sensor_id, location=e.location, sensor_type=e.sensor_type, serial_number=e.serial_number, sensor_start=e.sensor_start,
-                        sensor_end=e.sensor_end, cal_mode=e.cal_mode, cal_start=max([e.cal_start, start]), cal_end=min([e.cal_end, end])) 
-                        for e in entries_sort if (o:=utils.TimeInterval(e.cal_start, e.cal_end)) and (o.contains(di) or di.contains(o))
-                        ]
-    if valid:
-        breakpoint()
+                        sensor_end=e.sensor_end, next_cal=e.next_cal, cal_mode=e.cal_mode, cal_start=max([e.cal_start, start]), cal_end=min([e.cal_end, end]))
+             for e in entries_sort if (o := utils.TimeInterval(e.cal_start, e.cal_end)) and (o.contains(di) or di.contains(o))
+             ]
     if modes:
         valid = [v for v in valid if v.cal_mode in modes]
     return valid
@@ -254,9 +281,16 @@ def get_cal_ts(session: sqa.orm.Session, id: int, type: du.AvailableSensors, sta
         return all_dt.assign(**e._asdict())
     if len(valid) > 0:
         all_dt = pd.concat([iterate_cal_info(e) for e in valid], axis=0)
-        grps = ["serial_number", "sensor_start", "sensor_end"]
-        cd = [CalData(data=data, serial=serial, start=start, end=end)
-              for (serial, start, end), data in all_dt.groupby(grps)]
+        grps = ["serial_number", "cal_start", "cal_end", "next_cal"]
+        cd = [
+                CalData(
+                    data  = data,
+                    serial = serial, 
+                    start=cal_start,
+                    end = cal_end,
+                    next = next_cal) 
+                for (serial, cal_start, cal_end, next_cal), data in all_dt.groupby(grps)
+            ]
     else:
         cd = []
     return cd

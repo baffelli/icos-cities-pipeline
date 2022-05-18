@@ -3,7 +3,7 @@ Module to store the ORM class models
 to represent database objects
 """
 from abc import ABC, ABCMeta
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from sensorutils import data
 
 import sqlalchemy
@@ -12,9 +12,9 @@ import datetime as dt
 
 from sqlalchemy import (Column, DateTime, Float, ForeignKey, Integer, String,
                         engine)
-from sqlalchemy.orm import relationship
-from sqlalchemy.ext.declarative import declarative_base
-
+from sqlalchemy.orm import relationship, column_property, query_expression, aliased, object_session
+from sqlalchemy.ext.declarative import declarative_base, declared_attr
+from sqlalchemy import func
 
 import pandas as pd
 import numpy as np
@@ -39,6 +39,37 @@ class SensorDeploymentBase(object):
     location: str = Column("LocationName", String)
     start: dt.datetime = Column("Date_UTC_from", DateTime, primary_key=True)
     end: dt.datetime = Column("Date_UTC_to", DateTime, primary_key=True)
+    mode: int = Column(Integer)
+    # @declared_attr
+    # def next_cal(cls) -> Optional[dt.datetime]:
+
+    #     qr = sqlalchemy.select(
+    #         func.lead(cls.start).over(partition_by=cls.id, order_by=cls.start).label('next')
+    #         ).filter(cls.mode == 2).subquery()
+    #     al = aliased(cls, alias=qr)
+    #     fq = sqlalchemy.select(al).filter((al.id==cls.id) & (al.start == cls.start))
+    #     return query_expression(fq)
+    @property
+    def next_cal(self) -> Optional[dt.datetime]:
+        """
+        Return the date of next (chamber) calibration
+        """
+        ses =  object_session(self)
+        cls = self.__class__
+        iq = sqlalchemy.select(
+            cls,
+        ).filter(cls.mode==2).cte()
+        iq_as = aliased(cls, alias=iq)
+        ft_dt = sqlalchemy.DateTime(data.NAT.to_pydatetime())
+        stm = sqlalchemy.select(func.coalesce(iq_as.start, ft_dt)).filter(
+            (iq_as.id == self.id) &  
+            (iq_as.start > self.start)).order_by(iq_as.start.desc()).limit(1)
+        #breakpoint()
+        final_stm = ses.scalar(func.coalesce(ses.scalar(stm), sqlalchemy.cast(data.NAT.to_pydatetime(), sqlalchemy.DateTime)))
+        return final_stm
+        
+        
+
 
 SensBase = declarative_base(cls=SensorDeploymentBase)
 
@@ -56,6 +87,7 @@ class Deployment(SensBase):
     mode: Optional[int] = Column('cal_mode', Integer)
     height: float = Column("HeightAboveGround", Float)
     inlet_height: float = Column("Inlet_HeightAboveGround", Float)
+
 
 @dataclass
 class Calibration(SensBase):
