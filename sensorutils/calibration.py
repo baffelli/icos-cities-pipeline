@@ -5,6 +5,7 @@ from asyncio.log import logger
 from dataclasses import dataclass
 from operator import mod
 import pdb
+from statistics import correlation
 from tkinter import W
 
 import sqlalchemy
@@ -26,6 +27,7 @@ from sqlalchemy.orm import aliased
 import datetime as dt
 
 import pandas as pd
+import numpy as np
 
 
 class CalDataRow(NamedTuple):
@@ -243,9 +245,6 @@ def limit_cal_entry(entries: List[CalDataRow], start: dt.datetime, end: dt.datet
     di = utils.TimeInterval(start, end)
     periods = [utils.TimeInterval(e.cal_start, e.cal_end)
                for e in entries_sort]
-    # valid = [CalDataRow(sensor_id=e.sensor_id, location=e.location, sensor_type=e.sensor_type, serial_number=e.serial_number, sensor_start=e.sensor_start,
-    #                     sensor_end=e.sensor_end, cal_mode=e.cal_mode, cal_start=max([e.cal_start, start]), cal_end=min([e.cal_end, end]))
-    #                     for e in entries_sort if di.contains(utils.TimeInterval(e.cal_start, e.cal_end)) or di.overlaps(utils.TimeInterval(e.cal_start, e.cal_end)) or di.starts(utils.TimeInterval(e.cal_start, e.cal_end))]
     valid = [CalDataRow(sensor_id=e.sensor_id, location=e.location, sensor_type=e.sensor_type, serial_number=e.serial_number, sensor_start=e.sensor_start,
                         sensor_end=e.sensor_end, next_cal=e.next_cal, cal_mode=e.cal_mode, cal_start=max([e.cal_start, start]), cal_end=min([e.cal_end, end]))
              for e in entries_sort if (o := utils.TimeInterval(e.cal_start, e.cal_end)) and (o.contains(di) or di.contains(o))
@@ -377,3 +376,39 @@ def persist_level2_data(session: sqa.orm.Session, data: List[mods.Level2Data]) -
     """
     for row in data:
         session.merge(row)
+
+@dataclass
+class CalibrationQuality:
+    """
+    Dataclass to store calibration quality parameters
+    """
+    rmse: float 
+    bias: float
+    correlation: float
+
+
+
+def bias(ref: pd.Series, value: pd.Series) -> float:
+    """
+    Computes the bias (mean difference)
+    of two `pandas.Series`
+    """
+    return (ref - value).mean()
+
+
+def rmse(ref: pd.Series, value: pd.Series) -> float:
+    """
+    Computes the rmse (mean squared difference)
+    of two `pandas.Series`
+    """
+    return np.sqrt(((ref - value)**2).mean())
+
+def compute_quality_indices(pred: pd.DataFrame, ref_col='ref_CO2', pred_col='CO2_pred',) -> CalibrationQuality:
+    """
+    Compute model quality indicators for a dataframe of model predictions
+    and return a dict of the statistics
+    """
+    res_rmse = rmse(pred[ref_col],  pred[pred_col])
+    res_bias = bias(pred[ref_col],  pred[pred_col])
+    res_cor = pred[ref_col].corr(pred[pred_col])
+    return mods.ModelFitPerformance(**{'rmse': res_rmse, 'bias': res_bias, 'correlation': res_cor})

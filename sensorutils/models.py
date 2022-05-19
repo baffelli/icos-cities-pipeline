@@ -4,6 +4,7 @@ to represent database objects
 """
 from abc import ABC, ABCMeta
 from dataclasses import dataclass, field
+from tkinter.tix import Select
 from sensorutils import data
 
 import sqlalchemy
@@ -40,15 +41,6 @@ class SensorDeploymentBase(object):
     start: dt.datetime = Column("Date_UTC_from", DateTime, primary_key=True)
     end: dt.datetime = Column("Date_UTC_to", DateTime, primary_key=True)
     mode: int = Column(Integer)
-    # @declared_attr
-    # def next_cal(cls) -> Optional[dt.datetime]:
-
-    #     qr = sqlalchemy.select(
-    #         func.lead(cls.start).over(partition_by=cls.id, order_by=cls.start).label('next')
-    #         ).filter(cls.mode == 2).subquery()
-    #     al = aliased(cls, alias=qr)
-    #     fq = sqlalchemy.select(al).filter((al.id==cls.id) & (al.start == cls.start))
-    #     return query_expression(fq)
     @property
     def next_cal(self) -> Optional[dt.datetime]:
         """
@@ -64,12 +56,10 @@ class SensorDeploymentBase(object):
         stm = sqlalchemy.select(func.coalesce(iq_as.start, ft_dt)).filter(
             (iq_as.id == self.id) &  
             (iq_as.start > self.start)).order_by(iq_as.start.desc()).limit(1)
-        #breakpoint()
         final_stm = ses.scalar(func.coalesce(ses.scalar(stm), sqlalchemy.cast(data.NAT.to_pydatetime(), sqlalchemy.DateTime)))
         return final_stm
         
         
-
 
 SensBase = declarative_base(cls=SensorDeploymentBase)
 
@@ -117,16 +107,16 @@ class Cylinder(base.Base):
     """
     ORM class to represent a gas cylinder
     """
-    __tablename__ = "RefGasCylinder"
+    __tablename__ = "ref_gas_cylinder"
     __sa_dataclass_metadata_key__ = "sa"
-    cylinder_id: str = Column("CylinderID", String, primary_key=True)
+    cylinder_id: str = Column("cylinder_id", String, primary_key=True)
     fill: int = Column("EMPA_fill_number", String)
     start: dt.datetime = Column("Date_UTC_from", DateTime, primary_key=True)
     end: dt.datetime = Column("Date_UTC_to", DateTime, primary_key=True)
     CO2: float  = Column(Float)
     H2O: float  = Column(Float)
     analysed: dt.datetime = Column(DateTime)
-
+    pressure: float = Column(Float)
 
 @dataclass
 class CylinderDeployment(base.Base):
@@ -134,9 +124,9 @@ class CylinderDeployment(base.Base):
     ORM class to represent a gas cylinder deployment
     to a certain location and time range
     """
-    __tablename__ = "RefGasCylinder_Deployment"
+    __tablename__ = "cylinder_deployment"
     __sa_dataclass_metadata_key__ = "sa"
-    cylinder_id: str = Column("CylinderID", String, primary_key=True)
+    cylinder_id: str = Column("cylinder_id", String, primary_key=True)
     start: dt.datetime = Column("Date_UTC_from", DateTime, primary_key=True)
     end: dt.datetime = Column("Date_UTC_to", DateTime, primary_key=True)
     sensor_id: int = Column("SensorUnit_ID", Integer, primary_key=True)
@@ -146,8 +136,15 @@ class CylinderDeployment(base.Base):
     primaryjoin= lambda: (CylinderDeployment.cylinder_id == Cylinder.cylinder_id) & (CylinderDeployment.start > Cylinder.start),
     foreign_keys= lambda: Cylinder.cylinder_id)
 
-
-
+@dataclass
+class CylinderAnalysis(base.Base):
+    """
+    ORM class to represent the analyes of a given gas cylinder
+    for a selected date
+    """
+    __tablename__ = "ref_gas_cylinder_analysis"
+    __sa_dataclass_metadata_key__ = "sa"
+    
 
 @dataclass
 class CalibrationParameter(base.Base):
@@ -253,6 +250,12 @@ class ModelFitPerformance(base.Base):
     rmse: float = Column(Float)
     bias: float = Column(Float)
     correlation: float = Column(Float)
+    
+    def valid(self) -> bool:
+        """
+        Check if the calibration is valid
+        """
+        return np.isfinite(self.rmse) & np.isfinite(self.bias) & np.isfinite(self.correlation)
 
 @dataclass
 class TimeseriesData(object):
@@ -312,6 +315,7 @@ class HPPData(base.Base, TimeseriesData):
     senseair_hpp_temperature_mcu: float = Column(Float)
     sensirion_sht21_temperature: float = Column(Float)
     sensirion_sht21_humidity: float = Column(Float)
+
 
 @dataclass
 class PicarroData(base.Base, TimeseriesData):
