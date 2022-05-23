@@ -19,6 +19,7 @@ from abc import ABC, ABCMeta, abstractmethod
 import re as re
 from . import db as db_utils
 from . import data as du
+from . import models as mods
 import json
 import sqlalchemy as sqa
 from sqlalchemy.orm import sessionmaker, Session
@@ -37,6 +38,8 @@ from .log import logger
 import pytz
 import tempfile as tf
 import subprocess as sp
+
+from sqlalchemy.orm import aliased
 
 """
 This module contains functions used to interact with files and read and write specific file formats used in this 
@@ -168,7 +171,8 @@ def get_available_measurements_on_db(engine: sqa.engine.Engine, md: sqa.MetaData
                                      date_column: sqa.sql.expression.ColumnElement,
                                      grouping_column: Optional[sqa.sql.expression.ColumnElement] = None,
                                      group_id: Optional[Union[str, int]] = None,
-                                     first_date: Optional[dt.datetime] = None
+                                     first_date: Optional[dt.datetime] = None,
+                                     filter: Optional[str] = None
                                      ) -> pd.DataFrame:
     """
     List all available datasets (grouped by date) on the database for the (NABEL) station with the ID `station`.
@@ -204,19 +208,23 @@ def get_available_measurements_on_db(engine: sqa.engine.Engine, md: sqa.MetaData
     """
     table = sqa.Table(station, md, autoload=True)
     cols = [date_column, grouping_column] if grouping_column is not None else [date_column]
-    dq = sqa.select(*cols).distinct().select_from(table)
+    #dq = sqa.select(*cols).distinct().select_from(table)
     if group_id is not None and grouping_column is not None:
-        stmt = dq.filter(grouping_column == group_id)
+        filt = (grouping_column == group_id, )
     else:
-        stmt = dq
+        filt = ()
     if first_date:
-        stmt_sq = stmt.subquery()
-        stmt_final = sqa.select(stmt_sq).filter(stmt_sq.c.date > first_date)
+       filt = filt + (date_column > first_date,)
     else:
-        stmt_final = stmt
-    qs = stmt_final.compile()
-    logger.debug(f'The query is {qs}')
-    return pd.read_sql_query(qs, engine, parse_dates=['date']).reset_index()
+        pass
+    if filter is not None:
+        filt = filt + (sqa.text(filter),)
+    else:
+        pass
+    qs = sqa.select(table).filter(*filt).cte()
+    qf = sqa.select(*cols).distinct().select_from(qs)
+    logger.debug(f'The query is {qf}')
+    return pd.read_sql_query(qf, engine, parse_dates=['date']).reset_index()
 
 
 def get_all_picarro_files(station: str, rexp: str = '.*\.(csv|CSV)') -> List[pl.Path]:
@@ -490,6 +498,8 @@ class DatabaseSource(DataSource):
         should be transfered
     group: str or none
         The value of the `grouping_key` group that should be used 
+    column_filter: str or none
+        Extra column filter to identify valid entries
         
     """
     table: str
@@ -497,6 +507,7 @@ class DatabaseSource(DataSource):
     group: Optional[Union[str, int]] = None
     grouping_key: Optional[str] = None
     eng: Optional[Union[sqa.engine.Engine, influxdb.client.InfluxDBClient]] = None
+    column_filter: Optional[str] = None
 
     @abstractmethod
     def attach_db(self, db:Any) -> None:
@@ -568,7 +579,7 @@ class DBSource(DatabaseSource):
         return (sqa.sql.literal_column(f"{self.grouping_key}").label(label) if self.grouping_key else None)
 
 
-    def date_group_query(self) -> sqa.orm.Query:
+    def date_group_query(self, label: Optional[str] = None) -> sqa.orm.Query:
         """
         Creates a :obj:`sqlalchem.orm.Query` representation of 
         the query used to identify the files in the database backend
@@ -592,10 +603,10 @@ class DBSource(DatabaseSource):
         """
         meas = get_available_measurements_on_db(
             self.eng, self.metadata, self.table, date_column=self.date_expression(), grouping_column=self.group_expression(), 
-            group_id=(self.group or group), first_date=self.date_from)
+            group_id=(group or self.group), first_date=self.date_from, filter=self.column_filter)
         meas_full = meas
-        if self.group:
-            meas_full['group_id'] = self.group
+        # if self.group:
+        #     meas_full['group_id'] = self.group
         meas_full['path'] = self.table
         return meas_full
 
@@ -623,10 +634,10 @@ class DBSource(DatabaseSource):
         dq = self.date_group_query(label=lb).with_session(
             session).select_from(table).add_columns(*table.columns).subquery()
         fq = session.query(dq).filter(dq.c[lb] == date.strftime('%Y-%m-%d'))
-        if group:
+        if self.group:
             fq_tot = fq.filter(dq.c[self.grouping_key] == self.group)
         else:
-            fq = fq
+            fq_tot = fq
         qs = fq_tot.statement.compile(compile_kwargs={"literal_binds": True})
         logger.debug(f"The query is {qs}")
         return pd.read_sql(qs, self.eng).drop(lb, axis=1).replace(self.na, np.NaN)
@@ -709,7 +720,7 @@ class InfluxdbSource(DatabaseSource):
     @check_db
     def list_files(self, *args, group=None) -> pd.DataFrame:
         if self.eng:
-            gq = f"{self.grouping_key} =~ /{group}/ AND" if group else ""
+            gq = f"{self.grouping_key} =~ /{(group or self.group)}/ AND" if (group or self.group) else ""
             q = f"""
             SELECT
             *
@@ -1067,7 +1078,7 @@ class SourceMapping():
     """
     source: DataSource
     dest: DataSource
-    columns: List[ColumnMapping]
+    columns: Optional[List[ColumnMapping]] = None
 
     def connect_all_db(self, 
         source_eng:Optional[Union[sqa.engine.Engine, influxdb.client.InfluxDBClient]]=None, 
@@ -1436,3 +1447,15 @@ def id_generator(size=6, chars=string.ascii_uppercase + string.digits):
     Generates a random id of given length
     """
     return ''.join(random.choice(chars) for _ in range(size))
+
+
+def read_bottle_calibration(pt: pl.Path) -> List[mods.CylinderAnalysis]:
+    """
+    Reads the bottle calibration from a file 
+    and returns a list of entries as :obj:`sensorutils.models.CylinderAnalysis`.
+    """
+    pd.read_excel(pt)
+    names = {
+        "cylinder": "cylinder_id",
+        
+    }
