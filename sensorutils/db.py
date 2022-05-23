@@ -3,16 +3,37 @@ import sqlalchemy.engine as eng
 import sqlalchemy as db
 import sqlalchemy.orm as orm
 import sqlalchemy as sqa
-from typing import Callable, Union, Optional
+from typing import Callable, Union, Optional, List
 import pandas as pd
 from .log import logger
 import datetime as dt
 import sqlite3 as sqllite
-from . import models as mods
+from sensorutils import models as mods
+
 """
 This module contains function used to interact with the metadata DB,
 """
 
+def get_first_deployment_at_location(session: orm.Session, id: str) -> mods.Deployment:
+    """
+    Given a certain location id, returns the first deployment at that location
+    """
+    qr = sqa.select(mods.Deployment).where(mods.Deployment.location == id).order_by(mods.Deployment.location.asc())
+    return session.execute(qr).first()
+
+
+def list_locations_with_deployment(session: orm.Session, start: Optional[dt.datetime] = None) -> List[mods.Location]:
+    """
+    List all locations in the database that had at least one deployment
+    in :obj:`sensorutils.models.Deployment`
+    """
+    fls = (mods.Deployment.location == mods.Location.id, )
+    if start is not None:
+        fls = fls + (mods.Deployment.start > start,)
+    qr = sqa.select(mods.Location).filter(
+        sqa.select(mods.Deployment).filter(*fls).exists()
+    )
+    return session.execute(qr).all()
 
 def create_upsert_metod(meta: db.MetaData) -> Callable:
     """

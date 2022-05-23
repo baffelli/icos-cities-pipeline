@@ -5,7 +5,7 @@ _export:
     base_folder: '${proj_folder}/Software'
     data_folder: '${proj_folder}/Data'
     reference_config: '${base_folder}/config/picarro_mapping.yml'
-
+    project_begin: '${moment("20220101", "YYYYMMDD")}'
 +setup:
     #Disable python breakpoints
     sh>: export PYTHONBREAKPOINT=0
@@ -28,12 +28,22 @@ _export:
         sh>: rsync -a amrs503@m2m.empa.ch:/data/meteoschweiz/*.csv ${data_folder}/METEO/MCH_DAILY_DATA_DUMP
     +import_meteoswiss:
         sh>: python3 MeteoSwissData4Carbosense/transfer_meteo_data.py ${base_folder}/config/meteo_data_mapping.yml '${data_folder}/METEO/MCH_DAILY_DATA_DUMP/' 'VQEA33*.csv'
-
+    +pressure_interpolation:
+        +list_locations:
+            py>: digdagutils.list_locations
+            dest: 'locations'       
+            start: '${project_begin}'
+        +compute:
+            for_each>: 
+                loc: ${locations}
+            _do:
+                sh>: python3 MeteoSwissData4Carbosense/pressure_interpolation.py ${loc} DUE1
 +raw_data:
     #Store a list of all sensors in a digdag environment variable
     +list_sensors:
         py>: digdagutils.list_sensors
         dest: 'sensors'
+
     +load:
         for_each>:
             sens: ['LP8', 'HPP']
@@ -42,6 +52,7 @@ _export:
                 i: ${sensors[sens]}
             _do:
                 sh>: python3.10 ${base_folder}/CarbosenseDatabaseTools/dump_raw_data_from_influxdb.py ${base_folder}/config/co2_sensor_mapping.yml ${sens} ${i}
+
 
 #Upload metadata to decentlab-db
 +metadata:

@@ -4,8 +4,13 @@ import sensorutils.db as db_utils
 import yaml
 import pathlib as pl
 import digdag
+import datetime as dt
 
-from typing import Any
+
+from sqlalchemy import orm
+
+from typing import Any, Optional
+
 def list_sensors(dest:str) -> None:
     """
     List all available sensors in the database and writes  them
@@ -18,6 +23,22 @@ def list_sensors(dest:str) -> None:
     env[dest] = lst
     print(dest)
     digdag.env.store(env)
+
+def list_locations(dest:str, start: Optional[dt.datetime] = None) -> None:
+    """
+    List all available locations in the database that had at least
+    one deployment and write it in the digdag env in the variable `dest`
+    """
+    print("a")
+    eng = db_utils.connect_to_metadata_db()
+    ses = orm.sessionmaker(bind=eng)
+    with ses() as session:
+        locs = db_utils.list_locations_with_deployment(session, start=start)
+    loc_names = [l.id for l,*_ in locs]
+    env = {}
+    env[dest] = loc_names
+    digdag.env.store(env)
+
 
 def store_env(param:Any, key:str) -> None:
     pass

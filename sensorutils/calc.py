@@ -27,6 +27,9 @@ T0 = 273.15
 TC = 647.096
 PC = 22.064e6
 P0 = 1013.25e2
+G0 = 9.80665
+M  = 0.0289644 
+R_STAR =  8.3144598 
 
 def absolute_temperature(t: float):
     return t + T0
@@ -100,3 +103,11 @@ def dry_to_wet_molar_mixing(conc:float, H2O:float) -> float:
     the water mixing ratio (both in ppm)
     """
     return conc * (1 - H2O / 100)
+
+
+def pressure_interpolation(p_ref: float, t_ref: float, h_ref: float, h_stat: float) -> float:
+    """
+    Computes the pressure [in Pa] at a station located at altitude `h_stat` from a measurement
+    `p_ref` of a measurement station at `h_ref` with temperature `t_ref` [in K] using the barometric formula
+    """
+    return p_ref * np.exp(- G0 * M * (h_stat - h_ref) / (T0 * R_STAR))

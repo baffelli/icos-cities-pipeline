@@ -12,7 +12,7 @@ from . import base
 import datetime as dt
 
 from sqlalchemy import (Column, DateTime, Float, ForeignKey, Integer, String,
-                        engine)
+                        engine, Date)
 from sqlalchemy.orm import relationship, column_property, query_expression, aliased, object_session
 from sqlalchemy.ext.declarative import declarative_base, declared_attr
 from sqlalchemy import func
@@ -30,6 +30,26 @@ from typing import List, Union, Dict, Optional
 
 
 @dataclass
+class Location(base.Base):
+    """
+    ORM class to represent sensor location
+    """
+    __tablename__ = "Location"
+    __sa_dataclass_metadata_key__ = "sa"
+    id: str = Column("LocationName", String, primary_key=True)
+    start: dt.datetime = Column("Date_UTC_from", DateTime, primary_key=True)
+    end: dt.datetime = Column("Date_UTC_to", DateTime, primary_key=True)
+    x: float = Column("X_LV03", DateTime)
+    y: float = Column("Y_LV03", DateTime)
+    h: float = Column("h", DateTime)
+    canton: str = Column("Canton", String)
+    network: str = Column("Network", String)
+    type: str = Column("SiteType", String)
+    address: str = Column("Address", String)
+    contact: str = Column("Contact", String)
+    remark: str = Column("Remark", String)
+
+@dataclass
 class SensorDeploymentBase(object):
     """
     Base class for representing
@@ -37,10 +57,21 @@ class SensorDeploymentBase(object):
     as they use a very similar database format
     """
     id: int =  Column("SensorUnit_ID", Integer, primary_key=True)
-    location: str = Column("LocationName", String)
+    # @declared_attr
+    # def location(cls):
+    #     return Column("LocationName",  String)
+    location: str = Column("LocationName",  String)
     start: dt.datetime = Column("Date_UTC_from", DateTime, primary_key=True)
     end: dt.datetime = Column("Date_UTC_to", DateTime, primary_key=True)
     mode: int = Column(Integer)
+    @declared_attr
+    def location_info(cls):
+        return relationship(
+            lambda: Location,  
+            foreign_keys = lambda: Location.id,
+            primaryjoin= lambda: (Location.id == cls.location) & (cls.start > Location.start) & (cls.end > Location.start)
+            )
+
     @property
     def next_cal(self) -> Optional[dt.datetime]:
         """
@@ -110,31 +141,14 @@ class Cylinder(base.Base):
     __tablename__ = "ref_gas_cylinder"
     __sa_dataclass_metadata_key__ = "sa"
     cylinder_id: str = Column("cylinder_id", String, primary_key=True)
-    fill: int = Column("EMPA_fill_number", String)
-    start: dt.datetime = Column("Date_UTC_from", DateTime, primary_key=True)
-    end: dt.datetime = Column("Date_UTC_to", DateTime, primary_key=True)
-    CO2: float  = Column(Float)
-    H2O: float  = Column(Float)
-    analysed: dt.datetime = Column(DateTime)
-    pressure: float = Column(Float)
-
-@dataclass
-class CylinderDeployment(base.Base):
-    """
-    ORM class to represent a gas cylinder deployment
-    to a certain location and time range
-    """
-    __tablename__ = "cylinder_deployment"
-    __sa_dataclass_metadata_key__ = "sa"
-    cylinder_id: str = Column("cylinder_id", String, primary_key=True)
-    start: dt.datetime = Column("Date_UTC_from", DateTime, primary_key=True)
-    end: dt.datetime = Column("Date_UTC_to", DateTime, primary_key=True)
-    sensor_id: int = Column("SensorUnit_ID", Integer, primary_key=True)
-    location: int = Column("LocationName", Integer)
-    inlet: str = Column("inlet", String)
-    cylinders: List[Cylinder] = relationship("Cylinder",  
-    primaryjoin= lambda: (CylinderDeployment.cylinder_id == Cylinder.cylinder_id) & (CylinderDeployment.start > Cylinder.start),
-    foreign_keys= lambda: Cylinder.cylinder_id)
+    start: dt.datetime = Column("start", DateTime, primary_key=True)
+    end: dt.datetime = Column("end", DateTime, primary_key=True)
+    volume: float = Column(Float)
+    test_valid_to: float = Column(DateTime)
+    fills: List["CylinderAnalysis"] = relationship(
+        lambda: CylinderAnalysis,
+        primaryjoin = lambda: 
+            (Cylinder.cylinder_id == CylinderAnalysis.cylinder_id))
 
 @dataclass
 class CylinderAnalysis(base.Base):
@@ -144,7 +158,40 @@ class CylinderAnalysis(base.Base):
     """
     __tablename__ = "ref_gas_cylinder_analysis"
     __sa_dataclass_metadata_key__ = "sa"
-    
+    cylinder_id: str = Column(String, ForeignKey(Cylinder.cylinder_id), primary_key=True)
+    fillnr: str = Column(String)
+    analysed: dt.date = Column(Date, primary_key=True)
+    fill_from: dt.date = Column(Date, primary_key=True)
+    fill_to: dt.date = Column(Date, primary_key=True)
+    CO2: float = Column(Float)
+    CO2_sd: float = Column(Float)
+    H2O: float = Column(Float)
+    H2O_sd: float = Column(Float)
+    pressure: float = Column(Float)
+    measured_by: str = Column(String)
+    comments: str = Column(String)
+
+
+
+@dataclass
+class CylinderDeployment(base.Base):
+    """
+    ORM class to represent a gas cylinder deployment
+    to a certain location and time range
+    """
+    __tablename__ = "cylinder_deployment"
+    __sa_dataclass_metadata_key__ = "sa"
+    cylinder_id: str = Column("cylinder_id", String, ForeignKey("Cylinder.cylinder_id"), primary_key=True)
+    start: dt.datetime = Column("Date_UTC_from", DateTime, primary_key=True)
+    end: dt.datetime = Column("Date_UTC_to", DateTime, primary_key=True)
+    sensor_id: int = Column("SensorUnit_ID", Integer, primary_key=True)
+    location: int = Column("LocationName", Integer)
+    inlet: str = Column("inlet", String)
+    cylinders: List[CylinderAnalysis] = relationship(lambda: CylinderAnalysis,  
+    primaryjoin= lambda: (CylinderDeployment.cylinder_id == CylinderAnalysis.cylinder_id) & (CylinderAnalysis.fill_from <= CylinderDeployment.start) &
+     (CylinderAnalysis.fill_to >= CylinderDeployment.end),
+     foreign_keys= lambda: CylinderAnalysis.cylinder_id)
+
 
 @dataclass
 class CalibrationParameter(base.Base):
@@ -355,3 +402,14 @@ class Level2Data(base.Base, TimeseriesData):
     relative_humidity: float = Column(Float)
     pressure: float = Column(Float)
     inlet: float = Column(String)
+
+@dataclass
+class PressureInterpolation(base.Base, TimeseriesData):
+    """
+    ORM class to represent pressure interpolation
+    """
+    __tablename__ = "pressure_interpolation"
+    __sa_dataclass_metadata_key__ = "sa"
+    id: str = Column("location", String, primary_key=True)
+    time: int = Column("timestamp", Integer, primary_key=True)
+    pressure: float = Column(Float)

@@ -589,7 +589,7 @@ class DBSource(DatabaseSource):
         label: str
             An optional label to rename the column of the date group
         """
-        return sqa.orm.Query(sqa.cast(sqa.func.from_unixtime(self.date_expression()), sqa.DATE).label(label))
+        return sqa.orm.Query(self.date_expression().label(label))
 
     @check_db
     def list_files(self, group:str=None, *args) -> pd.DataFrame:
@@ -615,7 +615,7 @@ class DBSource(DatabaseSource):
         """
         Reads one file from the database source with a given date.
         If the `group` parameter is passed, only read the part where `grouping_key` 
-        equals the value of `group`
+        equals the value of `group`, otherwise the value of group is taken from the object (if it is set)
 
         Parameters
         ----------
@@ -632,15 +632,18 @@ class DBSource(DatabaseSource):
         session = Session()
         lb = 'date_group'
         dq = self.date_group_query(label=lb).with_session(
-            session).select_from(table).add_columns(*table.columns).subquery()
-        fq = session.query(dq).filter(dq.c[lb] == date.strftime('%Y-%m-%d'))
-        if self.group:
-            fq_tot = fq.filter(dq.c[self.grouping_key] == self.group)
+            session).select_from(table).add_columns(*table.columns)
+        filts = (self.date_expression() == date.strftime('%Y-%m-%d'), )
+        if (group or self.group) and self.grouping_key:
+            grp = (group or self.group)
+            filts = filts + (table.c[self.grouping_key] == grp, )
         else:
-            fq_tot = fq
-        qs = fq_tot.statement.compile(compile_kwargs={"literal_binds": True})
-        logger.debug(f"The query is {qs}")
-        return pd.read_sql(qs, self.eng).drop(lb, axis=1).replace(self.na, np.NaN)
+            pass
+        qs = dq.filter(*filts)
+        qs_comp = qs.statement.compile(compile_kwargs={"literal_binds": True})
+        logger.debug(f"The query is {qs_comp}")
+        #breakpoint()
+        return pd.read_sql(qs.statement, self.eng).drop(lb, axis=1).replace(self.na, np.NaN)
 
     @check_db
     #TODO fix returing of affected
@@ -1449,13 +1452,13 @@ def id_generator(size=6, chars=string.ascii_uppercase + string.digits):
     return ''.join(random.choice(chars) for _ in range(size))
 
 
-def read_bottle_calibration(pt: pl.Path) -> List[mods.CylinderAnalysis]:
-    """
-    Reads the bottle calibration from a file 
-    and returns a list of entries as :obj:`sensorutils.models.CylinderAnalysis`.
-    """
-    pd.read_excel(pt)
-    names = {
-        "cylinder": "cylinder_id",
+# def read_bottle_calibration(pt: pl.Path) -> List[mods.CylinderAnalysis]:
+#     """
+#     Reads the bottle calibration from a file 
+#     and returns a list of entries as :obj:`sensorutils.models.CylinderAnalysis`.
+#     """
+#     pd.read_excel(pt)
+#     names = {
+#         "cylinder": "cylinder_id",
         
-    }
+#     }
