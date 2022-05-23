@@ -50,13 +50,12 @@ parser = ap.ArgumentParser(description='Import raw data from decentlab into data
 parser.add_argument('config', type=cu.path_or_config, help='Path to the datasource mapping configuration file or a dict of config')
 parser.add_argument('sensor_type', type=str, choices=['HPP','LP8'], help='Sensor type to import')
 parser.add_argument('id', type=parse_range, nargs='?', help='Sensor id to import: either number or numeric range start-end')
+parser.add_argument('start', type=dt.fromisoformat, help='First date to import')
 parser.add_argument('--import-all', default=False, action='store_true', help='Import all data or only incremental import?')
 parser.add_argument('--backfill', default=0, type=int, help='Backfill time for incremental import')
 
 args = parser.parse_args()
 logger.info('Started')
-#Default date
-default_date = dt.strptime('2017-01-01 00:00:00', '%Y-%m-%d %H:%M:%S') 
 #Mapping table <> sensor type
 table_mapping = {'HPP':"hpp_data", "LP8":'lp8_data'}
 
@@ -68,9 +67,11 @@ client = dl.decentlab_client(token=passw)
 #Connect to  target database
 logger.info('Connecting to the DB')
 engine = db_utils.connect_to_metadata_db()
-#db_metadata = db.MetaData(bind=engine)
-#db_metadata.reflect()
-mapping = fu.DataMappingFactory.create_mapping(**args.config[args.sensor_type])
+#Set the start date of the loading
+cfg = args.config[args.sensor_type]
+cfg['dest']['date_from'] = args.start
+cfg['source']['date_from'] = args.start
+mapping = fu.DataMappingFactory.create_mapping(**cfg)
 #Attach the client to the source and destination
 mapping.source.attach_db(client)
 mapping.dest.attach_db(engine)

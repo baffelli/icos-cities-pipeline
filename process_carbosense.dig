@@ -5,7 +5,7 @@ _export:
     base_folder: '${proj_folder}/Software'
     data_folder: '${proj_folder}/Data'
     reference_config: '${base_folder}/config/picarro_mapping.yml'
-    project_begin: '${moment("20220101", "YYYYMMDD")}'
+    project_begin: "${moment('20220101', 'YYYYMMDD').format('YYYY-MM-DDThh:mm:ss')}"
 +setup:
     #Disable python breakpoints
     sh>: export PYTHONBREAKPOINT=0
@@ -32,12 +32,12 @@ _export:
         +list_locations:
             py>: digdagutils.list_locations
             dest: 'locations'       
-            start: '${project_begin}'
+            start: ${project_begin}
         +compute:
             for_each>: 
                 loc: ${locations}
             _do:
-                sh>: python3 MeteoSwissData4Carbosense/pressure_interpolation.py ${loc} DUE1
+                sh>: python3 MeteoSwissData4Carbosense/pressure_interpolation.py ${loc} DUE1 ${project_begin}
 +raw_data:
     #Store a list of all sensors in a digdag environment variable
     +list_sensors:
@@ -51,7 +51,7 @@ _export:
             for_each>: 
                 i: ${sensors[sens]}
             _do:
-                sh>: python3.10 ${base_folder}/CarbosenseDatabaseTools/dump_raw_data_from_influxdb.py ${base_folder}/config/co2_sensor_mapping.yml ${sens} ${i}
+                sh>: python3.10 ${base_folder}/CarbosenseDatabaseTools/dump_raw_data_from_influxdb.py ${base_folder}/config/co2_sensor_mapping.yml ${sens} ${i} ${project_begin}
 
 
 #Upload metadata to decentlab-db

@@ -29,12 +29,16 @@ def list_locations(dest:str, start: Optional[dt.datetime] = None) -> None:
     List all available locations in the database that had at least
     one deployment and write it in the digdag env in the variable `dest`
     """
-    print("a")
+
+
     eng = db_utils.connect_to_metadata_db()
     ses = orm.sessionmaker(bind=eng)
+    start = dt.datetime.fromisoformat(start)
     with ses() as session:
         locs = db_utils.list_locations_with_deployment(session, start=start)
     loc_names = [l.id for l,*_ in locs]
+    print(start)
+    print(type(start))
     env = {}
     env[dest] = loc_names
     digdag.env.store(env)
