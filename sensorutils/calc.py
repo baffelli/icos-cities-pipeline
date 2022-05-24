@@ -111,3 +111,7 @@ def pressure_interpolation(p_ref: float, t_ref: float, h_ref: float, h_stat: flo
     `p_ref` of a measurement station at `h_ref` with temperature `t_ref` [in K] using the barometric formula
     """
     return p_ref * np.exp(- G0 * M * (h_stat - h_ref) / (T0 * R_STAR))
+
+
+def psi_to_bar(p: float) -> float:
+    return p * 0.0689476

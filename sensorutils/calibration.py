@@ -2,19 +2,19 @@
 Functions used for calibration / sensor data processing
 """
 from asyncio.log import logger
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 from operator import mod
 import pdb
 from statistics import correlation
 from tkinter import W
 
 import sqlalchemy
-from . import models as mods
-from . import data as du
-from . import base
-from . import log
-from . import db
-from . import utils
+from sensorutils import models as mods
+from sensorutils import data as du
+from sensorutils import base
+from sensorutils import log
+from sensorutils import db
+from sensorutils import utils
 
 from typing import List, NamedTuple, Optional, Union, Dict, Tuple
 
@@ -235,6 +235,31 @@ def get_sensor_data(session: sqa.orm.Session, id: int, type: du.AvailableSensors
     return dt
 
 
+def get_HHP_calibration_data(session: sqa.orm.Session, id: int, start: dt.datetime, end: dt.datetime) -> pd.DataFrame:
+    """
+    Get the data for the senseair HPP Sensor. For each calibration period, also returns the corresponding
+    cylinder analysis
+    """
+    qr = query_sensor_data(session, id, du.AvailableSensors.HPP, start, end)
+    qr_filt = qr.filter((mods.HPPData.calibration_a == 1) |
+                        (mods.HPPData.calibration_b == 1)).cte()
+    hpp_as = aliased(mods.HPPData, qr_filt)
+    jq = sqa.select(hpp_as, mods.CylinderDeployment).join(
+        mods.CylinderDeployment,
+        (hpp_as.id == mods.CylinderDeployment.sensor_id) &
+        (hpp_as.time.between(
+            sqa.func.unix_timestamp(mods.CylinderDeployment.start),
+            sqa.func.unix_timestamp(mods.CylinderDeployment.end)
+        ))
+    )
+    #get the data
+    res = session.execute(jq).all()
+    #Unpack and only keep entries where the inlet of the bottle entries corresponds to the active inlet
+    res_unpack = [ asdict(a) |  (asdict(b.cylinders[0]) if b.cylinders else {}) for a,b in res if (a.calibration_a == 1 and b.inlet == 'a') or (a.calibration_b == 1 and b.inlet == 'b') and b.cylinder_id]
+    breakpoint()
+    dt = pd.DataFrame(res_unpack)
+    return dt
+
 def limit_cal_entry(entries: List[CalDataRow], start: dt.datetime, end: dt.datetime, modes: Optional[List[int]] = None, replace_dates: bool = True) -> List[CalDataRow]:
     """
     Iterate through a list of :obj:`CalDataRow` objects and keep only those that overlap with :obj:`start` and 
@@ -282,14 +307,14 @@ def get_cal_ts(session: sqa.orm.Session, id: int, type: du.AvailableSensors, sta
         all_dt = pd.concat([iterate_cal_info(e) for e in valid], axis=0)
         grps = ["serial_number", "cal_start", "cal_end", "next_cal"]
         cd = [
-                CalData(
-                    data  = data,
-                    serial = serial, 
-                    start=cal_start,
-                    end = cal_end,
-                    next = next_cal) 
-                for (serial, cal_start, cal_end, next_cal), data in all_dt.groupby(grps)
-            ]
+            CalData(
+                data=data,
+                serial=serial,
+                start=cal_start,
+                end=cal_end,
+                next=next_cal)
+            for (serial, cal_start, cal_end, next_cal), data in all_dt.groupby(grps)
+        ]
     else:
         cd = []
     return cd
@@ -377,15 +402,15 @@ def persist_level2_data(session: sqa.orm.Session, data: List[mods.Level2Data]) -
     for row in data:
         session.merge(row)
 
+
 @dataclass
 class CalibrationQuality:
     """
     Dataclass to store calibration quality parameters
     """
-    rmse: float 
+    rmse: float
     bias: float
     correlation: float
-
 
 
 def bias(ref: pd.Series, value: pd.Series) -> float:
@@ -402,6 +427,7 @@ def rmse(ref: pd.Series, value: pd.Series) -> float:
     of two `pandas.Series`
     """
     return np.sqrt(((ref - value)**2).mean())
+
 
 def compute_quality_indices(pred: pd.DataFrame, ref_col='ref_CO2', pred_col='CO2_pred',) -> CalibrationQuality:
     """

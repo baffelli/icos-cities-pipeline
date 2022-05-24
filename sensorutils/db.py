@@ -5,10 +5,11 @@ import sqlalchemy.orm as orm
 import sqlalchemy as sqa
 from typing import Callable, Union, Optional, List
 import pandas as pd
-from .log import logger
 import datetime as dt
 import sqlite3 as sqllite
+
 from sensorutils import models as mods
+from sensorutils.log import logger
 
 """
 This module contains function used to interact with the metadata DB,

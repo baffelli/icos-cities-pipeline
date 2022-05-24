@@ -3,6 +3,7 @@ This module contains functions and classes to operate with CarboSense / ICOS-Cit
 It includes classes to map calibration parameters to the DB using SQLalchemy (ORM) so that calibrations
 can be persisted in a format that can be easily exchanged with other systems.
 """
+from argparse import ArgumentError
 import datetime as dt
 import enum
 import imp
@@ -35,10 +36,12 @@ from sqlalchemy.orm import relationship
 from statsmodels import tools as sttools
 from statsmodels.regression import linear_model
 
-from . import base
+from sensorutils import files as fu
+from sensorutils import models as mods
+from sensorutils import calc
 
-from . import files as fu
-from . import models as mods
+import csv
+
 """
 Represents the missing (or unset) time in ICOS-cities database
 """
@@ -219,6 +222,50 @@ def read_calibration_config(pt: pl.Path) -> List[CalibrationConfiguration]:
     return [CalibrationConfiguration(**c) for c in configs]
 
 
+def read_bottle_calibrations(pt: pl.Path) -> List[mods.CylinderAnalysis]:
+    """
+    Reads the calibration values from the bottle 
+    calibration performed by Christoph Zellweger (GAW)
+    and returns a list of :obj:`sensorutils.models.CylinderAnalysis` objects.
+    """
+    match pt.suffix:
+        case '.xls' |  '.xlsx': 
+            dt_in = pd.read_excel(pt)
+        case '.csv':
+            dt_in = pd.read_csv(pt,  sep="[;,]", engine='python', 
+                quoting=csv.QUOTE_NONE, doublequote=True, quotechar="'").rename(lambda x: x.replace('"',""), axis='columns')
+        case _:
+            raise NotImplementedError("Only CSV and Excel files can be read")
+    names = {
+        'cylinder': 'cylinder_id',
+        'fillnr': 'fillnr',
+        'p': 'pressure',
+        'dtm2': 'analysed',
+        'H2O': 'H2O',
+        'H2O.sd': 'H2O_sd',
+        'CO2': 'CO2',
+        'CO2.sd': 'CO2_sd',
+        'standard': 'standard'
+    }
+    dt_out = dt_in.rename(columns=names).applymap(lambda x: x.replace('"',"") if isinstance(x, str) else x)
+    #Make a date for the fill number
+    dt_out['analysed'] = pd.to_datetime(dt_out['analysed']) if 'analysed' in dt_out.columns else None
+    dt_out['filled'] = pd.to_datetime(dt_out['fillnr'], format='%y%m%d', errors='coerce')
+    entries = [
+        mods.CylinderAnalysis(
+            cylinder_id=i.cylinder_id, 
+            pressure=calc.psi_to_bar(i.pressure), 
+            analysed=i.analysed.to_pydatetime(), 
+            fill_from=i.filled.to_pydatetime(), 
+            CO2 = i.CO2,
+            CO2_sd = i.CO2_sd,
+            H2O = i.H2O,
+            H2O_sd = i.H2O_sd,
+            fillnr = i.fillnr,
+            fill_to= NAT.to_pydatetime()) for i in dt_out[~dt_out['standard']].reset_index().itertuples()
+        ]
+    return entries
+    
 
 def apply_calibration_parameters(table:sqa.Table, session:sqa.orm.Session, compound:str, target_compound:str, zero:float, span:float, valid_from:dt.datetime, valid_to:dt.datetime, temp:bool=True) -> None:
     """

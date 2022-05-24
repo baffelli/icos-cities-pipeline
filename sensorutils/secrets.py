@@ -6,7 +6,7 @@ import secrets
 from attr import dataclass
 import yaml
 from yaml import Loader
-from . import files as fu
+from sensorutils import files as fu
 from typing import Optional, Dict, Union, List
 import pathlib as pl
 import itertools

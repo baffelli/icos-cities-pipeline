@@ -17,9 +17,10 @@ from typing import Callable, Union, List, Optional, Pattern, Dict, Set, Any, Tup
 from dataclasses import dataclass
 from abc import ABC, ABCMeta, abstractmethod
 import re as re
-from . import db as db_utils
-from . import data as du
-from . import models as mods
+
+from sensorutils import data as du
+from sensorutils import db as db_utils
+
 import json
 import sqlalchemy as sqa
 from sqlalchemy.orm import sessionmaker, Session

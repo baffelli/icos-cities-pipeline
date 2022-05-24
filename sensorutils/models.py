@@ -5,14 +5,17 @@ to represent database objects
 from abc import ABC, ABCMeta
 from dataclasses import dataclass, field
 from tkinter.tix import Select
-from sensorutils import data
+
+from sensorutils import base
+
 
 import sqlalchemy
-from . import base
+
+
 import datetime as dt
 
 from sqlalchemy import (Column, DateTime, Float, ForeignKey, Integer, String,
-                        engine, Date)
+                        engine, Date, PrimaryKeyConstraint)
 from sqlalchemy.orm import relationship, column_property, query_expression, aliased, object_session
 from sqlalchemy.ext.declarative import declarative_base, declared_attr
 from sqlalchemy import func
@@ -27,7 +30,6 @@ from statsmodels.regression import linear_model
 import pathlib as pl
 
 from typing import List, Union, Dict, Optional
-
 
 @dataclass
 class Location(base.Base):
@@ -74,20 +76,22 @@ class SensorDeploymentBase(object):
 
     @property
     def next_cal(self) -> Optional[dt.datetime]:
+        from sensorutils.data import NAT
         """
         Return the date of next (chamber) calibration
         """
+
         ses =  object_session(self)
         cls = self.__class__
         iq = sqlalchemy.select(
             cls,
         ).filter(cls.mode==2).cte()
         iq_as = aliased(cls, alias=iq)
-        ft_dt = sqlalchemy.DateTime(data.NAT.to_pydatetime())
+        ft_dt = sqlalchemy.DateTime(NAT.to_pydatetime())
         stm = sqlalchemy.select(func.coalesce(iq_as.start, ft_dt)).filter(
             (iq_as.id == self.id) &  
             (iq_as.start > self.start)).order_by(iq_as.start.desc()).limit(1)
-        final_stm = ses.scalar(func.coalesce(ses.scalar(stm), sqlalchemy.cast(data.NAT.to_pydatetime(), sqlalchemy.DateTime)))
+        final_stm = ses.scalar(func.coalesce(ses.scalar(stm), sqlalchemy.cast(NAT.to_pydatetime(), sqlalchemy.DateTime)))
         return final_stm
         
         
@@ -159,10 +163,10 @@ class CylinderAnalysis(base.Base):
     __tablename__ = "ref_gas_cylinder_analysis"
     __sa_dataclass_metadata_key__ = "sa"
     cylinder_id: str = Column(String, ForeignKey(Cylinder.cylinder_id), primary_key=True)
-    fillnr: str = Column(String)
     analysed: dt.date = Column(Date, primary_key=True)
     fill_from: dt.date = Column(Date, primary_key=True)
     fill_to: dt.date = Column(Date, primary_key=True)
+    fillnr: str = Column(String)
     CO2: float = Column(Float)
     CO2_sd: float = Column(Float)
     H2O: float = Column(Float)
@@ -190,7 +194,7 @@ class CylinderDeployment(base.Base):
     cylinders: List[CylinderAnalysis] = relationship(lambda: CylinderAnalysis,  
     primaryjoin= lambda: (CylinderDeployment.cylinder_id == CylinderAnalysis.cylinder_id) & (CylinderAnalysis.fill_from <= CylinderDeployment.start) &
      (CylinderAnalysis.fill_to >= CylinderDeployment.end),
-     foreign_keys= lambda: CylinderAnalysis.cylinder_id)
+     foreign_keys= lambda: CylinderAnalysis.cylinder_id, viewonly=True)
 
 
 @dataclass
