@@ -40,10 +40,15 @@ from mpl_toolkits.axes_grid.anchored_artists import AnchoredText
 
 import re
 
+from itertools import groupby
 
 from sklearn.linear_model import QuantileRegressor
 
 import dataclasses as dc
+
+
+from statsmodels.regression.rolling import RollingOLS
+
 
 # Utility functions
 
@@ -426,11 +431,11 @@ def get_HPP_data(
     return res
 
 
-def prepare_features(dt: pd.DataFrame, ir_col: str = "sensor_ir_lpl", fit: bool = True, plt: str = '1d') -> pd.DataFrame:
+def prepare_HPP_features(dt: pd.DataFrame, ir_col: str = "sensor_ir_lpl", fit: bool = True, plt: str = '1d') -> pd.DataFrame:
     """
     Prepare features for CO2 calibration / predictions
     """
-    dt_new = dt.copy()
+    dt_new = dt.copy().reset_index().set_index('time').reset_index()
     dt_new['date'] = pd.to_datetime(dt_new['time'], unit='s')
     dt_new["sensor_ir_log"] = - np.log(dt_new[ir_col])
     dt_new["sensor_ir_inverse"] = 1/(dt_new[ir_col])
@@ -449,8 +454,8 @@ def prepare_features(dt: pd.DataFrame, ir_col: str = "sensor_ir_lpl", fit: bool 
     # Dummy variable every `plt` days
     dt_new['time_dummy'] = dt_new['date'].dt.round(plt).dt.date.astype('str')
     # Start of cylinder calibration (anytime the inlet changes)
-    dt_new['inlet_change'] = dt_new['calibration_inlet'].shift(
-    ) != dt_new['calibration_inlet']
+    breakpoint()
+    dt_new['inlet_change'] = (dt_new['sensor_calibration_a'].diff() != 0) | (dt_new['sensor_calibration_b'].diff() != 0)
     dt_new['cal_num'] = dt_new['inlet_change'].cumsum()
     dt_new['cal_start'] = dt_new.groupby(
         dt_new['cal_num']).apply(lambda x: x['date'].min())
@@ -629,16 +634,24 @@ def plot_CO2_ts(ax: mpl.axes.Axes,
     Plot the CO2 timeseries with the given axes, time span and measurements. Optionally,
     you can pass a second series to plot a reference line
     """
-    ax.plot(time, meas, get_line_color(measurementType.CAL))
+    ax.plot(time, meas, get_line_color(measurementType.CAL), label='Calibrated')
     if orig:
-        ax.plot(time, meas, get_line_color(measurementType.ORIG))
+        ax.plot(time, meas, get_line_color(measurementType.ORIG), label='Uncalibrated')
     if ref:
-        ax.plot(time, meas, get_line_color(measurementType.REF))
+        ax.plot(time, meas, get_line_color(measurementType.REF), label='Reference')
+    ax.set_xlabel('Time')
+    ax.set_ylabel('CO2 [ppm]')
     return ax
 
-def plot_CO2_scatter(ax: mpl.axes.Axes, eas: pd.Series,
-                orig: Optional[pd.Series] = None , 
-                ref: Optional[pd.Series] = None) -> mpl.axes.Axes:
+def plot_CO2_scatter(ax: mpl.axes.Axes, meas: pd.Series,
+                ref: pd.Series , 
+                orig: Optional[pd.Series] = None) -> mpl.axes.Axes:
+    ax.scatter(ref, meas, get_line_color(measurementType.CAL),  label='Calibrated')
+    if orig:
+        ax.scatter(ref, orig, get_line_color(measurementType.ORIG), label='Reference')
+    ax.set_xlabel('Reference CO2 [ppm]')
+    ax.set_ylabel('Measured CO2 [ppm]')
+    return ax
 
 def plot_CO2_calibration(dt: pd.DataFrame,
                          model: sm.regression.linear_model.RegressionResults,
@@ -653,71 +666,71 @@ def plot_CO2_calibration(dt: pd.DataFrame,
     - Scatter plot
     - Residuals of regressors
     """
-  
+    
 
-        # Compute residuals statistics
-        residuals = dt[ref_col] - dt[pred_col]
-        qi = cal.compute_quality_indices(
-            dt, ref_col=ref_col, pred_col=pred_col)
-        res_bias = qi.bias
-        res_rmse = qi.rmse
-        res_cor = qi.correlation
-        # Make annotation
-        ann = AnchoredText(
-            f"RMSE: {res_rmse:5.2f} ppm,\n Bias: {res_bias:5.2f} ppm,\n corr: {res_cor:5.3f}", loc=4)
+    #     # Compute residuals statistics
+    #     residuals = dt[ref_col] - dt[pred_col]
+    #     qi = cal.compute_quality_indices(
+    #         dt, ref_col=ref_col, pred_col=pred_col)
+    #     res_bias = qi.bias
+    #     res_rmse = qi.rmse
+    #     res_cor = qi.correlation
+    #     # Make annotation
+    #     ann = AnchoredText(
+    #         f"RMSE: {res_rmse:5.2f} ppm,\n Bias: {res_bias:5.2f} ppm,\n corr: {res_cor:5.3f}", loc=4)
 
-        # Create plot for timeseries
-        fig = mpl.figure.Figure()
-        ax = fig.add_subplot(211)
-        ax.scatter(dt[ref_col], dt[pred_col], 0.4,
-                   color=cs.colors[0], label='Calibrated')
-        ax.scatter(dt[ref_col], dt[orig_col],
-                   0.4, color=cs.colors[1], label='Uncalibrated')
-        ax.axline((0, 0), slope=1., color='C0')
-        ax.set_xlabel('Reference mixing ratio [ppm]')
-        ax.set_ylabel('Sensor mixing ratio [ppm]')
-        lms = [300, 1000]
-        ax.set_xlim(lms)
-        ax.set_ylim(lms)
-        # Add annotation
-        ax.add_artist(ann)
-        ax.legend()
-        # Plot timeseries
-        dt_col = dt['date'].dt.to_pydatetime()
-        ts_ax = fig.add_subplot(212)
-        ts_ax.scatter(dt_col, dt[orig_col],
-                      0.4, color=cs.colors[1], label='Uncalibrated')
-        ts_ax.scatter(dt_col, dt[pred_col],
-                      0.4, color=cs.colors[0], label='Calibrated')
-        ts_ax.scatter(dt_col, dt[ref_col],
-                      0.4, color=cs.colors[2], label='Reference')
-        ts_ax.set_xlabel('Date')
-        ts_ax.set_ylabel('CO2 mixing ratio [ppm]')
-        ts_ax.set_ylim(lms)
-        ts_ax.legend()
-        ts_ax.tick_params(axis='x', labelrotation=45)
-        fig.tight_layout()
-        # Plot residuals vs various parameters
-        fig2: mpl.Figure = mpl.figure.Figure()
-        reg_names = [k for k, n in model.params.items()] + \
-            [ref_col, ] + extra_res
-        nr = len(reg_names) // 3 + 1
-        for i, par_name in enumerate(reg_names, start=1):
-            current_ax = fig2.add_subplot(nr, 3, i)
-            current_ax.scatter(dt[par_name], residuals, 0.4)
-            current_ax.set_xlabel(f"{par_name}")
-            current_ax.set_ylabel('Residual [ppm]')
-            current_ax.set_ylim(-30, 30)
-        fig2.tight_layout()
-    # Plot timeseries of regressors
-    fig3: mpl.Figure = mpl.figure.Figure()
-    for i, par_name in enumerate(reg_names, start=1):
-        current_ax = fig3.add_subplot(nr, 3, i)
-        current_ax.scatter(dt['date'], dt[par_name], 0.4)
-        current_ax.set_ylabel(f"{par_name}")
-        current_ax.set_xlabel('Date [ppm]')
-    fig3.tight_layout()
-    return fig, fig2, fig3
+    #     # Create plot for timeseries
+    #     fig = mpl.figure.Figure()
+    #     ax = fig.add_subplot(211)
+    #     ax.scatter(dt[ref_col], dt[pred_col], 0.4,
+    #                color=cs.colors[0], label='Calibrated')
+    #     ax.scatter(dt[ref_col], dt[orig_col],
+    #                0.4, color=cs.colors[1], label='Uncalibrated')
+    #     ax.axline((0, 0), slope=1., color='C0')
+    #     ax.set_xlabel('Reference mixing ratio [ppm]')
+    #     ax.set_ylabel('Sensor mixing ratio [ppm]')
+    #     lms = [300, 1000]
+    #     ax.set_xlim(lms)
+    #     ax.set_ylim(lms)
+    #     # Add annotation
+    #     ax.add_artist(ann)
+    #     ax.legend()
+    #     # Plot timeseries
+    #     dt_col = dt['date'].dt.to_pydatetime()
+    #     ts_ax = fig.add_subplot(212)
+    #     ts_ax.scatter(dt_col, dt[orig_col],
+    #                   0.4, color=cs.colors[1], label='Uncalibrated')
+    #     ts_ax.scatter(dt_col, dt[pred_col],
+    #                   0.4, color=cs.colors[0], label='Calibrated')
+    #     ts_ax.scatter(dt_col, dt[ref_col],
+    #                   0.4, color=cs.colors[2], label='Reference')
+    #     ts_ax.set_xlabel('Date')
+    #     ts_ax.set_ylabel('CO2 mixing ratio [ppm]')
+    #     ts_ax.set_ylim(lms)
+    #     ts_ax.legend()
+    #     ts_ax.tick_params(axis='x', labelrotation=45)
+    #     fig.tight_layout()
+    #     # Plot residuals vs various parameters
+    #     fig2: mpl.Figure = mpl.figure.Figure()
+    #     reg_names = [k for k, n in model.params.items()] + \
+    #         [ref_col, ] + extra_res
+    #     nr = len(reg_names) // 3 + 1
+    #     for i, par_name in enumerate(reg_names, start=1):
+    #         current_ax = fig2.add_subplot(nr, 3, i)
+    #         current_ax.scatter(dt[par_name], residuals, 0.4)
+    #         current_ax.set_xlabel(f"{par_name}")
+    #         current_ax.set_ylabel('Residual [ppm]')
+    #         current_ax.set_ylim(-30, 30)
+    #     fig2.tight_layout()
+    # # Plot timeseries of regressors
+    # fig3: mpl.Figure = mpl.figure.Figure()
+    # for i, par_name in enumerate(reg_names, start=1):
+    #     current_ax = fig3.add_subplot(nr, 3, i)
+    #     current_ax.scatter(dt['date'], dt[par_name], 0.4)
+    #     current_ax.set_ylabel(f"{par_name}")
+    #     current_ax.set_xlabel('Date [ppm]')
+    # fig3.tight_layout()
+    # return fig, fig2, fig3
 
 
 def cleanup_data(dt_in: pd.DataFrame, fit: bool = True) -> pd.DataFrame:
@@ -888,7 +901,7 @@ def convert_calibration_parameters(cp: sm.regression.linear_model.OLSResults,
 def get_averaging_time(sensor: du.AvailableSensors, fit: bool = True) -> int:
     match sensor, fit:
         case du.AvailableSensors.HPP, True:
-            av_sec = 600
+            av_sec = 60
         case du.AvailableSensors.LP8, True:
             av_sec = 600
         case du.AvailableSensors.HPP, False:
@@ -1172,15 +1185,22 @@ for current_id in ids_to_process:
 
         case "calibrate", (du.AvailableSensors.HPP as st):
             # Durations of calibration
-            start = dt.datetime.now() - dt.timedelta(days=15)
+            start = dt.datetime.now() - dt.timedelta(days=35) if not args.full else du.CS_START
             end = dt.datetime.now()
             # Get averaging duration
             av_t = get_averaging_time(st, True)
             # Get data during bottle calibration
-            cal_data = map_cylinder_concentration(
-                get_HPP_data(engine, db_metadata, id, start, end, 30, only_cyl=True))
+            with Session() as session:
+                cal_data = cal.get_HHP_calibration_data(session, id, start, end, av_t)
             # Compute calibration features
-            cal_features = prepare_features(cal_data, fit=False)
+            target = ['CO2']
+            features = ['sensor_CO2']
+            cal_features = prepare_HPP_features(cal_data, fit=False)
+            interval = int( av_t // dt.timedelta(hours=30).total_seconds())
+            breakpoint()
+            cat_fit = cal.HPP_two_point_calibration(cal_features, target, features, interval)
+            #Call bottle calibration
+            breakpoint()
             cal_features.to_csv(b_pth.with_name(f'HPP_{id}_two_point.csv'))
             # Apply calibration
             for (serialnumber, sensor_start, sensor_end), cal_data in cal_data_all_serial:

@@ -30,6 +30,10 @@ import pandas as pd
 import numpy as np
 
 
+from statsmodels.regression.rolling import RollingOLS
+from statsmodels.regression.linear_model import OLS
+import statsmodels.tools as smtools
+
 class CalDataRow(NamedTuple):
     """
     Class to represent a row in the calibration table or in the deployment table
@@ -126,11 +130,11 @@ def get_table(type: du.AvailableSensors) -> mods.TimeseriesData:
             return mods.PicarroData
 
 
-def get_sensor_data_agg(session: sqa.orm.Session, id: Union[int, str],
+def query_sensor_data_agg(session: sqa.orm.Session, id: Union[int, str],
                         type: du.AvailableSensors, start: dt.datetime, end: dt.datetime,
-                        averaging_time: int, aggregations: Dict) -> pd.DataFrame:
+                        averaging_time: int, aggregations: Dict) -> sqa.sql.Selectable:
     """
-    Get the sensor data and aggregate it by :obj:`averaging_time` (in seconds), returning a :obj:`pandas.DataFrame`
+    Get the sensor data and aggregate it by :obj:`averaging_time` (in seconds), returning a :obj:`sqlalchemy.sql.Selectable`
     aggregated according to the SQL expression in the `aggregations` dictionary.
     """
     tb = get_table(type)
@@ -139,7 +143,17 @@ def get_sensor_data_agg(session: sqa.orm.Session, id: Union[int, str],
     qr = query_sensor_data(session, id, type, start, end)
     qr_agg = qr.with_only_columns(*(aggs + [ae])).group_by(ae)
     log.logger.debug(f"The query is {qr_agg}")
-    dt = pd.read_sql(qr_agg, session.connection(), index_col=ae.key)
+    return qr_agg
+
+def get_sensor_data_agg(session: sqa.orm.Session, id: Union[int, str],
+                        type: du.AvailableSensors, start: dt.datetime, end: dt.datetime,
+                        averaging_time: int, aggregations: Dict) -> pd.DataFrame:
+    """
+    Get the sensor data and aggregate it by :obj:`averaging_time` (in seconds), returning a :obj:`pandas.DataFrame`
+    aggregated according to the SQL expression in the `aggregations` dictionary.
+    """
+    qr_agg = query_sensor_data_agg(session, id, type, start, end, averaging_time, aggregations)
+    dt = pd.read_sql(qr_agg, session.connection())
     return dt
 
 
@@ -202,8 +216,8 @@ def get_aggregations(type: du.AvailableSensors) -> dict:
                 'sensor_ir': 'AVG(NULLIF(senseair_hpp_ir_signal, -999))',
                 'sensor_detector_t': 'AVG(NULLIF(senseair_hpp_temperature_detector, -999))',
                 'sensor_mcu_t': 'AVG(NULLIF(senseair_hpp_temperature_mcu, -999))',
-                'sensor_calibration_a': 'MAX(COALESCE(calibration_a, 0))',
-                'sensor_calibration_b': 'MAX(COALESCE(calibration_b, 0))',
+                'sensor_calibration_a': 'MIN(COALESCE(calibration_a, 0))',
+                'sensor_calibration_b': 'MIN(COALESCE(calibration_b, 0))',
             }
         case du.AvailableSensors.LP8:
             agg = {
@@ -235,29 +249,39 @@ def get_sensor_data(session: sqa.orm.Session, id: int, type: du.AvailableSensors
     return dt
 
 
-def get_HHP_calibration_data(session: sqa.orm.Session, id: int, start: dt.datetime, end: dt.datetime) -> pd.DataFrame:
+def get_HHP_calibration_data(session: sqa.orm.Session, id: int, start: dt.datetime, end: dt.datetime, avg_time: int = 120) -> pd.DataFrame:
     """
     Get the data for the senseair HPP Sensor. For each calibration period, also returns the corresponding
     cylinder analysis
     """
     qr = query_sensor_data(session, id, du.AvailableSensors.HPP, start, end)
     qr_filt = qr.filter((mods.HPPData.calibration_a == 1) |
-                        (mods.HPPData.calibration_b == 1)).cte()
+                        (mods.HPPData.calibration_b == 1)).subquery()
     hpp_as = aliased(mods.HPPData, qr_filt)
-    jq = sqa.select(hpp_as, mods.CylinderDeployment).join(
+    ae = make_aggregate_expression(hpp_as.time, "time", avg_time)
+    agg = get_aggregations(du.AvailableSensors.HPP)
+    ac = make_aggregate_columns(agg)
+    hpp_agg = sqa.select(hpp_as).group_by(*[ae]).with_only_columns(*[ac + [ae, hpp_as.id]]).cte()
+    jq = sqa.select(hpp_agg, mods.CylinderDeployment).join(
         mods.CylinderDeployment,
-        (hpp_as.id == mods.CylinderDeployment.sensor_id) &
-        (hpp_as.time.between(
+        (hpp_agg.c.id == mods.CylinderDeployment.sensor_id) &
+        (hpp_agg.c.time.between(
             sqa.func.unix_timestamp(mods.CylinderDeployment.start),
-            sqa.func.unix_timestamp(mods.CylinderDeployment.end)
+            sqa.func.coalesce(sqa.func.unix_timestamp(mods.CylinderDeployment.end), sqa.func.unix_timestamp())
         ))
+    ).where(
+        ((hpp_agg.c.sensor_calibration_a == 1) & (mods.CylinderDeployment.inlet == 'a')) |
+        ((hpp_agg.c.sensor_calibration_b == 1) & (mods.CylinderDeployment.inlet == 'b')) 
     )
+    breakpoint()
     #get the data
     res = session.execute(jq).all()
-    #Unpack and only keep entries where the inlet of the bottle entries corresponds to the active inlet
-    res_unpack = [ asdict(a) |  (asdict(b.cylinders[0]) if b.cylinders else {}) for a,b in res if (a.calibration_a == 1 and b.inlet == 'a') or (a.calibration_b == 1 and b.inlet == 'b') and b.cylinder_id]
-    breakpoint()
-    dt = pd.DataFrame(res_unpack)
+    def unpack_row(rw:dict) -> dict:
+        return {k:(rw[k] if k not in ('CylinderDeployment') else ([asdict(c) for c in rw[k].cylinders] if rw[k] else None)) for k in rw.keys()}
+    #Unpack and only keep the analysis
+    res_unpack = [ unpack_row(b) for b in res]
+    md = {k:type(v) for k,v in res_unpack[0].items() if k not in ('CylinderDeployment')}
+    dt = pd.json_normalize(res_unpack, record_path='CylinderDeployment', meta=list(md.keys())).astype(md)
     return dt
 
 def limit_cal_entry(entries: List[CalDataRow], start: dt.datetime, end: dt.datetime, modes: Optional[List[int]] = None, replace_dates: bool = True) -> List[CalDataRow]:
@@ -438,3 +462,13 @@ def compute_quality_indices(pred: pd.DataFrame, ref_col='ref_CO2', pred_col='CO2
     res_bias = bias(pred[ref_col],  pred[pred_col])
     res_cor = pred[ref_col].corr(pred[pred_col])
     return mods.ModelFitPerformance(**{'rmse': res_rmse, 'bias': res_bias, 'correlation': res_cor})
+
+def HPP_two_point_calibration(dt: pd.DataFrame, endog: List[str], exog: List[str], window:int = 10):
+    """
+    Estimate the HPP two point calibration parameter
+    using a rolling regression
+    """
+    valid = ~dt[endog+exog].isna().any(axis=1)
+    valid_final = valid & (dt['sensor_RH'] < 20)
+    cr = RollingOLS(dt[valid_final][endog], smtools.add_constant(dt[valid_final][exog], prepend=False), window=window)
+    breakpoint()

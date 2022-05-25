@@ -31,8 +31,7 @@ eng = db_utils.connect_to_metadata_db()
 logger.info(f"Reading bottle calibrations from {args.base_path}")
 pts = args.base_path.glob(args.glob)
 
-cals = itertools.chain(*[du.read_bottle_calibrations(pt) for pt in pts])
-breakpoint()
+cals = list(itertools.chain(*[du.read_bottle_calibrations(pt) for pt in pts]))
 session = sessionmaker(bind=eng)
 
 for ce in cals:
@@ -46,7 +45,7 @@ for ce in cals:
         logger.info(f"Adding calibration {ce} to the session")
         c1 = ses.merge(ce)
         if c1 == ce:
-            pass
+            ses.add(c1)
         else:
             session.add(c1)
        
