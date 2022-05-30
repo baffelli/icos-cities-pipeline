@@ -185,7 +185,7 @@ class CylinderDeployment(base.Base):
     """
     __tablename__ = "cylinder_deployment"
     __sa_dataclass_metadata_key__ = "sa"
-    cylinder_id: str = Column("cylinder_id", String, ForeignKey("Cylinder.cylinder_id"), primary_key=True)
+    cylinder_id: str = Column("cylinder_id", String, ForeignKey(Cylinder.cylinder_id), primary_key=True)
     start: dt.datetime = Column("Date_UTC_from", DateTime, primary_key=True)
     end: dt.datetime = Column("Date_UTC_to", DateTime, primary_key=True)
     sensor_id: int = Column("SensorUnit_ID", Integer, primary_key=True)

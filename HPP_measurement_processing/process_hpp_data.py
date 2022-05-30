@@ -437,6 +437,7 @@ def prepare_HPP_features(dt: pd.DataFrame, ir_col: str = "sensor_ir_lpl", fit: b
     """
     dt_new = dt.copy().reset_index().set_index('time').reset_index()
     dt_new['date'] = pd.to_datetime(dt_new['time'], unit='s')
+    dt_new = dt_new.set_index('date')
     dt_new["sensor_ir_log"] = - np.log(dt_new[ir_col])
     dt_new["sensor_ir_inverse"] = 1/(dt_new[ir_col])
     dt_new["sensor_ir_interaction_t"] = dt_new[f"sensor_t"] / \
@@ -452,15 +453,17 @@ def prepare_HPP_features(dt: pd.DataFrame, ir_col: str = "sensor_ir_lpl", fit: b
         dt_new['sensor_t_abs'] / calc.T0
     dt_new['sensor_CO2_comp'] = dt["sensor_CO2"] * nc_sens
     # Dummy variable every `plt` days
-    dt_new['time_dummy'] = dt_new['date'].dt.round(plt).dt.date.astype('str')
+    dt_new['time_dummy'] = dt_new.reset_index()['date'].dt.round(plt).dt.date.astype('str')
     # Start of cylinder calibration (anytime the inlet changes)
-    breakpoint()
     dt_new['inlet_change'] = (dt_new['sensor_calibration_a'].diff() != 0) | (dt_new['sensor_calibration_b'].diff() != 0)
     dt_new['cal_num'] = dt_new['inlet_change'].cumsum()
+    #One full calibration cycle
+    dt_new['cal_cycle'] = (((dt_new['inlet_change'].cumsum() % 2)).diff() == 1).cumsum() 
     dt_new['cal_start'] = dt_new.groupby(
-        dt_new['cal_num']).apply(lambda x: x['date'].min())
-    dt_new['cal_elapsed'] = dt_new.groupby(dt_new['cal_num']).apply(
-        lambda x: (x['date'] - x['date'].min())).reset_index()['date'].dt.seconds
+        dt_new['cal_cycle']).apply(lambda x: x.reset_index()['date'].min())
+    breakpoint()
+    #Elapsed time
+    dt_new['cal_elapsed'] = dt_new.reset_index().groupby('cal_cycle').apply(lambda x: (x.reset_index()['date'] - x.reset_index()['date'].min()).dt.total_seconds()).values
     # Additional features needed for fitting
     if fit:
         dt_new['ref_t_abs'] = calc.absolute_temperature(dt_new['ref_T'])
@@ -474,7 +477,7 @@ def prepare_HPP_features(dt: pd.DataFrame, ir_col: str = "sensor_ir_lpl", fit: b
             dt_new['ref_CO2_DRY'], dt_new['ref_H2O']) * nc
         dt_new['ref_H2O_comp'] = dt_new['ref_H2O'] * nc
 
-    return dt_new
+    return dt_new.reset_index()
 
 
 def prepare_LP8_features(dt: pd.DataFrame, fit: bool = True,  plt: str = '1d') -> pd.DataFrame:
@@ -665,6 +668,7 @@ def plot_CO2_calibration(dt: pd.DataFrame,
     - Time series of sensor and reference
     - Scatter plot
     - Residuals of regressors
+    Depending on the mode, 
     """
     
 
@@ -877,25 +881,7 @@ def save_multipage(plots: List[plt.Figure], base_path: pl.Path, names: List[str]
             pdf.savefig(p)
 
 
-def convert_calibration_parameters(cp: sm.regression.linear_model.OLSResults,
-                                   species: str,
-                                   type: du.AvailableSensors,
-                                   valid_from: dt.datetime,
-                                   valid_to: dt.datetime,
-                                   computed: dt.datetime,
-                                   device: str) -> mods.CalibrationParameters:
-    """
-    Convert the fit results into a :obj:`sensorutils.data.CalibrationParameters`
-    object that can be persisted in the database in a human-readable format
-    thank to SQLAlchemy
-    """
-    pl = [mods.CalibrationParameter(parameter=n, value=v)
-          for n, v in cp.params.items()]
-    return mods.CalibrationParameters(parameters=pl,
-                                      species=species,
-                                      type=type.value, valid_from=valid_from,
-                                      valid_to=valid_to,
-                                      computed=computed, device=device)
+
 
 
 def get_averaging_time(sensor: du.AvailableSensors, fit: bool = True) -> int:
@@ -1163,7 +1149,7 @@ for current_id in ids_to_process:
                 ts_reg_plot.savefig(wp_path_reg)
                 # Persist parameters
                 computed_when = dt.datetime.now()
-                cal_obj = convert_calibration_parameters(
+                cal_obj = cal.convert_calibration_parameters(
                     cal_fit, "CO2", args.sensor_type, cd.data.cal_end.max(), cd.next, computed_when, cd.serial)
                 # Compute model statistics
                 model_statistics = cal.compute_quality_indices(
@@ -1196,54 +1182,20 @@ for current_id in ids_to_process:
             target = ['CO2']
             features = ['sensor_CO2']
             cal_features = prepare_HPP_features(cal_data, fit=False)
-            interval = int( av_t // dt.timedelta(hours=30).total_seconds())
-            breakpoint()
-            cat_fit = cal.HPP_two_point_calibration(cal_features, target, features, interval)
+            #Calibration window
+            interval = 2
             #Call bottle calibration
+            logger.info(f"Computing two point calibration for {id}")
+            cal_fit = cal.HPP_two_point_calibration(cal_features, target, features, interval)
+            #Predict
+            cal_pred = cal.apply_HPP_calibration(cal_features, cal_fit)
+            #Plot
+            figs = cal_pred.set_index('date').resample("1d").apply(lambda x: pd.Series({'plot':cal.plot_HPP_calibration(x.reset_index())})).reset_index()
+            wp_path = b_pth.with_name(f'HPP_bottle_cal_{id}_.pdf')
             breakpoint()
-            cal_features.to_csv(b_pth.with_name(f'HPP_{id}_two_point.csv'))
-            # Apply calibration
-            for (serialnumber, sensor_start, sensor_end), cal_data in cal_data_all_serial:
-                logger.info(f"Processing sensor {serialnumber} of unit {id}")
-                # Prepare features
-                cal_data_clean = cleanup_data(cal_data)
-                cal_feature = prepare_features(cal_data_clean.reset_index())
-                # Split into training and testing data
-                bottle_cal, field_cal = split_HPP_cal_data(cal_feature)
-                cal_feature_train, cal_feature_test = cal_cv_split(field_cal)
-                H2O_cal = H2O_calibration(cal_feature_train)
-                co2_cal = HPP_CO2_calibration(cal_feature_train)
-                # Remove dummies from model fit
-                co2_cal_nd = remove_dummies(co2_cal, 'time_dummy')
-                # Persist parameters
-                computed_when = dt.datetime.now()
-
-                cal_obj = convert_calibration_parameters(
-                    co2_cal_nd, "CO2", args.sensor_type, sensor_start.to_pydatetime(), sensor_end.to_pydatetime(), computed_when, serialnumber)
-                with Session() as session:
-                    logger.info("Persisting calibration parameters")
-                    session.add(cal_obj)
-                    session.commit()
-                # Predict and plot the prediction
-                pred_df = predict_CO2(cal_feature_test, co2_cal_nd)
-                pred_df_bottle = predict_CO2(bottle_cal, co2_cal_nd)
-                # Plot prediction week by week (for the co-location)
-                wp = pred_df.resample('W', on='date').apply(
-                    lambda x: pd.Series({'plot': plot_CO2_calibration(x, co2_cal_nd)})).reset_index()
-                wp_path = b_pth.with_name(f'HPP_{id}_{serialnumber}.pdf')
-                wp_res_path = b_pth.with_name(
-                    f'HPP_res_{id}_{serialnumber}.pdf')
-                # Save calibration results plot
-                save_multipage([u for u, w in wp['plot']], wp_path, wp['date'])
-                # Save residuals
-                save_multipage([w for u, w in wp['plot']],
-                               wp_res_path, wp['date'])
-
-                # Plot prediction for bottle times
-                wp = pred_df_bottle.resample('W', on='date').apply(lambda x: pd.Series(
-                    {'plot': plot_CO2_calibration(x, co2_cal_nd, ref_col='CO2_DRY_CYL_a')})).reset_index()
-                wp_path = b_pth.with_name(
-                    f'HPP_bottle_{id}_{serialnumber}.pdf')
-
-                save_multipage([w for u, w in wp['plot']], wp_path, wp['date'])
-                logger.debug(ref_dt)
+            save_multipage(figs['plot'].tolist(), wp_path, figs['date'].tolist())
+            with Session() as session:
+                logger.info(f"Storing calibration parameters for {id} in the database")
+                for el in cal_fit:
+                    session.add(el)
+                session.commit()

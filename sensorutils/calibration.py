@@ -1,38 +1,34 @@
 """
 Functions used for calibration / sensor data processing
 """
+import datetime as dt
+import enum
+
 from asyncio.log import logger
-from dataclasses import dataclass, asdict
+
+from dataclasses import asdict, dataclass
 from operator import mod
-import pdb
 from statistics import correlation
-from tkinter import W
+from typing import Dict, List, NamedTuple, Optional, Tuple, Union
 
+import matplotlib as mpl
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
 import sqlalchemy
-from sensorutils import models as mods
-from sensorutils import data as du
-from sensorutils import base
-from sensorutils import log
-from sensorutils import db
-from sensorutils import utils
-
-from typing import List, NamedTuple, Optional, Union, Dict, Tuple
-
-from collections import namedtuple
-
 import sqlalchemy as sqa
+import statsmodels.tools as smtools
 from sqlalchemy import func as func
 from sqlalchemy.orm import aliased
-
-import datetime as dt
-
-import pandas as pd
-import numpy as np
-
-
+from statsmodels.regression.linear_model import OLS, RegressionResults, OLSResults
 from statsmodels.regression.rolling import RollingOLS
-from statsmodels.regression.linear_model import OLS
-import statsmodels.tools as smtools
+
+
+from sensorutils import data as du
+from sensorutils import db, log
+from sensorutils import models as mods
+from sensorutils import utils
+
 
 class CalDataRow(NamedTuple):
     """
@@ -99,6 +95,24 @@ class CalData:
     next: pd.Timestamp
     serial: Union[int, str]
 
+class measurementType(enum.Enum):
+    """
+    Enumeration to list measurement types, 
+    used for plotting functions
+    """
+    REF = 'ref'
+    CAL = 'cal'
+    ORIG = 'orig'
+
+def get_line_color(tp: measurementType, cm: mpl.colors.Colormap = plt.cm.get_cmap('Set2')) -> Tuple:
+    match tp:
+        case measurementType.CAL:
+            cl = cm.colors[0]
+        case measurementType.REF:
+            cl = cm.colors[1]
+        case measurementType.ORIG:
+            cl = cm.colors[2]
+    return cl
 
 def make_aggregate_columns(aggregations: Dict[str, str]) -> List[sqa.sql.expression.ColumnClause]:
     """
@@ -262,18 +276,24 @@ def get_HHP_calibration_data(session: sqa.orm.Session, id: int, start: dt.dateti
     agg = get_aggregations(du.AvailableSensors.HPP)
     ac = make_aggregate_columns(agg)
     hpp_agg = sqa.select(hpp_as).group_by(*[ae]).with_only_columns(*[ac + [ae, hpp_as.id]]).cte()
-    jq = sqa.select(hpp_agg, mods.CylinderDeployment).join(
+    sf = sqa.select(mods.Sensor).filter(mods.Sensor.type == du.AvailableSensors.HPP.value).subquery()
+    sens_as = aliased(mods.Sensor, sf)
+    #Get sensor info
+    jq = sqa.select(hpp_agg, mods.CylinderDeployment, sens_as).outerjoin(
         mods.CylinderDeployment,
         (hpp_agg.c.id == mods.CylinderDeployment.sensor_id) &
-        (hpp_agg.c.time.between(
-            sqa.func.unix_timestamp(mods.CylinderDeployment.start),
-            sqa.func.coalesce(sqa.func.unix_timestamp(mods.CylinderDeployment.end), sqa.func.unix_timestamp())
-        ))
+        (sqa.func.from_unixtime(hpp_agg.c.time) >= mods.CylinderDeployment.start) &
+        (sqa.func.from_unixtime(hpp_agg.c.time) <= mods.CylinderDeployment.end)
+    ).join(
+        sens_as,
+        (hpp_agg.c.id == sens_as.id) &
+        hpp_agg.c.time.between(
+            sqa.func.unix_timestamp(sens_as.start),
+            sqa.func.coalesce(sqa.func.unix_timestamp(sens_as.end), sqa.func.unix_timestamp()))
     ).where(
         ((hpp_agg.c.sensor_calibration_a == 1) & (mods.CylinderDeployment.inlet == 'a')) |
-        ((hpp_agg.c.sensor_calibration_b == 1) & (mods.CylinderDeployment.inlet == 'b')) 
-    )
-    breakpoint()
+        ((hpp_agg.c.sensor_calibration_b == 1) & (mods.CylinderDeployment.inlet == 'b'))  
+    ).order_by(hpp_agg.c.time).add_columns(sens_as.serial)
     #get the data
     res = session.execute(jq).all()
     def unpack_row(rw:dict) -> dict:
@@ -282,6 +302,7 @@ def get_HHP_calibration_data(session: sqa.orm.Session, id: int, start: dt.dateti
     res_unpack = [ unpack_row(b) for b in res]
     md = {k:type(v) for k,v in res_unpack[0].items() if k not in ('CylinderDeployment')}
     dt = pd.json_normalize(res_unpack, record_path='CylinderDeployment', meta=list(md.keys())).astype(md)
+
     return dt
 
 def limit_cal_entry(entries: List[CalDataRow], start: dt.datetime, end: dt.datetime, modes: Optional[List[int]] = None, replace_dates: bool = True) -> List[CalDataRow]:
@@ -463,12 +484,97 @@ def compute_quality_indices(pred: pd.DataFrame, ref_col='ref_CO2', pred_col='CO2
     res_cor = pred[ref_col].corr(pred[pred_col])
     return mods.ModelFitPerformance(**{'rmse': res_rmse, 'bias': res_bias, 'correlation': res_cor})
 
-def HPP_two_point_calibration(dt: pd.DataFrame, endog: List[str], exog: List[str], window:int = 10):
+def convert_calibration_parameters(cp: OLSResults,
+                                   species: str,
+                                   type: du.AvailableSensors,
+                                   valid_from: dt.datetime,
+                                   valid_to: dt.datetime,
+                                   computed: dt.datetime,
+                                   device: str) -> mods.CalibrationParameters:
+    """
+    Convert the fit results into a :obj:`sensorutils.data.CalibrationParameters`
+    object that can be persisted in the database in a human-readable format
+    thank to SQLAlchemy
+    """
+    pl = [mods.CalibrationParameter(parameter=n, value=v)
+          for n, v in cp.params.items()]
+    return mods.CalibrationParameters(parameters=pl,
+                                      species=species,
+                                      type=type.value, valid_from=valid_from,
+                                      valid_to=valid_to,
+                                      computed=computed, device=device)
+
+def HPP_two_point_calibration(dt_in: pd.DataFrame, endog: List[str], exog: List[str], window:int = 10) -> List[mods.CalibrationParameters]:
     """
     Estimate the HPP two point calibration parameter
-    using a rolling regression
+    using a grouped regression (grouped by `window` days) and returns a list
+    of `sensorutils.models.CalibrationParameters`
     """
-    valid = ~dt[endog+exog].isna().any(axis=1)
-    valid_final = valid & (dt['sensor_RH'] < 20)
-    cr = RollingOLS(dt[valid_final][endog], smtools.add_constant(dt[valid_final][exog], prepend=False), window=window)
+
+    def inner_cal(data: pd.DataFrame) -> RegressionResults:
+        valid = ~data[endog+exog].isna().any(axis=1)
+        valid_final = valid & (data['sensor_RH'] < 10)
+        data_valid = data[valid_final]
+        return OLS(data_valid[endog], smtools.add_constant(data_valid[exog])).fit()
+    #Apply calibration
+    cal_par = dt_in.set_index('date').groupby(["id", "serial", pd.Grouper(freq='5d')]).apply(lambda x: inner_cal(x))
+    #Add next calibration date
+    cal_par_out = cal_par.to_frame(name='parameters').reset_index()
+    cal_par_out['next_cal'] = cal_par_out.date.shift(-1).fillna(du.NAT)
+    cal_par_out['species'] = endog[0]
+    par_objs = [
+        convert_calibration_parameters(
+            m.parameters,
+            m.species,
+            du.AvailableSensors.HPP,
+            m.date.to_pydatetime(),
+            m.next_cal.to_pydatetime(),
+            dt.datetime.now(),
+            m.serial) for m in cal_par_out.itertuples()
+    ]
+    return par_objs
+    #Iterate and make object
+
+
+def apply_HPP_calibration(dt_in: pd.DataFrame, cal_pars: List[mods.CalibrationParameters]) -> pd.DataFrame:
+    """
+    Apply the calibration parameters
+    contained in the list `cal_pars` to the data frame `dt_in`
+    and returns a data frame of calibrated data
+    """
+    def inner_pred(di: pd.DataFrame, pms: mods.CalibrationParameters) -> pd.DataFrame:
+        valid = di['date'].between(pms.valid_from, pms.valid_to)
+        dt_pred = di[valid]
+        dt_pred['const'] = 1
+        pms_sm = pms.to_statsmodel()
+        reg_names =[n for n in pms_sm.params.keys()]
+        dt_pred['CO2_cal'] = pms_sm.predict(dt_pred[reg_names])
+        return dt_pred
+    predictions = pd.concat([inner_pred(dt_in, pm) for pm in cal_pars])
     breakpoint()
+    return predictions
+
+
+def plot_HPP_calibration(dt: pd.DataFrame) -> plt.Figure:
+    """
+    Plots the Senseair HPP two point calibration timeseries
+    """
+    fig = mpl.figure.Figure()
+    ax = fig.add_subplot(211)
+    sz = 0.5
+    ax.scatter(dt['cal_elapsed'], dt['sensor_CO2'], color=get_line_color(measurementType.ORIG), label='Uncalibrated', s=sz)
+    ax.scatter(dt['cal_elapsed'], dt['CO2_cal'], color=get_line_color(measurementType.CAL), label='Calibrated', s=sz)
+    ax.scatter(dt['cal_elapsed'], dt['CO2'], color=get_line_color(measurementType.REF), label='Reference', s=sz)
+    ax.set_xlabel('Time')
+    ax.set_ylabel('CO2 [ppm]')
+    ax.set_ylim([300, 700])
+    ax.set_xlim([0, 60 * 30])
+    ax.legend()
+    ax1 = fig.add_subplot(212)
+    ax1.scatter(dt['cal_elapsed'], dt['sensor_RH'], color=get_line_color(measurementType.ORIG), s=sz)
+    ax1.set_ylim([0, 30])
+    ax1.set_xlim([0, 20 * 60])
+    ax1.set_ylabel('RH [%]')
+    return fig
+
+    
