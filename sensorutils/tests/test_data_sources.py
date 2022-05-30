@@ -121,7 +121,7 @@ class TestDataSourceMapping(unittest.TestCase):
         mapping = self.temp_mapping()
         source = mapping['GIMM'].source
         source.attach_db_from_config()
-        import pdb; pdb.set_trace()
+
         fl = source.list_files()
         self.assertIsInstance(fl, pd.DataFrame)
 

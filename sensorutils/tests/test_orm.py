@@ -76,9 +76,37 @@ class TestOrm(unittest.TestCase):
 
     def testGetCylinder(self):
         with self.session() as ses:
-            sel = sqlalchemy.select(mods.CylinderDeployment)
-            ses.execute(sel)
+            sel = sqlalchemy.select(mods.Cylinder)
+            res = ses.execute(sel)
+            cyls = res.all()
+            breakpoint()
 
+    def testGetCylinderAnalysis(self):
+        with self.session() as ses:
+            sel = sqlalchemy.select(mods.CylinderAnalysis)
+            res = ses.execute(sel)
+            cyls = res.all()
+            breakpoint()
+    
+    def testGetCylinderDeployment(self):
+        with self.session() as ses:
+            sel = sqlalchemy.select(mods.CylinderDeployment)
+            res = ses.execute(sel)
+            cyls = res.all()
+            breakpoint()
+
+    def testGetDeployment(self):
+        with self.session() as ses:
+            sel = sqlalchemy.select(mods.Deployment)
+            res = ses.execute(sel)
+            cyls = res.first()
+            breakpoint()
+
+
+    def testGetLocationsWithDeployment(self):
+        with self.session() as ses:
+            locs = du.list_locations_with_deployment(ses, start= dt.datetime(2022,1,1,0,0))
+            breakpoint()
 
 if __name__ == '__main__':
     unittest.main()

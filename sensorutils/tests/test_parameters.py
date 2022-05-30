@@ -41,7 +41,7 @@ class TestParameters(unittest.TestCase):
 
     def test_read_xls_new(self):
         data = icos_data.read_picarro_parameters_new(self.new_param_path)
-        import pdb; pdb.set_trace()
+
         self.assertIsInstance(data, pd.DataFrame)
     
     def test_read_calibration_configuration(self):
@@ -66,7 +66,7 @@ class TestParameters(unittest.TestCase):
         qr = session.query(icos_data.CalibrationParameters).all()
         for mapped, orig in zip(qr, cal_obj):
             self.assertEqual(mapped ,orig)
-        import pdb; pdb.set_trace()
+
 
 
 
