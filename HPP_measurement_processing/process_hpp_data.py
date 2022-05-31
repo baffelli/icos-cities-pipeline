@@ -9,6 +9,7 @@ from asyncio import base_tasks
 from locale import dcgettext
 import pdb
 import enum
+from turtle import back
 from pymysql import DataError
 import sensorutils.db as db_utils
 import sensorutils.files as fu
@@ -435,7 +436,7 @@ def prepare_HPP_features(dt: pd.DataFrame, ir_col: str = "sensor_ir_lpl", fit: b
     """
     Prepare features for CO2 calibration / predictions
     """
-    dt_new = dt.copy().reset_index().set_index('time').reset_index()
+    dt_new = dt.copy().reset_index()
     dt_new['date'] = pd.to_datetime(dt_new['time'], unit='s')
     dt_new = dt_new.set_index('date')
     dt_new["sensor_ir_log"] = - np.log(dt_new[ir_col])
@@ -453,29 +454,31 @@ def prepare_HPP_features(dt: pd.DataFrame, ir_col: str = "sensor_ir_lpl", fit: b
         dt_new['sensor_t_abs'] / calc.T0
     dt_new['sensor_CO2_comp'] = dt["sensor_CO2"] * nc_sens
     # Dummy variable every `plt` days
-    dt_new['time_dummy'] = dt_new.reset_index()['date'].dt.round(plt).dt.date.astype('str')
+    dt_new['time_dummy'] = dt_new.index.round(plt).date.astype('str')
+    #Map to single inlet
+    dt_new['inlet'] = [[None, 'a', 'b'][i] for i in (cal_data.sensor_calibration_a + cal_data.sensor_calibration_b * 2)]
     # Start of cylinder calibration (anytime the inlet changes)
     dt_new['inlet_change'] = (dt_new['sensor_calibration_a'].diff() != 0) | (dt_new['sensor_calibration_b'].diff() != 0)
-    dt_new['cal_num'] = dt_new['inlet_change'].cumsum()
-    #One full calibration cycle
+    #One full calibration cycle corresponds to two inlet changes
+    dt_new['inlet_cycle'] = dt_new['inlet_change'].cumsum()
     dt_new['cal_cycle'] = (((dt_new['inlet_change'].cumsum() % 2)).diff() == 1).cumsum() 
-    dt_new['cal_start'] = dt_new.groupby(
-        dt_new['cal_cycle']).apply(lambda x: x.reset_index()['date'].min())
-    breakpoint()
-    #Elapsed time
-    dt_new['cal_elapsed'] = dt_new.reset_index().groupby('cal_cycle').apply(lambda x: (x.reset_index()['date'] - x.reset_index()['date'].min()).dt.total_seconds()).values
+    #Elapsed time (for calibration cycle)
+    elaps_lm = lambda x: (x.index.to_series().min() - x.index.to_series()).dt.total_seconds()
+    dt_new['inlet_elapsed'] = dt_new.groupby('inlet_cycle').apply(elaps_lm).values
+    dt_new['cal_elapsed'] = dt_new.groupby('cal_cycle').apply(elaps_lm).values
     # Additional features needed for fitting
     if fit:
-        dt_new['ref_t_abs'] = calc.absolute_temperature(dt_new['ref_T'])
-        # Normalisation constant
-        nc = (dt_new['ref_pressure']) / calc.P0 * calc.T0 / dt_new['ref_t_abs']
-        # Compute normalised concentrations using ideal gas law
-        dt_new['sensor_H2O_comp'] = dt_new['sensor_H2O'] * nc
-        dt_new['ref_CO2'] = calc.dry_to_wet_molar_mixing(
-            dt_new['ref_CO2_DRY'], dt_new['ref_H2O']/100)
-        dt_new['ref_CO2_comp'] = calc.dry_to_wet_molar_mixing(
-            dt_new['ref_CO2_DRY'], dt_new['ref_H2O']) * nc
-        dt_new['ref_H2O_comp'] = dt_new['ref_H2O'] * nc
+        if 'ref_T' in dt_new.columns:
+            dt_new['ref_t_abs'] = calc.absolute_temperature(dt_new['ref_T'])
+            # Normalisation constant
+            nc = (dt_new['ref_pressure']) / calc.P0 * calc.T0 / dt_new['ref_t_abs']
+            # Compute normalised concentrations using ideal gas law
+            dt_new['sensor_H2O_comp'] = dt_new['sensor_H2O'] * nc
+            dt_new['ref_CO2'] = calc.dry_to_wet_molar_mixing(
+                dt_new['ref_CO2_DRY'], dt_new['ref_H2O']/100)
+            dt_new['ref_CO2_comp'] = calc.dry_to_wet_molar_mixing(
+                dt_new['ref_CO2_DRY'], dt_new['ref_H2O']) * nc
+            dt_new['ref_H2O_comp'] = dt_new['ref_H2O'] * nc
 
     return dt_new.reset_index()
 
@@ -1041,6 +1044,7 @@ logger.debug(
 b_pth: pl.Path = args.plot
 # Starting date for calibration
 start = du.CS_START if args.full else dt.datetime.now() - dt.timedelta(days=60)
+end = dt.datetime.now()
 for current_id in ids_to_process:
     id = current_id.value
     logger.debug(f"Processing sensor id {id}")
@@ -1083,14 +1087,14 @@ for current_id in ids_to_process:
                     cal_data_clean = cleanup_data(cal_data, fit=False)
                     prediction_features = prepare_LP8_features(
                         cal_data_clean, fit=False)
-                    # Preict
+                    # Predict
 
                     predicted = predict_CO2(prediction_features, model_fit)
                     l2_dt = cal.prepare_level2_data(predicted, pm.id)
                     cal.persist_level2_data(ses, l2_dt)
                     ses.commit()
                 # Plot
-                ts_plot, scatter_plot, _ = plot_CO2_calibration(
+                ts_plot, scatter_plot = plot_CO2_calibration(
                     predicted, model_fit, orig_col="sensor_CO2", ref_col="ref_CO2", extra_res=["ref_H2O"])
                 pdf.savefig(ts_plot)
 
@@ -1169,15 +1173,15 @@ for current_id in ids_to_process:
                     session.add(model_statistics)
                     session.commit()
 
-        case "calibrate", (du.AvailableSensors.HPP as st):
-            # Durations of calibration
-            start = dt.datetime.now() - dt.timedelta(days=35) if not args.full else du.CS_START
-            end = dt.datetime.now()
+        case "calibrate", (du.AvailableSensors.HPP as st):    
             # Get averaging duration
             av_t = get_averaging_time(st, True)
             # Get data during bottle calibration
             with Session() as session:
                 cal_data = cal.get_HHP_calibration_data(session, id, start, end, av_t)
+                if cal_data.empty:
+                    logger.info(f"No calibration data between {start} and {end} ")
+                    continue
             # Compute calibration features
             target = ['CO2']
             features = ['sensor_CO2']
@@ -1186,16 +1190,47 @@ for current_id in ids_to_process:
             interval = 2
             #Call bottle calibration
             logger.info(f"Computing two point calibration for {id}")
-            cal_fit = cal.HPP_two_point_calibration(cal_features, target, features, interval)
+            cal_fit = cal.HPP_two_point_calibration(cal_features, target, features, window= interval)
             #Predict
-            cal_pred = cal.apply_HPP_calibration(cal_features, cal_fit)
+            cal_params  = [a for a,c in cal_fit]
+            cal_pred = cal.apply_HPP_calibration(cal_features, cal_params)
             #Plot
             figs = cal_pred.set_index('date').resample("1d").apply(lambda x: pd.Series({'plot':cal.plot_HPP_calibration(x.reset_index())})).reset_index()
             wp_path = b_pth.with_name(f'HPP_bottle_cal_{id}_.pdf')
-            breakpoint()
             save_multipage(figs['plot'].tolist(), wp_path, figs['date'].tolist())
             with Session() as session:
                 logger.info(f"Storing calibration parameters for {id} in the database")
-                for el in cal_fit:
-                    session.add(el)
-                session.commit()
+                for el, qual in cal_fit:
+                    el_ad = cal.update_hpp_calibration(session, el)
+                    qual.model_id = el_ad.id
+                    session.add(qual)
+                    session.commit()
+        case "process", (du.AvailableSensors.HPP as st):
+            av_t = get_averaging_time(st, True)
+            #List missing dates
+            missing_dates = data_mapping.list_files_missing_in_dest(
+            group=id, all=args.full,  backfill= 15)
+            #Iterate over dates
+            for d in missing_dates:
+                day_start, day_end = du.day_range(d)
+                serialnumber = db_utils.get_serialnumber(engine, id, st.value, day_start, day_end)
+                with Session() as session:
+                    cp = cal.get_HPP_calibration(session, serialnumber, d)
+                    if not cp:
+                        logger.info(f"No calibration for HPP {id} on {d}, skipping")
+                        continue
+                    cal_data_all = cal.get_cal_ts(session, id, st, day_start, day_end, av_t, dep=True)
+                    cal_sets = [d.data for d in cal_data_all if d]
+                    if not cal_sets:
+                        continue
+                    else:
+                        cal_data = pd.concat(cal_sets)
+                        cal_features =  prepare_HPP_features(cal_data, fit=True)
+                        cal_pred = cal.apply_HPP_calibration(cal_features, [cp])
+                        l2_dt = cal.prepare_level2_data(cal_pred, cp.id)
+                        breakpoint()
+                        cal.persist_level2_data(session, l2_dt)
+                        session.commit()
+                        #Plot
+                        ts_plot, scatter_plot = plot_CO2_calibration(cal_pred, cp.to_statsmodel(), orig_col="sensor_CO2", ref_col="ref_CO2", extra_res=["ref_H2O"])
+                        #breakpoint()

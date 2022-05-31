@@ -29,6 +29,7 @@ from sensorutils import db, log
 from sensorutils import models as mods
 from sensorutils import utils
 
+import copy as cp 
 
 class CalDataRow(NamedTuple):
     """
@@ -300,9 +301,11 @@ def get_HHP_calibration_data(session: sqa.orm.Session, id: int, start: dt.dateti
         return {k:(rw[k] if k not in ('CylinderDeployment') else ([asdict(c) for c in rw[k].cylinders] if rw[k] else None)) for k in rw.keys()}
     #Unpack and only keep the analysis
     res_unpack = [ unpack_row(b) for b in res]
-    md = {k:type(v) for k,v in res_unpack[0].items() if k not in ('CylinderDeployment')}
-    dt = pd.json_normalize(res_unpack, record_path='CylinderDeployment', meta=list(md.keys())).astype(md)
-
+    if res_unpack:
+        md = {k:type(v) for k,v in res_unpack[0].items() if k not in ('CylinderDeployment')}
+        dt = pd.json_normalize(res_unpack, record_path='CylinderDeployment', meta=list(md.keys())).astype(md)
+    else:
+        dt = pd.DataFrame()
     return dt
 
 def limit_cal_entry(entries: List[CalDataRow], start: dt.datetime, end: dt.datetime, modes: Optional[List[int]] = None, replace_dates: bool = True) -> List[CalDataRow]:
@@ -344,7 +347,7 @@ def get_cal_ts(session: sqa.orm.Session, id: int, type: du.AvailableSensors, sta
         sensor_res = get_sensor_data_agg(session, e.sensor_id, st,
                                          e.cal_start, e.cal_end, averaging_time, aggs)
         if not picarro_res.empty:
-            all_dt = sensor_res.join(picarro_res, how='left').reset_index()
+            all_dt = sensor_res.set_index('time').join(picarro_res.set_index('time'), how='left').reset_index()
         else:
             all_dt = sensor_res.reset_index()
         return all_dt.assign(**e._asdict())
@@ -427,11 +430,12 @@ def prepare_level2_data(dt_in: pd.DataFrame, model_id: Union[str, int]) -> List[
         'location': 'location',
         'time': 'time',
         'sensor_id': 'id',
-        'CO2_pred': 'CO2',
+        'CO2_pred': 'CO2',        
         'H2O': 'H2O',
         'sensor_RH': 'relative_humidity',
         'sensor_t': 'temperature',
-        'sensor_pressure': 'pressure'
+        'sensor_pressure': 'pressure',
+        'inlet': 'inlet'
     }
     dt_out = dt_in.copy()[[k for k, v in new_names.items()
                            if k in dt_in.columns]].rename(columns=new_names)
@@ -474,7 +478,7 @@ def rmse(ref: pd.Series, value: pd.Series) -> float:
     return np.sqrt(((ref - value)**2).mean())
 
 
-def compute_quality_indices(pred: pd.DataFrame, ref_col='ref_CO2', pred_col='CO2_pred',) -> CalibrationQuality:
+def compute_quality_indices(pred: pd.DataFrame, ref_col='ref_CO2', pred_col='CO2_pred',) -> mods.ModelFitPerformance:
     """
     Compute model quality indicators for a dataframe of model predictions
     and return a dict of the statistics
@@ -504,33 +508,49 @@ def convert_calibration_parameters(cp: OLSResults,
                                       valid_to=valid_to,
                                       computed=computed, device=device)
 
-def HPP_two_point_calibration(dt_in: pd.DataFrame, endog: List[str], exog: List[str], window:int = 10) -> List[mods.CalibrationParameters]:
+def HPP_two_point_calibration(dt_in: pd.DataFrame, endog: List[str], exog: List[str], 
+window:int = 10) -> List[Tuple[mods.CalibrationParameters, mods.ModelFitPerformance]]:
     """
     Estimate the HPP two point calibration parameter
     using a grouped regression (grouped by `window` days) and returns a list
-    of `sensorutils.models.CalibrationParameters`
+    of `sensorutils.models.CalibrationParameters`.
+    Only use the measurement value after 240 seconds from the inlet change
     """
 
-    def inner_cal(data: pd.DataFrame) -> RegressionResults:
+    def inner_cal(data: pd.DataFrame) -> pd.Series:
+        #Check wether there are enough two point calibrations
+        span = np.abs(np.diff(data.CO2.unique()))[0]
+
         valid = ~data[endog+exog].isna().any(axis=1)
-        valid_final = valid & (data['sensor_RH'] < 10)
+        valid_final = valid & (data['inlet_elapsed'] > 240)
         data_valid = data[valid_final]
-        return OLS(data_valid[endog], smtools.add_constant(data_valid[exog])).fit()
-    #Apply calibration
-    cal_par = dt_in.set_index('date').groupby(["id", "serial", pd.Grouper(freq='5d')]).apply(lambda x: inner_cal(x))
+        if span > 100:
+            fit = OLS(data_valid[endog], smtools.add_constant(data_valid[exog])).fit()
+        else:
+            diff = data_valid[endog].values - data_valid[exog].values
+            data_valid['const'] = 1
+            fit_orig = OLS(diff,data_valid['const']).fit()
+            params = fit_orig.params
+            new_params =  pd.concat([params, pd.Series({exog[0]:1})])
+            fit = cp.deepcopy(fit_orig)
+            fit.params = new_params
+        cq = mods.ModelFitPerformance(rmse=np.sqrt(np.mean(fit.resid**2)), bias=np.mean(np.abs(fit.resid)), correlation=fit.rsquared)
+        return pd.Series({'parameters':fit, 'quality':cq})
+    #Group by time window and apply calibration
+    cal_par = dt_in.set_index('date').groupby(["id", "serial", pd.Grouper(freq=f'{window}d')]).apply(lambda x: inner_cal(x))
     #Add next calibration date
-    cal_par_out = cal_par.to_frame(name='parameters').reset_index()
+    cal_par_out = cal_par.reset_index()
     cal_par_out['next_cal'] = cal_par_out.date.shift(-1).fillna(du.NAT)
     cal_par_out['species'] = endog[0]
     par_objs = [
-        convert_calibration_parameters(
+        (convert_calibration_parameters(
             m.parameters,
             m.species,
             du.AvailableSensors.HPP,
             m.date.to_pydatetime(),
             m.next_cal.to_pydatetime(),
             dt.datetime.now(),
-            m.serial) for m in cal_par_out.itertuples()
+            m.serial), m.quality) for m in cal_par_out.itertuples()
     ]
     return par_objs
     #Iterate and make object
@@ -548,11 +568,10 @@ def apply_HPP_calibration(dt_in: pd.DataFrame, cal_pars: List[mods.CalibrationPa
         dt_pred['const'] = 1
         pms_sm = pms.to_statsmodel()
         reg_names =[n for n in pms_sm.params.keys()]
-        dt_pred['CO2_cal'] = pms_sm.predict(dt_pred[reg_names])
+        dt_pred['CO2_pred'] = pms_sm.predict(dt_pred[reg_names])
         return dt_pred
-    predictions = pd.concat([inner_pred(dt_in, pm) for pm in cal_pars])
-    breakpoint()
-    return predictions
+    pred_objs = pd.concat([inner_pred(dt_in, pm) for pm in cal_pars])
+    return pred_objs
 
 
 def plot_HPP_calibration(dt: pd.DataFrame) -> plt.Figure:
@@ -563,7 +582,7 @@ def plot_HPP_calibration(dt: pd.DataFrame) -> plt.Figure:
     ax = fig.add_subplot(211)
     sz = 0.5
     ax.scatter(dt['cal_elapsed'], dt['sensor_CO2'], color=get_line_color(measurementType.ORIG), label='Uncalibrated', s=sz)
-    ax.scatter(dt['cal_elapsed'], dt['CO2_cal'], color=get_line_color(measurementType.CAL), label='Calibrated', s=sz)
+    ax.scatter(dt['cal_elapsed'], dt['CO2_pred'], color=get_line_color(measurementType.CAL), label='Calibrated', s=sz)
     ax.scatter(dt['cal_elapsed'], dt['CO2'], color=get_line_color(measurementType.REF), label='Reference', s=sz)
     ax.set_xlabel('Time')
     ax.set_ylabel('CO2 [ppm]')
@@ -577,4 +596,40 @@ def plot_HPP_calibration(dt: pd.DataFrame) -> plt.Figure:
     ax1.set_ylabel('RH [%]')
     return fig
 
-    
+def get_HPP_calibration(session: sqa.orm.Session, id: Union[int, str], dt: dt.datetime) -> Optional[mods.CalibrationParameters]:
+    """
+    Get the valid HPP calibration parameters for a given date and sensor  id
+    """
+    ds, de = du.day_range(dt)
+    par_query = sqa.select(mods.CalibrationParameters).filter(
+        (mods.CalibrationParameters.device == id) &
+        (mods.CalibrationParameters.valid_from <= ds) &
+        (mods.CalibrationParameters.valid_to >= de) &
+        (mods.CalibrationParameters.species == "CO2")
+    ).order_by(
+        mods.CalibrationParameters.computed.desc()
+    )
+    return session.execute(par_query).scalar()
+
+def update_hpp_calibration(session: sqa.orm.Session, pm: mods.CalibrationParameters) -> mods.CalibrationParameters:
+    """
+    Updates an existing entry of HPP Calibration parameters in the database.
+    If no entry exists, add an entry
+    """
+    #Select the last computed valuex§
+    sq = sqa.select(mods.CalibrationParameters).filter(
+        (mods.CalibrationParameters.valid_from == pm.valid_from) &
+        (mods.CalibrationParameters.valid_to == pm.valid_to) &
+        (mods.CalibrationParameters.species == pm.species) &
+        (mods.CalibrationParameters.device == pm.device)).order_by(
+            mods.CalibrationParameters.computed.desc()
+        )
+    obj: mods.CalibrationParameters = session.execute(sq).scalar()
+    if obj:
+        obj.parameters = pm.parameters
+        obj.computed = pm.computed
+        obj_up = obj
+    else:
+        obj_up = session.add(obj)
+    session.commit()
+    return obj
