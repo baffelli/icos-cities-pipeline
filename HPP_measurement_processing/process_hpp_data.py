@@ -7,7 +7,7 @@ are specified using a configuration file
 
 from asyncio import base_tasks
 from locale import dcgettext
-import pdb
+
 import enum
 from turtle import back
 from pymysql import DataError
@@ -37,7 +37,6 @@ from matplotlib.backends.backend_pdf import PdfPages
 
 import copy as cp
 import statsmodels.api as sm
-from mpl_toolkits.axes_grid.anchored_artists import AnchoredText
 
 import re
 
@@ -436,7 +435,7 @@ def prepare_HPP_features(dt: pd.DataFrame, ir_col: str = "sensor_ir_lpl", fit: b
     """
     Prepare features for CO2 calibration / predictions
     """
-    dt_new = dt.copy().reset_index()
+    dt_new = dt.copy()
     dt_new['date'] = pd.to_datetime(dt_new['time'], unit='s')
     dt_new = dt_new.set_index('date')
     dt_new["sensor_ir_log"] = - np.log(dt_new[ir_col])
@@ -462,11 +461,23 @@ def prepare_HPP_features(dt: pd.DataFrame, ir_col: str = "sensor_ir_lpl", fit: b
     #One full calibration cycle corresponds to two inlet changes
     dt_new['inlet_cycle'] = dt_new['inlet_change'].cumsum()
     dt_new['cal_cycle'] = (((dt_new['inlet_change'].cumsum() % 2)).diff() == 1).cumsum() 
+    #Calibration cycle end
+    dt_new['cal_cycle_end'] = (~dt_new['inlet'].isnull()) & (dt_new['inlet'].shift(-1).isnull()) & (dt_new['inlet_cycle'] % 2 == 0)
+    dt_new['normal_cycle'] = dt_new['cal_cycle_end'].cumsum()
     #Elapsed time (for calibration cycle)
-    elaps_lm = lambda x: (x.index.to_series().min() - x.index.to_series()).dt.total_seconds()
-    dt_new['inlet_elapsed'] = dt_new.groupby('inlet_cycle').apply(elaps_lm).values
-    dt_new['cal_elapsed'] = dt_new.groupby('cal_cycle').apply(elaps_lm).values
+    elaps_lm = lambda x: (x.index.to_series() - x.index.to_series().min()).dt.total_seconds()
+    if dt_new.cal_cycle.max() > 0:
+        dt_new['inlet_elapsed'] = dt_new.groupby('inlet_cycle').apply(elaps_lm).values
+        dt_new['cal_elapsed'] = dt_new.groupby('cal_cycle').apply(elaps_lm).values
+        
+    else:
+        dt_new['inlet_elapsed'] = 0
+        dt_new['cal_elapsed'] = 0
     # Additional features needed for fitting
+    if dt_new.normal_cycle.max() > 0:
+        dt_new['normal_elapsed'] = dt_new.groupby('normal_cycle').apply(elaps_lm).values
+    else:
+        dt_new['normal_elapsed'] = (dt_new.index.to_series() - dt_new.index.to_series().min()).dt.total_seconds()
     if fit:
         if 'ref_T' in dt_new.columns:
             dt_new['ref_t_abs'] = calc.absolute_temperature(dt_new['ref_T'])
@@ -508,6 +519,10 @@ def prepare_LP8_features(dt: pd.DataFrame, fit: bool = True,  plt: str = '1d') -
         dt_new['sensor_RH'], dt_new['sensor_t_abs'], calc.P0)
     dt_new['sensor_ir_interaction_H2O'] = dt_new["sensor_ir"] / \
         dt_new['sensor_H2O']
+    if 'pressure_interpolation' in dt_new.columns:
+        pass
+    else:
+        dt_new['pressure_interpolation'] = calc.P0
     # Additional features needed for fitting but not for prediction
     if fit:
         try:
@@ -520,9 +535,10 @@ def prepare_LP8_features(dt: pd.DataFrame, fit: bool = True,  plt: str = '1d') -
                 dt_new['ref_CO2_DRY'], dt_new['ref_H2O']/100)
             dt_new['ref_CO2_comp'] = dt_new['ref_CO2'] * dt_new["nc"]
         except KeyError:
+            dt_new["nc"] = calc.T0 / dt_new['sensor_t_abs'] 
             pass
     else:
-        dt_new["nc"] = calc.T0 / dt_new['sensor_t_abs']
+        dt_new["nc"] = calc.T0 / dt_new['sensor_t_abs'] * dt_new['pressure_interpolation']  / calc.P0
     return dt_new
 
 
@@ -612,132 +628,6 @@ def predict_CO2(dt_in: pd.DataFrame, model: sm.regression.linear_model.Regressio
         dt_out[model.model.exog_names]) * 1/dt_out["nc"]
 
     return dt_out
-
-class measurementType(enum.Enum):
-    """
-    Enumeration to list measurement types, 
-    used for plotting functions
-    """
-    REF = 'ref'
-    CAL = 'cal'
-    ORIG = 'orig'
-
-def get_line_color(tp: measurementType, cm: mpl.colors.Colormap = plt.cm.get_cmap('Set2')) -> Tuple:
-    match tp:
-        case measurementType.CAL:
-            cl = cm.colors[0]
-        case measurementType.REF:
-            cl = cm.colors[1]
-        case measurementType.ORIG:
-            cl = cm.colors[2]
-    return cl
-
-def plot_CO2_ts(ax: mpl.axes.Axes,
-                time: pd.Series, meas: pd.Series,
-                orig: Optional[pd.Series] = None , 
-                ref: Optional[pd.Series] = None) -> mpl.axes.Axes:
-    """
-    Plot the CO2 timeseries with the given axes, time span and measurements. Optionally,
-    you can pass a second series to plot a reference line
-    """
-    ax.plot(time, meas, get_line_color(measurementType.CAL), label='Calibrated')
-    if orig:
-        ax.plot(time, meas, get_line_color(measurementType.ORIG), label='Uncalibrated')
-    if ref:
-        ax.plot(time, meas, get_line_color(measurementType.REF), label='Reference')
-    ax.set_xlabel('Time')
-    ax.set_ylabel('CO2 [ppm]')
-    return ax
-
-def plot_CO2_scatter(ax: mpl.axes.Axes, meas: pd.Series,
-                ref: pd.Series , 
-                orig: Optional[pd.Series] = None) -> mpl.axes.Axes:
-    ax.scatter(ref, meas, get_line_color(measurementType.CAL),  label='Calibrated')
-    if orig:
-        ax.scatter(ref, orig, get_line_color(measurementType.ORIG), label='Reference')
-    ax.set_xlabel('Reference CO2 [ppm]')
-    ax.set_ylabel('Measured CO2 [ppm]')
-    return ax
-
-def plot_CO2_calibration(dt: pd.DataFrame,
-                         model: sm.regression.linear_model.RegressionResults,
-                         fit: bool = True,
-                         ref_col='ref_CO2',
-                         pred_col='CO2_pred',
-                         orig_col="sensor_CO2",
-                         extra_res: Optional[List[str]] = None) -> Tuple[plt.Figure, plt.Figure]:
-    """
-    Plot detailed CO2 calibration results:
-    - Time series of sensor and reference
-    - Scatter plot
-    - Residuals of regressors
-    Depending on the mode, 
-    """
-    
-
-    #     # Compute residuals statistics
-    #     residuals = dt[ref_col] - dt[pred_col]
-    #     qi = cal.compute_quality_indices(
-    #         dt, ref_col=ref_col, pred_col=pred_col)
-    #     res_bias = qi.bias
-    #     res_rmse = qi.rmse
-    #     res_cor = qi.correlation
-    #     # Make annotation
-    #     ann = AnchoredText(
-    #         f"RMSE: {res_rmse:5.2f} ppm,\n Bias: {res_bias:5.2f} ppm,\n corr: {res_cor:5.3f}", loc=4)
-
-    #     # Create plot for timeseries
-    #     fig = mpl.figure.Figure()
-    #     ax = fig.add_subplot(211)
-    #     ax.scatter(dt[ref_col], dt[pred_col], 0.4,
-    #                color=cs.colors[0], label='Calibrated')
-    #     ax.scatter(dt[ref_col], dt[orig_col],
-    #                0.4, color=cs.colors[1], label='Uncalibrated')
-    #     ax.axline((0, 0), slope=1., color='C0')
-    #     ax.set_xlabel('Reference mixing ratio [ppm]')
-    #     ax.set_ylabel('Sensor mixing ratio [ppm]')
-    #     lms = [300, 1000]
-    #     ax.set_xlim(lms)
-    #     ax.set_ylim(lms)
-    #     # Add annotation
-    #     ax.add_artist(ann)
-    #     ax.legend()
-    #     # Plot timeseries
-    #     dt_col = dt['date'].dt.to_pydatetime()
-    #     ts_ax = fig.add_subplot(212)
-    #     ts_ax.scatter(dt_col, dt[orig_col],
-    #                   0.4, color=cs.colors[1], label='Uncalibrated')
-    #     ts_ax.scatter(dt_col, dt[pred_col],
-    #                   0.4, color=cs.colors[0], label='Calibrated')
-    #     ts_ax.scatter(dt_col, dt[ref_col],
-    #                   0.4, color=cs.colors[2], label='Reference')
-    #     ts_ax.set_xlabel('Date')
-    #     ts_ax.set_ylabel('CO2 mixing ratio [ppm]')
-    #     ts_ax.set_ylim(lms)
-    #     ts_ax.legend()
-    #     ts_ax.tick_params(axis='x', labelrotation=45)
-    #     fig.tight_layout()
-    #     # Plot residuals vs various parameters
-    #     fig2: mpl.Figure = mpl.figure.Figure()
-    #     reg_names = [k for k, n in model.params.items()] + \
-    #         [ref_col, ] + extra_res
-    #     nr = len(reg_names) // 3 + 1
-    #     for i, par_name in enumerate(reg_names, start=1):
-    #         current_ax = fig2.add_subplot(nr, 3, i)
-    #         current_ax.scatter(dt[par_name], residuals, 0.4)
-    #         current_ax.set_xlabel(f"{par_name}")
-    #         current_ax.set_ylabel('Residual [ppm]')
-    #         current_ax.set_ylim(-30, 30)
-    #     fig2.tight_layout()
-    # # Plot timeseries of regressors
-    # fig3: mpl.Figure = mpl.figure.Figure()
-    # for i, par_name in enumerate(reg_names, start=1):
-    #     current_ax = fig3.add_subplot(nr, 3, i)
-    #     current_ax.scatter(dt['date'], dt[par_name], 0.4)
-    #     current_ax.set_ylabel(f"{par_name}")
-    #     current_ax.set_xlabel('Date [ppm]')
-    # fig3.tight_layout()
-    # return fig, fig2, fig3
 
 
 def cleanup_data(dt_in: pd.DataFrame, fit: bool = True) -> pd.DataFrame:
@@ -1045,6 +935,7 @@ b_pth: pl.Path = args.plot
 # Starting date for calibration
 start = du.CS_START if args.full else dt.datetime.now() - dt.timedelta(days=60)
 end = dt.datetime.now()
+backfill_days = (end - start).days
 for current_id in ids_to_process:
     id = current_id.value
     logger.debug(f"Processing sensor id {id}")
@@ -1053,7 +944,7 @@ for current_id in ids_to_process:
         case "process", (du.AvailableSensors.LP8 as st):
             # List files missing in destination (only process them)
             missing_dates = data_mapping.list_files_missing_in_dest(
-                group=id, all=args.full)
+                group=id, all=args.full, backfill=backfill_days)
             logger.info(f"The missing dates for {id} are {missing_dates}")
             # Get calibration parameters
             wp_path = b_pth.with_name(f'LP8_predictions_{id}.pdf')
@@ -1086,7 +977,7 @@ for current_id in ids_to_process:
                     # Prepare regressors
                     cal_data_clean = cleanup_data(cal_data, fit=False)
                     prediction_features = prepare_LP8_features(
-                        cal_data_clean, fit=False)
+                        cal_data_clean, fit=True)
                     # Predict
 
                     predicted = predict_CO2(prediction_features, model_fit)
@@ -1094,8 +985,9 @@ for current_id in ids_to_process:
                     cal.persist_level2_data(ses, l2_dt)
                     ses.commit()
                 # Plot
-                ts_plot, scatter_plot = plot_CO2_calibration(
-                    predicted, model_fit, orig_col="sensor_CO2", ref_col="ref_CO2", extra_res=["ref_H2O"])
+                ts_plot = cal.plot_CO2_calibration(
+                    predicted, orig_col="sensor_CO2", ref_col="ref_CO2")
+                ts_plot.suptitle(f"LP8 {id}, {date} at {cal_data.location.unique()}")
                 pdf.savefig(ts_plot)
 
             pdf.close()
@@ -1105,7 +997,7 @@ for current_id in ids_to_process:
             # Define regressors
             reg = ["sensor_ir_log", "const", "sensor_t", "sensor_t_sq", "sensor_t_cub",
                    "sensor_ir_interaction_t", "sensor_ir_interaction_t_sq",
-                   "sensor_ir_interaction_t_cub"]
+                   "sensor_ir_interaction_t_cub", "pressure_interpolation"]
             # Get averaging time for calibration mode
             av_t = get_averaging_time(st, fit=True)
             # Get galibration data
@@ -1123,6 +1015,7 @@ for current_id in ids_to_process:
                 cal_data_clean = cleanup_data(cd.data)
                 cal_features = prepare_LP8_features(
                     cal_data_clean)
+                breakpoint()
                 dur = (cal_features['date'].max() - cal_features['date'].min())
                 try:
                     cal_df, test_df = cal_cv_split(
@@ -1142,15 +1035,11 @@ for current_id in ids_to_process:
                 # Fit RH model to find the sensors threshold
                 # fit_rh_threshold(co2_pred_all)
                 # #Plot and save
-                ts_plot, scatter_plot, ts_reg_plot = plot_CO2_calibration(
-                    co2_pred, cal_fit_nd, orig_col="sensor_CO2", extra_res=['ref_H2O'])
+                ts_plot = cal.plot_CO2_calibration(
+                    co2_pred, orig_col="sensor_CO2")
                 base_name = f"{st.name}_{id}_{cd.serial}_{cd.start:%Y%m%d}_{cd.end:%Y%m%d}"
                 wp_path = b_pth.with_name(f'{base_name}.pdf')
-                wp_path_res = b_pth.with_name(f'{base_name}_res.pdf')
-                wp_path_reg = b_pth.with_name(f'{base_name}_res_ts.pdf')
                 ts_plot.savefig(wp_path)
-                scatter_plot.savefig(wp_path_res)
-                ts_reg_plot.savefig(wp_path_reg)
                 # Persist parameters
                 computed_when = dt.datetime.now()
                 cal_obj = cal.convert_calibration_parameters(
@@ -1206,18 +1095,20 @@ for current_id in ids_to_process:
                     session.add(qual)
                     session.commit()
         case "process", (du.AvailableSensors.HPP as st):
+            wp_path = b_pth.with_name(f'HPP_predictions_{id}.pdf')
+            pdf = PdfPages(wp_path, 'a')
             av_t = get_averaging_time(st, True)
             #List missing dates
             missing_dates = data_mapping.list_files_missing_in_dest(
-            group=id, all=args.full,  backfill= 15)
+            group=id, all=args.full,  backfill=15)
             #Iterate over dates
-            for d in missing_dates:
-                day_start, day_end = du.day_range(d)
+            for current_date in missing_dates:
+                day_start, day_end = du.day_range(current_date)
                 serialnumber = db_utils.get_serialnumber(engine, id, st.value, day_start, day_end)
                 with Session() as session:
-                    cp = cal.get_HPP_calibration(session, serialnumber, d)
+                    cp = cal.get_HPP_calibration(session, serialnumber, current_date)
                     if not cp:
-                        logger.info(f"No calibration for HPP {id} on {d}, skipping")
+                        logger.info(f"No calibration for HPP {id} on {current_date}, skipping")
                         continue
                     cal_data_all = cal.get_cal_ts(session, id, st, day_start, day_end, av_t, dep=True)
                     cal_sets = [d.data for d in cal_data_all if d]
@@ -1228,9 +1119,14 @@ for current_id in ids_to_process:
                         cal_features =  prepare_HPP_features(cal_data, fit=True)
                         cal_pred = cal.apply_HPP_calibration(cal_features, [cp])
                         l2_dt = cal.prepare_level2_data(cal_pred, cp.id)
-                        breakpoint()
                         cal.persist_level2_data(session, l2_dt)
                         session.commit()
                         #Plot
-                        ts_plot, scatter_plot = plot_CO2_calibration(cal_pred, cp.to_statsmodel(), orig_col="sensor_CO2", ref_col="ref_CO2", extra_res=["ref_H2O"])
+                        #Filter the first minute afte the beginnig of a measurement cycle
+                        min_elapsed = 240
+                        cal_pred_plot = cal_pred[cal_pred['inlet'].isnull() & (cal_pred.normal_elapsed > min_elapsed)]
+                        ts_plot = cal.plot_CO2_calibration(cal_pred_plot, orig_col="sensor_CO2", ref_col="ref_CO2")
+                        ts_plot.suptitle(f"HPP {id} on {current_date}")
+                        pdf.savefig(ts_plot)
                         #breakpoint()
+            pdf.close()

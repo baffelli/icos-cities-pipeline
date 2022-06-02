@@ -8,7 +8,6 @@ import sensorutils.db as du
 import sensorutils.log as log
 import pathlib as pl
 import re
-import pdb
 import sensorutils.calc as calc
 import sensorutils.models as mods
 import sensorutils.files as fu
@@ -61,10 +60,10 @@ with session() as ses:
             (mods.Location.id == args.reference) &
             (mods.Location.end > args.start)
         )
-        breakpoint()
+
         source_loc, *_ = ses.execute(source_loc_query).first()
         #Create a dataset mapping
-        first_date = min([args.start, loc.start])
+        first_date = max([args.start, loc.start])
         source = fu.DBSource(
             date_from = first_date,
             table= mods.PicarroData.__tablename__, 
@@ -90,7 +89,6 @@ with session() as ses:
         missing = map.list_files_missing_in_dest(all=args.import_all)
         for m in missing:
             sf = source.read_file(m)
-            breakpoint()
             sf_out = sf.copy()
             #Average data
             sf_out['date'] = pd.to_datetime(sf_out['timestamp'], unit='s')

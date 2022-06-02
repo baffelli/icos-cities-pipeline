@@ -108,7 +108,13 @@ def list_all_sensor_ids(type: str, eng: eng.Engine) -> pd.DataFrame:
     md.reflect()
     Session = orm.sessionmaker(eng)
     with Session() as ses:
-        sens = ses.query(mods.Sensor).filter(mods.Sensor.type == type).with_entities(mods.Sensor.id).distinct().subquery()
+        type_sq = ses.query(mods.Sensor).filter(mods.Sensor.type == type)
+        if type == 'HPP':
+            type_sq_final = type_sq.filter(mods.Sensor.id >= 400)
+        else:
+            type_sq_final = type_sq
+        
+        sens = type_sq_final.with_entities(mods.Sensor.id).distinct().subquery()
         dep = ses.query(mods.Deployment).with_entities(mods.Deployment.id).distinct().subquery()
         stmt = ses.query(sens).join(dep, dep.c.id == sens.c.id)
         with ses.connection() as con:

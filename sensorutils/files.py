@@ -643,7 +643,6 @@ class DBSource(DatabaseSource):
         qs = dq.filter(*filts)
         qs_comp = qs.statement.compile(compile_kwargs={"literal_binds": True})
         logger.debug(f"The query is {qs_comp}")
-        #breakpoint()
         return pd.read_sql(qs.statement, self.eng).drop(lb, axis=1).replace(self.na, np.NaN)
 
     @check_db
@@ -1379,7 +1378,6 @@ def read_picarro_data(path: Union[str, pl.Path], tz:Union[str, pytz.tzinfo.BaseT
     data_map = data.rename(columns=col_map)[[l for k, l in col_map.items() if k in data.columns]]
     if 'timestamp' not in data_map.columns:
         data_map = du.date_to_timestamp(data_map, 'date')
-    breakpoint()
     data_map['date'] = pd.to_datetime(data_map['timestamp'], unit='s')
     data_map['valid'] = data_map['status'].eq(0).astype(int)
     data_map['CO2_DRY_F'] = data_map['valid']

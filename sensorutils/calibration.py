@@ -31,6 +31,11 @@ from sensorutils import utils
 
 import copy as cp 
 
+from mpl_toolkits.axes_grid.anchored_artists import AnchoredText
+from matplotlib.dates import DateFormatter
+import matplotlib.dates as mdates
+
+
 class CalDataRow(NamedTuple):
     """
     Class to represent a row in the calibration table or in the deployment table
@@ -160,6 +165,21 @@ def query_sensor_data_agg(session: sqa.orm.Session, id: Union[int, str],
     log.logger.debug(f"The query is {qr_agg}")
     return qr_agg
 
+def get_pressure_interpolation(session: sqa.orm.Session, location: str, start: dt.datetime, end: dt.datetime, averaging_time: int) -> pd.DataFrame:
+    """
+    Gets the (interpolated) pressure value for the location `location` 
+    between the times `start` and `end`
+    """
+    tb = mods.PressureInterpolation
+    aggregations = {'pressure_interpolation':'AVG(pressure * 100)'}
+    aggs = make_aggregate_columns(aggregations)
+    ae = make_aggregate_expression(tb.time, "time", avg_time=averaging_time)
+    qr = sqa.select(tb).filter(
+        (tb.time.between(start.timestamp(), end.timestamp())) &
+        (tb.id == location)
+        ).with_only_columns(*(aggs + [ae])).group_by(ae)
+    return pd.read_sql(qr, session.connection())
+
 def get_sensor_data_agg(session: sqa.orm.Session, id: Union[int, str],
                         type: du.AvailableSensors, start: dt.datetime, end: dt.datetime,
                         averaging_time: int, aggregations: Dict) -> pd.DataFrame:
@@ -171,6 +191,23 @@ def get_sensor_data_agg(session: sqa.orm.Session, id: Union[int, str],
     dt = pd.read_sql(qr_agg, session.connection())
     return dt
 
+def get_LP8_data_agg(session: sqa.orm.Session, id: Union[int, str], start: dt.datetime, end: dt.datetime, averaging_time: int) -> pd.DataFrame:
+    """
+    Get the data for the LP8 sensor and return a dataset averaged by `averaging_time`
+    """
+    aggs = get_aggregations(du.AvailableSensors.LP8)
+    qr_agg = query_sensor_data_agg(session, id, type, start, end, averaging_time, aggs)
+    return pd.read_sql(qr_agg, session.connection())
+
+
+def get_HPP_data_agg(session: sqa.orm.Session, id: Union[int, str], start: dt.datetime, end: dt.datetime, averaging_time: int, cal: bool = False) -> pd.DataFrame:
+    """
+    Get the data for the LP8 sensor and return a dataset averaged by `averaging_time`.
+    If `cal` is set, returns only the calibration times
+    """
+    aggs = get_aggregations(du.AvailableSensors.HPP)
+    qr_agg = query_sensor_data_agg(session, id, type, start, end, averaging_time, aggs)
+    return pd.read_sql(qr_agg, session.connection())
 
 def get_calibration_info(session: sqa.orm.Session,
                          id: int, type: du.AvailableSensors, dep: bool = False, latest: bool = True) -> List[CalDataRow]:
@@ -344,13 +381,19 @@ def get_cal_ts(session: sqa.orm.Session, id: int, type: du.AvailableSensors, sta
         picarro_res = get_sensor_data_agg(session, e.location, du.AvailableSensors.PICARRO,
                                           e.cal_start, e.cal_end, averaging_time, picarro_aggs)
         st = du.AvailableSensors[e.sensor_type]
+        #Call pressure interpolation
+        press = get_pressure_interpolation(session, e.location, e.cal_start, e.cal_end, averaging_time)
         sensor_res = get_sensor_data_agg(session, e.sensor_id, st,
                                          e.cal_start, e.cal_end, averaging_time, aggs)
         if not picarro_res.empty:
-            all_dt = sensor_res.set_index('time').join(picarro_res.set_index('time'), how='left').reset_index()
+            all_dt = sensor_res.set_index('time').join(picarro_res.set_index('time'), how='left')
         else:
-            all_dt = sensor_res.reset_index()
-        return all_dt.assign(**e._asdict())
+            all_dt = sensor_res
+        if not press.empty:
+            final_dt = all_dt.join(press.set_index('time'), how='left')
+        else:
+            final_dt = all_dt
+        return final_dt.assign(**e._asdict())
     if len(valid) > 0:
         all_dt = pd.concat([iterate_cal_info(e) for e in valid], axis=0)
         grps = ["serial_number", "cal_start", "cal_end", "next_cal"]
@@ -415,8 +458,7 @@ def make_calibration_parameters_table(table: pd.DataFrame) -> List[mods.Calibrat
     res = db.temp_query(table, q).drop_duplicates()
     res['next_date'] = pd.to_datetime(res['next_date'].fillna(du.NAT))
     res['date'] = pd.to_datetime(res['date'])
-    import pdb
-    pdb.set_trace()
+
     objs = res.reset_index().groupby(["device", "compound", "date"]).apply(
         lambda x: get_cal_params(x, x.name))
     return objs
@@ -519,11 +561,12 @@ window:int = 10) -> List[Tuple[mods.CalibrationParameters, mods.ModelFitPerforma
 
     def inner_cal(data: pd.DataFrame) -> pd.Series:
         #Check wether there are enough two point calibrations
-        span = np.abs(np.diff(data.CO2.unique()))[0]
-
+        
         valid = ~data[endog+exog].isna().any(axis=1)
         valid_final = valid & (data['inlet_elapsed'] > 240)
         data_valid = data[valid_final]
+        co2_levels = data_valid.CO2.unique()
+        span = np.abs(np.diff(co2_levels))[0] if len(co2_levels) > 1 else 0
         if span > 100:
             fit = OLS(data_valid[endog], smtools.add_constant(data_valid[exog])).fit()
         else:
@@ -574,26 +617,109 @@ def apply_HPP_calibration(dt_in: pd.DataFrame, cal_pars: List[mods.CalibrationPa
     return pred_objs
 
 
+def plot_CO2_ts(ax: mpl.axes.Axes,
+                time: pd.Series, meas: pd.Series,
+                orig: Optional[pd.Series] = None , 
+                ref: Optional[pd.Series] = None) -> mpl.axes.Axes:
+    """
+    Plot the CO2 timeseries with the given axes, time span and measurements. Optionally,
+    you can pass a second series to plot a reference line
+    """
+    ax.plot(time, meas, color=get_line_color(measurementType.CAL), label='Calibrated')
+    if orig is not None:
+        ax.plot(time, orig, color=get_line_color(measurementType.ORIG), label='Uncalibrated')
+    if ref is not None:
+        ax.plot(time, ref, color=get_line_color(measurementType.REF), label='Reference')
+    ax.set_xlabel('Time')
+    ax.set_ylabel('CO2 [ppm]')
+    return ax
+
+def plot_CO2_scatter(ax: mpl.axes.Axes, meas: pd.Series,
+                ref: pd.Series , 
+                orig: Optional[pd.Series] = None) -> mpl.axes.Axes:
+    ax.scatter(ref, meas, color=get_line_color(measurementType.CAL), s=0.5,  label='Calibrated')
+    if orig is not None:
+        ax.scatter(ref, orig, color=get_line_color(measurementType.ORIG),  s=0.5, label='Reference')
+    st = dict(slope=1., color='lightgray', lw=0.5)
+    ax.axline((0, 0), **st)
+    ax.axline((0, -3), **st)
+    ax.axline((0, 3), **st)
+    ax.set_xlabel('Reference CO2 [ppm]')
+    ax.set_ylabel('Measured CO2 [ppm]')
+    return ax
+
+def plot_CO2_calibration(dt_in: pd.DataFrame,
+                         ref_col='ref_CO2',
+                         pred_col='CO2_pred',
+                         orig_col="sensor_CO2",
+                         daily: bool = True) -> plt.Figure:
+    """
+    Plot detailed CO2 calibration results:
+    - Time series of sensor and reference
+    - Scatter plot
+    - Residuals of regressors
+    Depending on the mode, 
+    """
+    dt_min, dt_max = dt_in['date'].max(), dt_in['date'].min()
+    time_span = abs(dt_max - dt_min)
+    if time_span.days <= 1:
+        date_form = DateFormatter("%H")
+        loc = mdates.HourLocator(interval=1)
+        xl = [dt_min.replace(hour=0, minute=0), dt_min.replace(hour=23, minute=59)]
+    else:
+        date_form = DateFormatter("%Y-%M-%D %H")
+        loc = mdates.DayLocator(interval=1)
+        xl = [dt_in['date'].min(), dt_in['date'].max()]
+    fig = mpl.figure.Figure()
+    ax = fig.add_subplot(211)
+    rc = dt_in[ref_col] if ref_col in dt_in.columns else None
+    plot_CO2_ts(ax, dt_in['date'], dt_in[pred_col], dt_in[orig_col], ref=rc)
+    lms = [300, 700]
+    ax.set_ylim(lms)
+    ax.xaxis.set_major_formatter(date_form)
+    ax.xaxis.set_major_locator(loc)
+    ax.set_xlim(xl)
+    if rc is not None:
+        ax1 = fig.add_subplot(212)
+        ax1 = plot_CO2_scatter(ax1, dt_in[pred_col], rc, dt_in[orig_col])
+        s_bias = bias(rc, dt_in[pred_col])
+        s_rmse = rmse(rc, dt_in[pred_col])
+        cor = rc.corr(dt_in[pred_col])
+        ann = AnchoredText(
+        f"RMSE: {s_rmse:5.2f} ppm,\n Bias: {s_bias:5.2f} ppm,\n corr: {cor:5.3f}", loc='upper left')
+        ax.add_artist(ann)
+        ax1.set_ylim(lms)
+        ax1.set_xlim(lms)
+    ax.legend(loc='upper right')
+    return fig
+    
+
+
+
 def plot_HPP_calibration(dt: pd.DataFrame) -> plt.Figure:
     """
     Plots the Senseair HPP two point calibration timeseries
+    (for one day)
     """
+    dt_min, dt_max = dt['date'].min(), dt['date'].max()
+    date_form = DateFormatter("%H-%M")
     fig = mpl.figure.Figure()
-    ax = fig.add_subplot(211)
-    sz = 0.5
-    ax.scatter(dt['cal_elapsed'], dt['sensor_CO2'], color=get_line_color(measurementType.ORIG), label='Uncalibrated', s=sz)
-    ax.scatter(dt['cal_elapsed'], dt['CO2_pred'], color=get_line_color(measurementType.CAL), label='Calibrated', s=sz)
-    ax.scatter(dt['cal_elapsed'], dt['CO2'], color=get_line_color(measurementType.REF), label='Reference', s=sz)
-    ax.set_xlabel('Time')
-    ax.set_ylabel('CO2 [ppm]')
-    ax.set_ylim([300, 700])
-    ax.set_xlim([0, 60 * 30])
-    ax.legend()
-    ax1 = fig.add_subplot(212)
-    ax1.scatter(dt['cal_elapsed'], dt['sensor_RH'], color=get_line_color(measurementType.ORIG), s=sz)
-    ax1.set_ylim([0, 30])
-    ax1.set_xlim([0, 20 * 60])
-    ax1.set_ylabel('RH [%]')
+    if not dt.empty:
+        dt_scaled = dt['cal_elapsed'] * (dt['cal_cycle'] - dt['cal_cycle'].min() + 1)
+        ax = fig.add_subplot(211)
+        sz = 0.5
+        ax.scatter(dt_scaled, dt['sensor_CO2'], color=get_line_color(measurementType.ORIG), label='Uncalibrated', s=sz)
+        ax.scatter(dt_scaled, dt['CO2_pred'], color=get_line_color(measurementType.CAL), label='Calibrated', s=sz)
+        ax.scatter(dt_scaled, dt['CO2'], color=get_line_color(measurementType.REF), label='Reference', s=sz)
+        ax.set_ylabel('CO2 [ppm]')
+        ax.set_ylim([300, 700])
+        ax.legend()
+        ax1 = fig.add_subplot(212)
+        ax1.scatter(dt_scaled, dt['sensor_RH'], color=get_line_color(measurementType.ORIG), s=sz)
+        ax1.set_ylim([0, 30])
+        ax1.set_ylabel('RH [%]')
+        ax1.set_xlabel('Elapsed time')
+
     return fig
 
 def get_HPP_calibration(session: sqa.orm.Session, id: Union[int, str], dt: dt.datetime) -> Optional[mods.CalibrationParameters]:
@@ -625,11 +751,13 @@ def update_hpp_calibration(session: sqa.orm.Session, pm: mods.CalibrationParamet
             mods.CalibrationParameters.computed.desc()
         )
     obj: mods.CalibrationParameters = session.execute(sq).scalar()
-    if obj:
+
+    if obj is not None:
         obj.parameters = pm.parameters
         obj.computed = pm.computed
         obj_up = obj
     else:
-        obj_up = session.add(obj)
+        obj_up = session.add(pm)
+        obj_up = pm
     session.commit()
-    return obj
+    return obj_up

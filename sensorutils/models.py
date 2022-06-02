@@ -16,7 +16,7 @@ import datetime as dt
 
 from sqlalchemy import (Column, DateTime, Float, ForeignKey, Integer, String,
                         engine, Date, PrimaryKeyConstraint)
-from sqlalchemy.orm import relationship, column_property, query_expression, aliased, object_session
+from sqlalchemy.orm import relationship, column_property, query_expression, aliased, object_session, foreign, remote
 from sqlalchemy.ext.declarative import declarative_base, declared_attr
 from sqlalchemy import func
 
@@ -71,7 +71,8 @@ class SensorDeploymentBase(object):
         return relationship(
             lambda: Location,  
             foreign_keys = lambda: Location.id,
-            primaryjoin= lambda: (Location.id == cls.location) & (cls.start > Location.start) & (cls.end > Location.start)
+            primaryjoin= lambda: (Location.id == cls.location) & (cls.start > Location.start) & (cls.end > Location.start),
+            viewonly=True
             )
 
     @property
@@ -342,6 +343,29 @@ class LP8Data(base.Base, TimeseriesData):
     senseair_lp8_ir_filtered: float = Column(Float)
     senseair_lp8_ir_last: float = Column(Float)
     senseair_lp8_status: int = Column(Integer)
+    deployment: Optional[Deployment] = relationship(
+        lambda: Deployment,
+        primaryjoin = lambda: (Deployment.id == foreign(LP8Data.id)) & (func.coalesce(func.unix_timestamp(Deployment.end), func.unix_timestamp()) >= foreign(LP8Data.time)),
+        viewonly=True
+    )
+    # def pressure(self) -> Optional[float]:
+    #     """
+    #     Return the pressure from the Pressure Interpolation table
+    #     """
+
+    #     ses =  object_session(self)
+    #     cls = self.__class__
+    #     iq = sqlalchemy.select(
+    #         cls,
+    #     ).filter(cls.mode==2).cte()
+    #     iq_as = aliased(cls, alias=iq)
+    #     ft_dt = sqlalchemy.DateTime(NAT.to_pydatetime())
+    #     stm = sqlalchemy.select(func.coalesce(iq_as.start, ft_dt)).filter(
+    #         (iq_as.id == self.id) &  
+    #         (iq_as.start > self.start)).order_by(iq_as.start.desc()).limit(1)
+    #     final_stm = ses.scalar(func.coalesce(ses.scalar(stm), sqlalchemy.cast(NAT.to_pydatetime(), sqlalchemy.DateTime)))
+    #     return final_stm
+    
 
 @dataclass
 class HPPData(base.Base, TimeseriesData):
