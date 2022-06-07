@@ -5,7 +5,7 @@ import yaml
 import pathlib as pl
 import digdag
 import datetime as dt
-
+import os
 
 from sqlalchemy import orm
 
@@ -58,3 +58,31 @@ def load_config(file_path: pl.Path, var_name: str) -> None:
     env[var_name] = config
     print(env)
     digdag.env.store(env)
+
+
+def get_username(are: Any) -> None:
+    """
+    Stores the current username in the env
+    variable `usernam 
+    """
+    lg = os.getlogin()
+    digdag.env.store({'username': lg})
+
+def configure_paths(base: str) -> None:
+    """
+    Configure paths used in subsequent tasks
+    """
+    lg = os.getlogin()
+    username = lg
+    proj_folder = f"{base}"
+    base_folder = f'{base}/Software'
+    data_folder = f'{base}/Data'
+    icos_folder = f'/mnt/{lg}/ICOS-Cities'
+    plot_folder = f'{username}/Network/Processing/'
+    reference_config = f'{base_folder}/config/picarro_mapping.yml'
+    cal_config =  f'{base_folder}/config/calibration_mapping.yml'
+    digdag.env.store({k:v for k,v in locals().items()})
+
+
+def show_params():
+    print(digdag.env.params)

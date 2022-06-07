@@ -1,33 +1,40 @@
 timezone: Europe/Zurich
 
+#Get username and store it
+#in the digdag environment and configure various paths
++configure_paths:
+    +store:
+        py>: digdagutils.configure_paths
+        base: '/project/CarboSense'
+    +show:
+        py>: digdagutils.show_params
+        
+#Export date
 _export:
-    proj_folder: '/project/CarboSense/'
-    base_folder: '${proj_folder}/Software'
-    data_folder: '${proj_folder}/Data'
-    reference_config: '${base_folder}/config/picarro_mapping.yml'
     project_begin: "${moment('20220101', 'YYYYMMDD').format('YYYY-MM-DDThh:mm:ss')}"
+
 +setup:
     #Disable python breakpoints
     sh>: export PYTHONBREAKPOINT=0
-    
-#Load configuration files
-+load_configs:
-    +raw_sources:
-        py>: digdagutils.load_config
-        file_path: '${base_folder}/config/co2_sensor_mapping.yml'
-        var_name: 'raw_sensor'
+
 
 #Import reference data from DUE1 (and later from other locations)
 +reference_data:
     +DUE:
         sh>: python3.10 ${base_folder}/CarbosenseDatabaseTools/import_picarro_data.py ${reference_config} DUE
 
+
+#Import bottle calibration
++reference_gas:
+    +import_reference_bottles:
+        sh>: python3.10 ${base_folder}/CarbosenseDatabaseTools/import_bottle_calibrations.py '${icos_folder}/Network/Sensors/HPP/Kalibriergas/Calibration Gas Data Processing/'  'cylinder_analysis_picarro.xlsx'
+
 #Copy meteo from server
 +meteo:
     +copy_meteoswiss:
         sh>: rsync -a amrs503@m2m.empa.ch:/data/meteoschweiz/*.csv ${data_folder}/METEO/MCH_DAILY_DATA_DUMP
     +import_meteoswiss:
-        sh>: python3 MeteoSwissData4Carbosense/transfer_meteo_data.py ${base_folder}/config/meteo_data_mapping.yml '${data_folder}/METEO/MCH_DAILY_DATA_DUMP/' 'VQEA33*.csv'
+        sh>: python3.10 MeteoSwissData4Carbosense/transfer_meteo_data.py ${base_folder}/config/meteo_data_mapping.yml '${data_folder}/METEO/MCH_DAILY_DATA_DUMP/' 'VQEA33*.csv'
     +pressure_interpolation:
         +list_locations:
             py>: digdagutils.list_locations
@@ -38,12 +45,13 @@ _export:
                 loc: ${locations}
             _do:
                 sh>: python3 MeteoSwissData4Carbosense/pressure_interpolation.py ${loc} DUE1 ${project_begin}
-+raw_data:
+
+#Copy raw data
++copy_raw_data:
     #Store a list of all sensors in a digdag environment variable
     +list_sensors:
         py>: digdagutils.list_sensors
         dest: 'sensors'
-
     +load:
         for_each>:
             sens: ['LP8', 'HPP']
@@ -53,197 +61,26 @@ _export:
             _do:
                 sh>: python3.10 ${base_folder}/CarbosenseDatabaseTools/dump_raw_data_from_influxdb.py ${base_folder}/config/co2_sensor_mapping.yml ${sens} ${i} ${project_begin}
 
++level2_processing:
+    +list_sensors:
+        py>: digdagutils.list_sensors
+        dest: 'sensors'
+    +bottle_calibration:
+        for_each>: 
+            sens: ${sensors['HPP']}
+        _do: 
+            sh>: python3.10 ${base_folder}/HPP_measurement_processing/process_hpp_data.py ${cal_config} calibrate HPP ${sens} --plot ${plot_folder}
+    +prediction:
+        for_each>:
+            sens: ['LP8', 'HPP']
+        _do:
+            for_each>: 
+                i: ${sensors[sens]}
+            _do:
+                sh>: python3.10 ${base_folder}/HPP_measurement_processing/process_hpp_data.py ${cal_config} process ${sens} ${i} --plot ${plot_folder}
 
 #Upload metadata to decentlab-db
 +metadata:
     +upload_metadata:
         sh>: python3  ${base_folder}/UploadProcessedMeasurementsToDecentlabDB/importer.py
 
-
-# #need to fix the links to the folder
-# +reference_data:
-#     +import:
-#         +NABEL_DUE:
-#             sh>: Rscript ${base_folder}/CarbosenseDatabaseTools/Import_DB_table_NABEL_DUE.r 
-#         +NABEL_HAE_pic:
-#             sh>: Rscript ${base_folder}/CarbosenseDatabaseTools/Import_DB_table_NABEL_HAE_PIC.r
-#         +NABEL_PAY:
-#             sh>: Rscript ${base_folder}/CarbosenseDatabaseTools/Import_DB_table_NABEL_PAY.r
-#         +NABEL_RIG:
-#             sh>: Rscript ${base_folder}/CarbosenseDatabaseTools/Import_DB_table_NABEL_RIG.r
-#         +EMPA_LAEG:
-#             sh>: Rscript ${base_folder}/CarbosenseDatabaseTools/Import_DB_table_EMPA_LAEG.r T
-#         +UNIBE_GIMM:
-#             sh>: Rscript ${base_folder}/CarbosenseDatabaseTools/Import_DB_table_UNIBE_GIMM.r 
-#         +UNIBE_BRM:
-#             sh>: Rscript ${base_folder}/CarbosenseDatabaseTools/Import_DB_table_UNIBE_BRM.r 
-#     +process:
-#         +ref_processing:
-#             sh>: Rscript  ${base_folder}/CarbosenseDatabaseTools/DB_REF_MEAS_Processing.r
-#         +picarro_wet:
-#             sh>: Rscript ${base_folder}/CarbosenseDatabaseTools/Compute_NABEL_Picarro_CO2_WET.r
-#     +plot_ref_ts:
-#         sh>:  Rscript ${base_folder}/REF_measurement_processing/Plot_REF_CO2_TS.r
-    
-#     #+import_calibration_data:
-
-# +meteo:
-#     +copy_meteoswiss:
-#         sh>: rsync -a amrs503@m2m.empa.ch:/data/meteoschweiz/*.csv /project/CarboSense/Data/METEO/MCH_DAILY_DATA_DUMP
-#     +import_meteoswiss:
-#         sh>: Rscript ${base_folder}/MeteoSwissData4Carbosense/Import_DB_table_METEOSWISS_Measurements_sb.r 
-#     +pressure_interpolation:
-#         sh>: Rscript ${base_folder}/MeteoSwissData4Carbosense/METEOSWISS_PressureInterpolation.r
-
-#     #Only run plotting on sundays
-#     +plots:
-#         +diurnal_variations:
-#             if>: ${moment().format('dddd') == 'Sunday'}
-#             _do:
-#                 +diu:
-#                     sh>: Rscript ${base_folder}/MeteoSwissData4Carbosense/MCH_MEAS_DiurnalVariationsPerMonth.r
-#                 +timeseries:
-#                     sh>: Rscript ${base_folder}/MeteoSwissData4Carbosense/MCH_MEAS_TimeSeries.r
-
-# # +new_sensors:
-# #     +import_raw_data:
-# #         sh>: Rscript  ${base_folder}/new_sensors/import_raw_sensor_data.R
-# #     +k96:
-# #         +copy_k96:
-# #             sh>: rsync -a pi@10.2.5.238:/home/pi/data/*.csv /project/CarboSense/temp/K96_data
-# #     +consolidate:
-# #         sh>: Rscript ${base_folder}/new_sensors/consolidate_sensor_data.R
-
-
-# +network_state:
-#     +deployment_km:
-#         sh>: Rscript ${base_folder}/CarbosenseNetworkStatus/CarboSenseDeployment2KML.r
-#     +links:
-#         sh>: Rscript ${base_folder}/CarbosenseNetworkStatus/GEO_ADMIN_LINKS_for_active_deployments.r
-#     +sensor_health:
-#         sh>: Rscript ${base_folder}/CarbosenseNetworkStatus/Check_CarboSense_SensorHealth.r
-#     +meteoswiss_km:
-#         sh>: Rscript ${base_folder}/CarbosenseNetworkStatus/MeteoSwissNetwork2KML.r
-#     +free_station_kml:
-#         sh>: Rscript ${base_folder}/CarbosenseNetworkStatus/make_free_locations_kml.r
-
-# +HPP:
-#     +process_hpp:
-#         sh>: Rscript ${base_folder}/HPP_measurement_processing/Compute_CarboSense_HPP_CO2_values.r 
-#     +plot_hpp_ts:
-#         sh>: Rscript ${base_folder}/HPP_measurement_processing/Plot_HPP_CO2.r
-#     +comparison_hpp_ref:
-#         sh>: Rscript ${base_folder}/HPP_measurement_processing/Comparison_CO2_HPP_REF.r 
-#     +upload_to_decentlab:
-#         sh>: ${base_folder}/UploadProcessedMeasurementsToDecentlabDB/Upload_HPP_Measurements_To_swiss_co2_live.sh
-#     #+diagnostics:
-#     #    sh>: Rscript ${base_folder}//HPP_measurement_processing/hpp_performance.R
-#     +process_HHP_due:
-#         +process_HPP_CO2_due:
-#             sh>: Rscript ${base_folder}/HPP_measurement_processing/Compute_CarboSense_HPP_CO2_values.r F DUE1
-#         # +comparison_hpp_ref_mch:
-#         #     sh>: Rscript ${base_folder}/HPP_measurement_processing/Comparison_H2O_HPP_MCH.r
-
-# +process_lp8:
-#     #Process various testing modes that are not uploaded to decentlab
-#     +special_modes:
-#         for_each>: 
-#             config: [[2, 'NO_DUE'], [3, 'NO_DUE']]
-#         _do:
-           
-#             +compute_co2_values:
-#                 if>: ${config[1] == 'DUE'}
-#                 _do:
-#                     sh>: Rscript ${base_folder}/LP8_measurement_processing/Compute_CarboSense_CO2_values.r F ${config[0]} ${config[1]}
-#                 _else_do:
-#                         sh>: Rscript ${base_folder}/LP8_measurement_processing/Compute_CarboSense_CO2_values.r F ${config[0]} 
-
-#             +outlier_detection:
-#                 sh>: Rscript ${base_folder}/LP8_measurement_processing/Empa_OutlierDetection_P.r ${config[0]} ${config[1]}
-        
-#             +measurement_analysis:
-#                 #Only run on Sunday (it takes a long time)
-#                 if>: ${moment(session_date).format('dddd' )== 'Sunday'}
-#                 _do:
-#                     if>: ${config[1] == 'DUE'}
-#                     _do:
-#                         sh>: Rscript ${base_folder}/LP8_measurement_processing/LP8_measurement_analysis.r ${config[0]} ${config[1]}  
-#                     _else_do:
-#                         sh>: Rscript ${base_folder}/LP8_measurement_processing/LP8_measurement_analysis.r ${config[0]}  
-#                 _else_do:
-#                     echo>: "Skipping measurement analysis"
-
-#             +drift_correction:
-#                 sh>: Rscript ${base_folder}/LP8_measurement_processing/LP8_DriftCorrection.r  ${config[0]} F
-
-#             +consistency_check:
-#                     sh>: Rscript ${base_folder}/LP8_measurement_processing/LP8_ConsistencyCheck.r ${config[0]}
-
-#             #Only plot on sunday
-#             +plot_lp8:
-#                 if>: ${config[1] != 'DUE' && moment(session_date).format('dddd') == 'Sunday'}
-#                 _do:
-#                     +plots:
-#                         +plot_lp8_ts:
-#                             sh>: Rscript ${base_folder}/LP8_measurement_processing/Plot_CarboSense_CO2_TS.r ${config[0]}
-
-#                         +plot_diurnal_concentration:
-#                             sh>: Rscript ${base_folder}/LP8_measurement_processing/Compute_Diurnal_CO2concentrations.r ${config[0]}
-                    
-#                         +comparison_l8_ref:
-#                             for_each>: 
-#                                 type : [DRY, WET]
-#                             _do:
-#                                 sh>:  Rscript ${base_folder}/LP8_measurement_processing/Comparison_CO2_LP8_REF.r ${config[0]} ${type}
-
-#                         +comparison_lp8_lp8:
-#                             sh>: Rscript ${base_folder}/LP8_measurement_processing/Comparison_CO2_LP8_LP8.r ${config[0]}
-
-#                         #+comparison_lp8_HPP:
-#                         #    sh>: Rscript ${base_folder}/LP8_measurement_processing/Comparison_CO2_LP8_HPP.r ${config[0]}
-#                 _else_do:
-#                     echo>: "Skipping plotting. LP8 plotting is only run on sundays"
-                
-#     #Process the final model
-#     +final_mode:
-#         +compute_co2_values:
-#             sh>:  Rscript ${base_folder}/LP8_measurement_processing/Compute_CarboSense_CO2_values_FINAL.r
-#         # +plot_ts:
-#         #     sh>:  Rscript ${base_folder}/LP8_measurement_processing/Plot_CarboSense_CO2_TS.r 0
-#         # +plot_diurnal_concentration:
-#         #     sh>: Rscript ${base_folder}/LP8_measurement_processing/Compute_Diurnal_CO2concentrations.r 0 
-#         # +comparison_l8_ref:
-#         #     for_each>: 
-#         #         type : [DRY, WET]
-#         #     _do:
-#         #         sh>:  Rscript ${base_folder}/LP8_measurement_processing/Comparison_CO2_LP8_REF.r 0 ${type}
-#         # +comparison_lp8_lp8:
-#         #     sh>: Rscript ${base_folder}/LP8_measurement_processing/Comparison_CO2_LP8_LP8.r 0
-#         # +comparison_lp8_HPP:
-#         #     sh>: Rscript ${base_folder}/LP8_measurement_processing/Comparison_CO2_LP8_HPP.r 0
-#         +upload_to_decentlab:
-#             sh>: ${base_folder}/UploadProcessedMeasurementsToDecentlabDB/Upload_LP8_Measurements_To_swiss_co2_live.sh
-#         +upload_medatadata:
-#             sh>: python3  ${base_folder}/UploadProcessedMeasurementsToDecentlabDB/importer.py
-
-# +calibration:
-#     #Only run weekly
-#     if>: ${moment(session_date).format('dddd')== 'Sunday'}
-#     _do: 
-#         +HPP: 
-#             +new:
-#                 _export:
-#                     gen_script: CO2_HPP_SensorCalibration_LINUX_IR_2S.r
-#                     script_param: 0
-#                     convert_script: CONVERT_HPP_2ndGENERATION_FIGURES
-#                     result_folder: "/project/CarboSense/Carbosense_Network/HPP_Calibration/HPP_2ndGen_RESULTS_CV00/"
-#                 +calibrate:
-#                     sh>: Rscript  ${base_folder}/HPP_sensor_calibration/${gen_script} ${script_param} ${result_folder}
-#                 +plot:
-#                     sh>:  sh ${base_folder}/HPP_sensor_calibration/${convert_script}.sh ${result_folder}
-#         +lp8:
-#             _export:
-#                 lp8_result_folder: /project/CarboSense/Carbosense_Network/LP8_Calibration/LP8_CAL
-#             sh>: Rscript ${base_folder}/LP8_sensor_calibration/CO2_LP8_SensorCalibration_LINUX_DRY.r ${lp8_result_folder} 0 MEAN
-#     _else_do:
-#         echo>: "Skipping calibration"
