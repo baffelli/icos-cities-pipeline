@@ -335,7 +335,7 @@ def get_HHP_calibration_data(session: sqa.orm.Session, id: int, start: dt.dateti
     #get the data
     res = session.execute(jq).all()
     def unpack_row(rw:dict) -> dict:
-        return {k:(rw[k] if k not in ('CylinderDeployment') else ([asdict(c) for c in rw[k].cylinders] if rw[k] else None)) for k in rw.keys()}
+        return {k:(rw[k] if k not in ('CylinderDeployment') else ([{f"cyl_{k}":v for k,v in asdict(c).items()} for c in rw[k].cylinders] if rw[k] else None)) for k in rw.keys()}
     #Unpack and only keep the analysis
     res_unpack = [ unpack_row(b) for b in res]
     if res_unpack:
@@ -509,7 +509,7 @@ def bias(ref: pd.Series, value: pd.Series) -> float:
     Computes the bias (mean difference)
     of two `pandas.Series`
     """
-    return (ref - value).mean()
+    return (value - ref).mean() 
 
 
 def rmse(ref: pd.Series, value: pd.Series) -> float:
@@ -517,18 +517,26 @@ def rmse(ref: pd.Series, value: pd.Series) -> float:
     Computes the rmse (mean squared difference)
     of two `pandas.Series`
     """
-    return np.sqrt(((ref - value)**2).mean())
+    return np.sqrt(((value - ref)**2).mean())
 
+def none_if_nan(value: np.number) -> Optional[float]:
+    return None if np.isnan(value) else float(value)
 
-def compute_quality_indices(pred: pd.DataFrame, ref_col='ref_CO2', pred_col='CO2_pred',) -> mods.ModelFitPerformance:
+def compute_quality_indices(pred: pd.DataFrame, ref_col='ref_CO2', pred_col='CO2_pred', fit=True) -> mods.ModelFitPerformance:
     """
     Compute model quality indicators for a dataframe of model predictions
     and return a dict of the statistics
     """
-    res_rmse = rmse(pred[ref_col],  pred[pred_col])
-    res_bias = bias(pred[ref_col],  pred[pred_col])
-    res_cor = pred[ref_col].corr(pred[pred_col])
-    return mods.ModelFitPerformance(**{'rmse': res_rmse, 'bias': res_bias, 'correlation': res_cor})
+    res_rmse = none_if_nan(rmse(pred[ref_col],  pred[pred_col]))
+    res_bias = none_if_nan(bias(pred[ref_col],  pred[pred_col]))
+    res_cor = none_if_nan(pred[ref_col].corr(pred[pred_col]))
+    dit = {'rmse': res_rmse, 'bias': res_bias, 'correlation': res_cor}
+    if fit: 
+        res = mods.ModelFitPerformance(**dit)
+    else:
+        res = mods.PredictionPerformance(**dit)
+    return res
+
 
 def convert_calibration_parameters(cp: OLSResults,
                                    species: str,
@@ -565,7 +573,7 @@ window:int = 10) -> List[Tuple[mods.CalibrationParameters, mods.ModelFitPerforma
         valid = ~data[endog+exog].isna().any(axis=1)
         valid_final = valid & (data['inlet_elapsed'] > 240)
         data_valid = data[valid_final]
-        co2_levels = data_valid.CO2.unique()
+        co2_levels = data_valid[endog[0]].unique()
         span = np.abs(np.diff(co2_levels))[0] if len(co2_levels) > 1 else 0
         if span > 100:
             fit = OLS(data_valid[endog], smtools.add_constant(data_valid[exog])).fit()
@@ -610,8 +618,8 @@ def apply_HPP_calibration(dt_in: pd.DataFrame, cal_pars: List[mods.CalibrationPa
         dt_pred = di[valid]
         dt_pred['const'] = 1
         pms_sm = pms.to_statsmodel()
-        reg_names =[n for n in pms_sm.params.keys()]
-        dt_pred['CO2_pred'] = pms_sm.predict(dt_pred[reg_names])
+        reg_names = [n for n in pms_sm.params.keys()]
+        dt_pred['CO2_pred'] = pms_sm.predict(dt_pred[reg_names]) 
         return dt_pred
     pred_objs = pd.concat([inner_pred(dt_in, pm) for pm in cal_pars])
     return pred_objs
@@ -648,6 +656,22 @@ def plot_CO2_scatter(ax: mpl.axes.Axes, meas: pd.Series,
     ax.set_ylabel('Measured CO2 [ppm]')
     return ax
 
+def plot_RH_ts(ax: mpl.axes.Axes, time: pd.Series, rh: pd.Series, t: pd.Series) -> mpl.axes.Axes:
+    """
+    Plot the timeseries of relative humidity
+    """
+    cm = plt.cm.get_cmap('Set2')
+    ax.plot(time, rh, color = cm.colors[4])
+    ax.set_ylabel("H2O [ppm]")
+    ax.set_ylim([0, 2])
+    ax_t = ax.twinx()
+    ax_t.plot(time, t,  color = cm.colors[3])
+    ax_t.set_ylim([-5, 40])
+    ax_t.set_ylabel("T [C]")
+    ax_t.tick_params(axis='y', labelcolor=cm.colors[3])
+
+    return ax
+
 def plot_CO2_calibration(dt_in: pd.DataFrame,
                          ref_col='ref_CO2',
                          pred_col='CO2_pred',
@@ -664,33 +688,38 @@ def plot_CO2_calibration(dt_in: pd.DataFrame,
     time_span = abs(dt_max - dt_min)
     if time_span.days <= 1:
         date_form = DateFormatter("%H")
-        loc = mdates.HourLocator(interval=1)
+        loc = mdates.HourLocator(interval=2)
         xl = [dt_min.replace(hour=0, minute=0), dt_min.replace(hour=23, minute=59)]
     else:
-        date_form = DateFormatter("%Y-%M-%D %H")
-        loc = mdates.DayLocator(interval=1)
+        date_form = DateFormatter("%Y-%M-%d %H")
+        loc = mdates.DayLocator(interval=time_span.days // 2)
         xl = [dt_in['date'].min(), dt_in['date'].max()]
     fig = mpl.figure.Figure()
-    ax = fig.add_subplot(211)
+    gs = fig.add_gridspec(3,1)
+    #Plot timeseries
+    ax1 = fig.add_subplot(gs[0,:])
     rc = dt_in[ref_col] if ref_col in dt_in.columns else None
-    plot_CO2_ts(ax, dt_in['date'], dt_in[pred_col], dt_in[orig_col], ref=rc)
-    lms = [300, 700]
-    ax.set_ylim(lms)
-    ax.xaxis.set_major_formatter(date_form)
-    ax.xaxis.set_major_locator(loc)
-    ax.set_xlim(xl)
+    plot_CO2_ts(ax1, dt_in['date'], dt_in[pred_col], dt_in[orig_col], ref=rc)
+    lms = [300, 600]
+    ax1.set_ylim(lms)
+    ax1.xaxis.set_major_formatter(date_form)
+    ax1.xaxis.set_major_locator(loc)
+    ax1.set_xlim(xl)
+    #Plot timeseries of RH/T
+    ax_w = fig.add_subplot(gs[1,:], sharex=ax1)
+    ax_w = plot_RH_ts(ax_w, dt_in['date'], dt_in['sensor_H2O'], dt_in['sensor_t'])
     if rc is not None:
-        ax1 = fig.add_subplot(212)
-        ax1 = plot_CO2_scatter(ax1, dt_in[pred_col], rc, dt_in[orig_col])
+        ax2 = fig.add_subplot(gs[2, :])
+        ax2 = plot_CO2_scatter(ax2, dt_in[pred_col], rc, dt_in[orig_col])
         s_bias = bias(rc, dt_in[pred_col])
         s_rmse = rmse(rc, dt_in[pred_col])
         cor = rc.corr(dt_in[pred_col])
         ann = AnchoredText(
         f"RMSE: {s_rmse:5.2f} ppm,\n Bias: {s_bias:5.2f} ppm,\n corr: {cor:5.3f}", loc='upper left')
-        ax.add_artist(ann)
-        ax1.set_ylim(lms)
-        ax1.set_xlim(lms)
-    ax.legend(loc='upper right')
+        ax2.add_artist(ann)
+        ax2.set_ylim(lms)
+        ax2.set_xlim(lms)
+    ax1.legend(loc='upper right')
     return fig
     
 
@@ -708,9 +737,9 @@ def plot_HPP_calibration(dt: pd.DataFrame) -> plt.Figure:
         dt_scaled = dt['cal_elapsed'] * (dt['cal_cycle'] - dt['cal_cycle'].min() + 1)
         ax = fig.add_subplot(211)
         sz = 0.5
-        ax.scatter(dt_scaled, dt['sensor_CO2'], color=get_line_color(measurementType.ORIG), label='Uncalibrated', s=sz)
+        ax.scatter(dt_scaled, dt['sensor_CO2_comp'], color=get_line_color(measurementType.ORIG), label='Uncalibrated', s=sz)
         ax.scatter(dt_scaled, dt['CO2_pred'], color=get_line_color(measurementType.CAL), label='Calibrated', s=sz)
-        ax.scatter(dt_scaled, dt['CO2'], color=get_line_color(measurementType.REF), label='Reference', s=sz)
+        ax.scatter(dt_scaled, dt['cyl_CO2'], color=get_line_color(measurementType.REF), label='Reference', s=sz)
         ax.set_ylabel('CO2 [ppm]')
         ax.set_ylim([300, 700])
         ax.legend()
@@ -761,3 +790,17 @@ def update_hpp_calibration(session: sqa.orm.Session, pm: mods.CalibrationParamet
         obj_up = pm
     session.commit()
     return obj_up
+
+
+def filter_LP8_features(features: pd.DataFrame) -> pd.DataFrame:
+    """
+    Filter the SenseAir LP8 features and returns a dataframe
+    with only the valid times, that is where:
+    - RH < 85 %
+    - no abrupt temperature changes
+    - no abrupt IR changes
+    """
+    rh_cond  = features['sensor_RH'] < 85 
+    breakpoint()
+    ir_diff = (features.set_index('date')['sensor_ir'].diff().abs()).values < 1000
+    return features[rh_cond & ir_diff]

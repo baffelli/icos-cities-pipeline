@@ -230,7 +230,7 @@ def read_bottle_calibrations(pt: pl.Path) -> List[mods.CylinderAnalysis]:
     """
     match pt.suffix:
         case '.xls' |  '.xlsx': 
-            dt_in = pd.read_excel(pt)
+            dt_in = pd.read_excel(pt, engine=None)
         case '.csv':
             dt_in = pd.read_csv(pt,  sep="[;,]", engine='python', 
                 quoting=csv.QUOTE_NONE, doublequote=True, quotechar="'").rename(lambda x: x.replace('"',""), axis='columns')

@@ -348,23 +348,7 @@ class LP8Data(base.Base, TimeseriesData):
         primaryjoin = lambda: (Deployment.id == foreign(LP8Data.id)) & (func.coalesce(func.unix_timestamp(Deployment.end), func.unix_timestamp()) >= foreign(LP8Data.time)),
         viewonly=True
     )
-    # def pressure(self) -> Optional[float]:
-    #     """
-    #     Return the pressure from the Pressure Interpolation table
-    #     """
 
-    #     ses =  object_session(self)
-    #     cls = self.__class__
-    #     iq = sqlalchemy.select(
-    #         cls,
-    #     ).filter(cls.mode==2).cte()
-    #     iq_as = aliased(cls, alias=iq)
-    #     ft_dt = sqlalchemy.DateTime(NAT.to_pydatetime())
-    #     stm = sqlalchemy.select(func.coalesce(iq_as.start, ft_dt)).filter(
-    #         (iq_as.id == self.id) &  
-    #         (iq_as.start > self.start)).order_by(iq_as.start.desc()).limit(1)
-    #     final_stm = ses.scalar(func.coalesce(ses.scalar(stm), sqlalchemy.cast(NAT.to_pydatetime(), sqlalchemy.DateTime)))
-    #     return final_stm
     
 
 @dataclass
@@ -441,3 +425,17 @@ class PressureInterpolation(base.Base, TimeseriesData):
     id: str = Column("location", String, primary_key=True)
     time: int = Column("timestamp", Integer, primary_key=True)
     pressure: float = Column(Float)
+
+@dataclass
+class PredictionPerformance(base.Base):
+    """
+    ORM mapping for the `prediction_performance` table
+    """
+    __tablename__ = "prediction_performance"
+    __sa_dataclass_metadata_key__ = "sa"
+    sensor_id: str = Column("sensor_id", Integer, primary_key=True)
+    model_id: int = Column(ForeignKey("calibration_parameters.id"), primary_key=True)
+    date: int = Column("date", Date, primary_key=True)
+    rmse: Optional[float] = Column(Float)
+    bias: Optional[float] = Column(Float)
+    correlation: Optional[float] = Column(Float)
