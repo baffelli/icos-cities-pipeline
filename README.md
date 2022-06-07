@@ -5,23 +5,23 @@ This repository contains *almost* all the code, configurations and scripts neede
 ## Setup the Pipeline
 To setup a working pipeline, you need to follow the steps below. In case of problems, you can contact Simone Baffelli. In the following sections, we assume you work on a Linux system with python>=3.10 and with an working installation of conda/anaconda.
 ### Install dependencies with conda
-Using conda, install all the dependencies from [envrionment.yaml](config/environment.yaml):
+Using conda, install all the dependencies from [icos-cities.yaml](config/icos-cities.yaml):
 ```bash
 conda env create -f config/environment.yml
 ```
-The environment is called *carbosense-processing*. 
+The environment is called *icos-cities*. 
 To activate the environment, use:
 ```bash
-conda activate carbosense-processing
+conda activate icos-cities
 ```
 
-I also created a newer, python only environment called *icos-cities*. Its configuration file is found in [icos-cities.yaml](config/icos-cities.yaml)
+The repository also contains an older, mixed python and R  environment called *carbosense-processing*. Its configuration file is found in [environment.yaml](config/environment.yaml)
 
 Use the same commands as above to initialise and use the environment.
-This environment is needed to run the python scripts that process the data, while the `carbosense-processing` envrionment is used to run the older scripts that were used during the CarboSense project.
+The `carbosense-processing` envrionment is used to run the older scripts that were used during the CarboSense project.
 
 ### Install sensorutils manually
-This is a python package containing utilities used in all other scripts. To install it in the project, run the following command from the main repository directory:
+*Sensorutils* is a python package containing utilities used in all other scripts. To install it in the project, run the following command from the main repository directory:
 ```
 pip install -e .
 ```
@@ -83,267 +83,31 @@ Using automount, configure the following (Windows) network shares to be mounted 
 - `G:/`
   - On `/mnt/{username}/G`
 To setup automount, ask Stephan Henne from 503 or Patrick Burckhalter from the IT department.
+
 ### Install DigDag
-Follow the instructions [here](http://docs.digdag.io/getting_started.html#downloading-the-latest-version) to install the latest version of digdag. Digdag is used to automate the run of the pipeline at daily intervals.
+Follow the instructions [here](http://docs.digdag.io/getting_started.html#downloading-the-latest-version) to install the latest version of digdag. 
+
+Digdag is used to automate the run of the pipeline at daily intervals. You might have to install jdk on conda if the currently available version from the OS doesn't let you run digdag.
+
+The pipeline is self-explaining, all the processing steps are listed in the digdag DAG file.
 
 ## Running the pipeline
 ### Manual run
 To manually run the pipeline, use the following commands:
 ```bash
-conda activate carbosense-processing
-digdag -r process_carbosense.dig
+conda activate icos-cities
+digdag -r icos-cities.dig
 ```
+
+
+
 ### Automated run
 So far, the pipeline run are scheduled to run once per day using a crontab file calling the script [start_processing.sh](start_processing.sh). 
 
-In the future, it would be desireable to install digdag as a service, so that the pipeline runs can be scheduled directly with digdag and their operation can be verified more robustly. For this, consult the digdag documentation [here](http://docs.digdag.io/command_reference.html#server-mode-commands).
+In the future, it would be ideal to install digdag as a service, so that the pipeline runs can be scheduled directly with digdag and their operation can be verified more robustly. For this, consult the digdag documentation [here](http://docs.digdag.io/command_reference.html#server-mode-commands).
 
-# Structure of the repository
-The repository is structured in directories containing group of scripts performing related tasks. These are listed below
-
-
-- [**CarbosenseDatabaseTools**](./CarbosenseDatabaseTools/)
-
-   Contains scripts used to interact with the data/metadata database. In particular, these
-   scripts are used regularly or called from the digdag DAG:
-
-  - [Import_DB_table_NABEL_DUE.r](./CarboSenseDatabaseTools/Import_DB_table_NABEL_DUE.r)
-    - no longer used
-    - Imports data files (Picarro, Gases, Meteo) from directory `K:/Nabel/Daten/Stationen/DUE/` (`/project/CarboSense/Win_K/Daten/Stationen/DUE/`) into database table ``NABEL_DUE``
-    - Exclusion periods accounted in the script
-  - [Import_DB_table_NABEL_HAE.r](./CarboSenseDatabaseTools/Import_DB_table_NABEL_HAE.r)
-    - no longer used as Licor insturment is not installed in Harkingen anymore
-    - Imports data files (**LICOR**, Gases, Meteo) from directory `K:/Nabel/Daten/Stationen/HAE/` (`/project/CarboSense/Win_K/Daten/Stationen/HAE/`) into database table ```NABEL_HAE```
-    - Reads relevant entries from `CarboSense.RefMeasExclusionPeriods`
-  - [Import_DB_table_NABEL_HAE_pic.r](./CarboSenseDatabaseTools/Import_DB_table_NABEL_HAE_pic.r)
-    - no longer used 
-    - Imports data files (**Picarro**, Gases, Meteo) from directory `K:/Nabel/Daten/Stationen/HAE/` (`/project/CarboSense/Win_K/Daten/Stationen/HAE/`) into database table `NABEL_HAE`
-    - Reads relevant entries from CarboSense.RefMeasExclusionPeriods
-  - [Import_DB_table_NABEL_PAY.r](./CarboSenseDatabaseTools/Import_DB_table_NABEL_PAY.r)
-    - Imports data files (Picarro, Gases, Meteo) from directory `K:/Nabel/Daten/Stationen/PAY/` (`/project/CarboSense/Win_K/Daten/Stationen/HAE/`) into database table `NABEL_PAY`
-    - Reads relevant entries from CarboSense.RefMeasExclusionPeriods
-
-  - [Import_DB_table_NABEL_RIG.r](./CarboSenseDatabaseTools/Import_DB_table_NABEL_RIG.r)
-    - Imports data files (Picarro, Gases, Meteo) from directory `K:/Nabel/Daten/Stationen/RIG/`  into database table `NABEL_RIG`
-
-  - [Import_DB_table_EMPA_LAEG.r](./CarboSenseDatabaseTools/Import_DB_table_EMPA_LAEG.r)
-    - no longer used
-    - Imports data from `empaGSN.laegern_1min_cal` to `CarboSense.EMPA_LAEG`
-    - Reads relevant entries from `CarboSense.RefMeasExclusionPeriods`
-  - [Import_DB_table_UNIBE_GIMM.r](./CarboSenseDatabaseTools/Import_DB_table_UNIBE_GIMM.r)
-    - no longer used
-    - Imports data from `empaGSN.gimmiz_1min_cal` to `CarboSense.UNIBE_GIMM`
-    - Reads relevant entries from `CarboSense.RefMeasExclusionPeriods`
-  - [Import_DB_table_UNIBE_BRM.r](./CarboSenseDatabaseTools/Import_DB_table_UNIBE_GIMM.r)
-    - no longer used
-    - Imports data from `empaGSN.beromuenster_Xm_1min_cal` to `CarboSense.UNIBE_BRM`
-
-  [2] Contact regarding data availability and access to empaGSN: Stephan Henne
-
-  - [Import_DB_table_PressureChamber_00_METAS.r](./CarboSenseDatabaseTools/Import_DB_table_PressureChamber_00_METAS.r)
-    - no longer used as calibration at Metas is not used
-    - Imports the measurement files collected during the pressure calibration at METAS (directory: `K:/Carbosense/Data/Druckkammer_Versuche_Metas/Data/`) into database table `PressureChamber_00_METAS`
-    - Empty database table before running the script
-    - Pressure calibration at METAS was carried out only once in May 2017.
-  - [Import_DB_table_ClimateChamber_00_DUE.r](./CarboSenseDatabaseTools/Import_DB_table_ClimateChamber_00_DUE.r)
-    - Imports the measurement files (climate chamber data, CO2, pressure) collected during the climate chamber calibrations in LA064 (directory: `K:/Carbosense/Data/Klimakammer_Versuche_27022017_XXXXXXXX`) into database table `ClimateChamber_00_DUE`
-    - Empty database table before running the script
-    - Review code in terms of correct time zones (CEST,CET,UTC) when importing data from an additional calibration run. Climate chamber data is usually in local time.
-    - **the entries for  Carbosense meta-database have to be set according to user in the script**
-  - [Import_DB_table_PressureChamber_01_DUE.r](./CarboSenseDatabaseTools/Import_DB_table_PressureChamber_01_DUE.r )
-    - Imports the measurement files (CO2, pressure) collected during the pressure calibration in LA003 (directory: `K:/Carbosense/Data//Druckkammer_Versuche_Empa_LA003/`) into database table `PressureChamber_01_DUE`
-      - Empty database table before running the script
-      - Review code in terms of correct time zones (CEST,CET,UTC) when importing data from an additional calibration run. Pressure data from the Additel pressure instrument might refer to local time.
-      - **CS_DB_user, CS_DB_pass for Carbosense meta-database have to be set according to user in the script**
-  - [check_db_integrity.sql](./CarbosenseDatabaseTools/check_db_integrity.sql)
-    - Checks the integrity of database constraints. To start, you need a working sql connection and a sql interpreter. Will later be called from within a python script to produce a report 
-  - [import_picarro_data.py](./CarbosenseDatabaseTools/import_picarro_data.py)
-    - Imports all picarro / reference data from the various tables, replacing the `Import_DB_*` scripts above. Requires a configuration file, which you will find [here](config/picarro_mapping.yml). 
-  - [dump_raw_data_from_influxdb.py](./CarbosenseDatabaseTools/dump_raw_data_from_influxdb.py)
-    - (incrementally) dumps the raw HPP or LP8 data into the table `CarboSense.lp8_data` or
-    `CarboSense.hpp_data` depending on the chosen mode. Run from the digdag DAG to alway have up-to-date raw data on the database
-
-  - [create_reference_data_table.SQL](./CarbosenseDatabaseTools/create_reference_data_table.SQL)
-    - Used to fill a table called `CarboSense.picarro_data` containing the consolidated reference data from all picarro instruments
-  - [Check_CarboSense_Metadata_DB.r](./CarbosenseDatabaseTools/Check_CarboSense_Metadata_DB.r)
-    - Older script (by Michael Mueller) to check the integrity of the metadata
-  - [DB_REF_MEAS_Processing.r](./CarbosenseDatabaseTools/DB_REF_MEAS_Processing.r) 
-    - Computes columns `?_10MIN_AV` in CarboSense database tables that contain data for LP8 calibration (`NABEL_DUE`, `NABEL_HAE`,`NABEL_RIG`, `NABEL_PAY`, `ClimateChamber_00_DUE`, `PressureChamber_01_DUE`, "`PressureChamber_00_METAS`). Only data of tables `NABEL_?` should be processed on a daily basis.
-    - Filtering criteria are coded in the script and depend on specific tables
-    - Applies CO2/H2O calibration for Picarros in DUE, HAE, PAY, RIG (e.g. CO2_DRY_CAL)
-  - [Compute_NABEL_Picarro_CO2_WET.r](./CarbosenseDatabaseTools/Compute_NABEL_Picarro_CO2_WET.r) 
-    - Computes CO2_WET_COMP for tables NABEL_DUE, NABEL_HAE, NABEL_PAY and NABEL_RIG
-    - As the Picarros in HAE, PAY and RIG measures air that is dried before the measuring cell (since early 2020), meteo measurements (T,RH,P) from NABHAE, PAY and NABRIG are required for the computation of H2O. 
-- [**CarboSenseUtilities**](./CarbosenseUtilities/)
-
-  Various utilities used to process the data
-  - [CarboSenseFunctions.r](./CarbosenseUtilities/CarboSenseFunctions.r)
-    - Collection of plot functions, etc.
-  - [api-v1.3.r](./CarboSenseUtilities/api-v1.3.r)
-    - Decentlab API for data retrieval used in various scripts
-  - [api-v1.3_2019-09-03.r](./CarboSenseUtilities/api-v1.3_2019-09-03.r)
-   - Decentlab API for data retrieval/data upload used in various scripts
-
-- [**LP8_measurement_processing**](./LP8_measurement_processing/)
-
-  - The LP8 measurement processing is applied for two model versions:
-    - version [3]: full model -> database table: `CarboSense_CO2_TEST01`
-    - version [2]: simplified model -> database table: `CarboSense_CO2_TEST00`
-    - [*version [1]: not used anymore (database table: CarboSense_CO2)*]
-
-
-  - The directory contains a series of scripts that implement the LP8 processing chain  
-
-
-    First part: Computation of processed measurements, outlier correction, discontinuity in time series, drift correction, consistency check
-
-    1. [Compute_CarboSense_CO2_values.r](./LP8_measurement_processing/Compute_CarboSense_CO2_values.r)
-        - Required input variables: par1: partial/complete processing [T/F]; par2: version [1/2/3]; optional_par3: processing only measurements from DUE1 [DUE] 
-        - Tasks:
-          - Computation of CO2 concentration based on raw measurements and calibration model/parameters
-          - Export processed measurements to database tables CarboSense_CO2_TEST01, CarboSense_CO2_TEST00 or CarboSense_CO2 (depending on **version**)
-          - Flags outliers based on SHT21_RH [-> FLAG]
-    2.  [Empa_OutlierDetection_P.r](./LP8_measurement_processing/Empa_OutlierDetection_P.r)
-        - Required input variables: par1: Version [1/2/3]; par2: processing measurements from DUE1 [DUE/NO_DUE] 
-        - Tasks:
-          - Flags outliers [-> O_FLAG]
-    3. [LP8_measurement_analysis.r](./LP8_measurement_processing/LP8_measurement_analysis.r) 
-        - Required input variables: par1: Version [1/2/3]; optional_par2: processing only measurements from DUE1 [DUE] 
-        - Tasks:
-          - Detects discontinuity periods in LP8 time series 
-    4. LP8_DriftCorrection.r 
-        - Required input variables: par1: Version [1/2/3]; par2: partial/complete processing [F/T]; optional_par3: processing only measurements from DUE1 [DUE] 
-        - Tasks:
-          - Computes and applies drift corrections for LP8 sensors based on MeteoSwiss wind measurements and CO2 reference measurements 
-    5. LP8_ConsistencyCheck.r 
-        - Required input variables: par1: Version [1/2/3]; optional_par2: processing only measurements from DUE1 [DUE] 
-        - Tasks:
-          - Checks consistency of LP8 measurement by means of reference measurements
-          - Flags suspicious measurements [-> L_FLAG]
-
-  - Second part: analysis+visualisation of results
-
-    6. Plot_CarboSense_CO2_TS.r **CronJob**
-      - Required input variables: par1: Version [1/2/3]
-      - Tasks:
-        - Creates LP8 measurement time series
-  - Compute_Diurnal_CO2concentrations.r **CronJob**
-    - Required input variables: par1: Version [1/2/3]
-    - Tasks:
-      - Computes diurnal CO2 variations (aggregated for months) based on LP8 measurements (+ HPP/Picarro measurements)
-  - Comparison_CO2_LP8_REF.r **CronJob**
-    - Required input variables: par1: Version [1/2/3]; par2: comparison for CO2_DRY or CO2_WET [DRY/WET]
-    - Tasks:
-      - Compares LP8 measurements with measurements of co-located Picarro-instruments [sites HAE, PAY, DUE, RIG, BRM, LAEG]
-  - Comparison_CO2_LP8_LP8.r **CronJob**
-    - Required input variables: par1: Version [1/2/3]
-    - Tasks:
-      - Compares measurements of co-located LP8 sensors
-  - Comparison_CO2_LP8_HPP.r **CronJob**
-  - Required input variables: par1: Version [1/2/3]
-  - Tasks:
-    - Compares LP8 measurements with measurements of co-located HPP instruments [sites HAE, PAY, DUE, RIG, BRM, LAEG]
-
-Miscellaneous:
-- SpatialSiteClassification.r
-  - Required input variables: par1 [DEPLOYMENT/GRID]
-  - Output of script [option "DEPLOYMENT"] is used for script "LP8_ConsistencyCheck.r" (run after each change in the LP8/HPP sensor deployment)
-  - Tasks:
-    - Computes spatial characteristics for sensor locations / grid
-- TemperatureAroundZurich.r
-  - Creation of maps with SHT21 / MeteoSwiss temperatures around the city of Zurich  
-
-
-- [**HPP_measurement_processing**](./HPP_measurement_processing/)
-  - Compute_CarboSense_HPP_CO2_values.r **CronJob**
-    - Required input variables: par1: partial/complete processing [T/F]; optional_par2: LocationName (if omitted only operational sites are processed)
-    - Tasks:
-      - Computation of CO2 concentrations based on raw measurements, calibration model and on-site calibration
-      - Export of computed concentrations to CarboSense.CarboSense_HPP_CO2
-      - Reports of calibration conditions (delta HPP-REF, H2O, RH, cylinder pressure)
-  - Plot_HPP_CO2.r **CronJob**
-    - Tasks:
-      - Generation of HPP CO2 time series
-  - Comparison_CO2_HPP_REF.r **CronJob**
-    - Tasks:
-      - Comparison of HPP measurements and measurements from Picarro instruments
-  - Comparison_H2O_HPP_MCH.r **CronJob**
-    - Tasks:
-      - Comparison of computed HPP H2O values with H2O values computed from MeteoSwiss measurements
-
-## REF_measurement_processing
-- Plot_REF_CO2.r **CronJob**
-  - Tasks:
-    - Generation of CO2 time series for sites equipped with Picarro or Licor instrument (CO2_WET_COMP or CO2 depending on measurement site)
-
-## HPP_sensor_calibration
-- CO2_HPP_SensorCalibration_LINUX_IR_2S.r **WorkingScript** 
-  - Determination of HPP calibration model parameters (HPP 426-445)
-    - Option to select / define different models
-    - Data that is used for calibration
-      -  CV_mode:
-        -  1 --> all data from calibration periods
-        -  4 --> data from pressure chamber calibration + 2 weeks before and after chamber calibration (selection of particular chamber calibration run coded in the script because some sensors were calibrated more than once.)
-        -  **New feature required**
-           -  Possibility for several calibration parameter sets per sensor which are valid for specific time periods in case a sensor has substantially drifted. Requires additional changes in database table "ProcessingParameters" and in script "Compute_CarboSense_HPP_CO2_values.r"
-    - Export of model parameters CarboSense.CalibrationParameters
-- CO2_HPP_SensorCalibration_LINUX_IR.r **WorkingScript**
-  - Determination of HPP calibration model parameters (HPP 342+390)
-
-## LP8_sensor_calibration
-- CO2_LP8_SensorCalibration_LINUX_DRY.r **WorkingScript** 
-  - Determination of LP8 calibration model parameters
-    - Option to select / define different models
-    - Export of model parameters CarboSense.CalibrationParameters
-
-## MeteoSwissData4Carbosense
-- Import_DB_table_METEOSWISS_Measurements.r **CronJob**
-  - Imports daily files from "/project/CarboSense/Data/METEO/MCH_DAILY_DATA_DUMP" and write it into database table "METEOSWISS\_Measurements"
-  - Contacts: Stephan Henne (data from MeteoSwiss: m2m.empa.ch)
-- METEOSWISS_PressureInterpolation.r **CronJob**
-  - Spatial interpolation of pressure measurements in 10 minutes interval for all "LocationName" with deployed sensors [CarboSense.Deployment]
-  - Data flow: CarboSense.METEOSWISS_Measurements -> Interpolation -> CarboSense.PressureInterpolation / CarboSense.PressureParameter
-- [ *Import_DB_table_METEOSWISS_Measurements_MAN_DOWNLOADED_FILES.r* ]
-  - Used to import MeteoSwiss data files that were manually downloaded before automated file transfer was established.  
-- [ *METEOSWISS_PressureInterpolation_CV.r* ]
-  - Same as "METEOSWISS_PressureInterpolation.r", used for accuracy estimation computation
-
-## CarbosenseNetworkStatus
-- Check_CarboSense_SensorHealth.r **CronJob**
-  - Reports for each sensor: Number of LP8 and SHT measurements, status, battery, range of values for the preceding 24 hours 
-  - Results in directory: /project/CarboSense/Carbosense_Network/CarboSense_SensorHealth
-- CarboSenseDeployment2KML.r **CronJob**
-  - Creates KML-file for GoogleEarth based on entries in Carbosense.Deployment
-  - Results in directory: /project/CarboSense/Carbosense_Network/CarboSense_KML
-- [ *GEO_ADMIN_LINKS_for_active_deployments.r* ]
-  - Creates file that contains links for website "https://map.geo.admin.ch"
-- [ *MeteoSwissNetwork2KML.r* ]
-  - Generates a KML-file that includes the availability of P,T and wind measurements from MeteoSwiss (table: METEOSWISS_Measurements)
-
-
-## UploadProcessedMeasurementsToDecentlabDB
-Contacts related to "swiss.co2.live": Khash-Erdene Jalsan (khash.jalsan@decentlab.com), Reinhard Bischoff (reinhard.bischoff@decentlab.com)
-
-- Upload_LP8_Measurements_To_swiss_co2_live.sh **CronJob**
-  - Loop over all LP8 sensors: drops series (first of month) / deletes data from last 21 days (daily) in swiss.co2.live
-  - Calls "Upload_LP8_processed_one_sensor_to_Decentlab_DB"
-- Upload_HPP_Measurements_To_swiss_co2_live.sh **CronJob**
-  - Loop over all HPP sensors: drops series (first of month) / deletes data from last 21 days (daily) in swiss.co2.live
-  - Calls "Upload_HPP_processed_one_sensor_to_Decentlab_DB"
-- Upload_LP8_processed_one_sensor_to_Decentlab_DB.r
-  - Selects all data (first of month) / data of last 21 days (daily) from CarboSense_CO2_FINAL and uploads it to swiss.co2.live
-- Upload_HPP_processed_one_sensor_to_Decentlab_DB.r
-  - Selects all data (first of month) / data of last 21 days (daily) from CarboSense_HPP_CO2 and uploads it to swiss.co2.live
-
-- Upload_Carbosense_MetaDBtables_to_DecentlabSFTP.pl
-  - Uploads Carbosense meta-database table dump to Decentlab's FTP server
-
-## ICOS_Carbosense_T_RH_Data_Release_October_2019
-- Compute_CarboSense_T_RH_values_Version_October_2019.r
-  - Download LP8 measurements from the Decentlab database, measurement processing (e.g. adjusting of timestamp, removal of duplicates, status), export in Carbosense database
-- Carbosense_data_release_2019-10.r
-  - Script that created the files for the ICOS data release in October 2019  
-
+## Old CarboSense Pipeline
+For documentation on the previous carbosense pipeline, please refer to [this document](./old_pipeline.md).
 
 ## sensorutils
 This is a python package containing utilities used in all other scripts. To install it in the project, run the following command from the main repository directory:
@@ -355,6 +119,7 @@ pip install -e ./sensorutils
 
 
 # Pipeline documentation
+
 In the following sections, I will describe the most important sections of the pipeline and how to run / configure them.
 ## Importing raw sensor data
 ### Motivation
@@ -500,3 +265,57 @@ python3 (./HPP_measurement_processing/process_hpp_data.py  ./config/co2_sensor_m
 ```
 
 ## Processing mode
+
+To process the data, run the code as shown above but use the `process` flag instead:
+
+```
+python3 (./HPP_measurement_processing/process_hpp_data.py  ./config/co2_sensor_mapping.yaml process HPP 445 --plot your_plot_directory
+```
+
+By default, the processed data is stored in the table `co2_level2`.
+
+
+# Database Structure
+
+## Motivation 
+Most of the current processes in the icos-cities pipeline exchange data and store their state in the `CarboSense` database schema on `emp-sql-cs1.empa.emp-eaw.ch`.  This database also stores network metadata such as the deployment times of sensors, their geographical location and many more.
+
+In the following section, I will describe the most important tables there, their structure and how to enter data.
+
+## Database Tables
+In the following, I will list the most relevant database tables and give some information how to enter / modify the data there. 
+
+As a general information, consider that the date `2100-01-01 00:00:00` stands for an unknown time while the number `-999` is used to mark missing values. The latter is an historical artifact, which has been removed from most tables and replaced with SQL-conforming `NULL`. Feel free to replace this value with `NULL` whenever you encouter it. 
+
+On the long term, it would be optimal if all the column names / table names  would be changed to *snake_case*. Feel free to do it, but ensure that the python code is updated accordingly. This must be mainly done through the [models](./sensorutils/models.py) file, where the SQLalchemy classes mapping the database tables reside, but do not forget to check the rest of the code.
+
+Finally, here are the table descriptions:
+
+### Tables
+
+* `Deployment`:
+    
+    Gives the location and the timespan
+    when a sensor was deployed at a measurement station. The column `SensorUnit_ID` must refer to one ID in the table `SensorUnits`, while `LocationName` must be present in the `Location` table (foreign key). `CalibrationMode` should be set to 1 or 2 whenever a sensor is to be calibrated by climate chamber or co-location respectively.
+    When you finish a deployment, finish it by setting the `Date_UTC_from` value to the finishing date and **NOT** by removing the entry. 
+    
+* `Location`:
+
+  Contains the name, address and other metadata for measurement stations. The validity period gived by  `Date_UTC_from` and `Date_UTC_to` serves to identify measurement stations whose location was changed (as an example, the *DUE1* NABEL station which was moved in April 2020)
+
+* `Sensors`:
+
+  Contains a list of all sensors (identified by `serialnumber` and `Type`) that were ever contained in a Sensor Unit (the phisical container sending the data over LoRaWan identified by `SensorUnit_ID`). When you replace a sensor in a sensor unit, terminate the latest entriy and add a new entry with the new `serialnumber`.
+
+* `ref_gas_cylinder`:
+ 
+  Lists all the reference gas cylinders using through the project, their validity time, the volume, owner and date of the next due pressure test. To use a cylinder in other tables such as `ref_gas_cylinder_analysis`, you must first create an entry here (foreign key constraint).
+
+* `ref_gas_cylinder_analysis`
+
+  Lists the analysed value for filled reference gas cylinders. The values are usually imported using the python script [import_bottle_calibrations.py](./CarbosenseDatabaseTools/import_bottle_calibrations.py) after the cylinders are analysed. The table is used to compute the HPP two point calibration values
+
+* `cylinder_deployment`
+  Lists which 
+
+### Views
