@@ -222,7 +222,7 @@ def get_available_measurements_on_db(engine: sqa.engine.Engine, md: sqa.MetaData
         filt = filt + (sqa.text(filter),)
     else:
         pass
-    qs = sqa.select(table).filter(*filt).cte()
+    qs = sqa.select(table).filter(*filt).subquery()
     qf = sqa.select(*cols).distinct().select_from(qs)
     logger.debug(f'The query is {qf}')
     return pd.read_sql_query(qf, engine, parse_dates=['date']).reset_index()
@@ -564,6 +564,8 @@ class DBSource(DatabaseSource):
         if self.db_prefix:
             eng = db_utils.connect_to_metadata_db(group=self.db_prefix)
             self.attach_db(eng)
+        else:
+            pass
 
     def date_expression(self, label='date') -> sqa.sql.ColumnElement:
         """
@@ -643,7 +645,12 @@ class DBSource(DatabaseSource):
         qs = dq.filter(*filts)
         qs_comp = qs.statement.compile(compile_kwargs={"literal_binds": True})
         logger.debug(f"The query is {qs_comp}")
-        return pd.read_sql(qs.statement, self.eng).drop(lb, axis=1).replace(self.na, np.NaN)
+        data = pd.read_sql(qs.statement, self.eng).drop(lb, axis=1)
+        if self.na:
+            dt_rep = data.replace([self.na], np.NaN)
+        else:
+            dt_rep = data
+        return dt_rep
 
     @check_db
     #TODO fix returing of affected
@@ -676,8 +683,12 @@ class DBSource(DatabaseSource):
         output_table = self.metadata.tables[self.table]
         with self.eng.connect() as con:
             tran = con.begin()
+            #Add group value if missing column is missing
+            if self.grouping_key not in input_filled.columns:
+                input_filled[self.grouping_key] = (self.group or group)
             input_filled.to_sql(self.table, con, method=method,
                                 index=False, if_exists='append')
+            
             if group and self.grouping_key:
                 new_data = session.query(output_table).filter(output_table.columns[self.date_column].between(
                 input[self.date_column].min(), input[self.date_column].max())

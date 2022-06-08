@@ -51,11 +51,15 @@ def load_and_map(mapping: fu.SourceMapping, temporary: bool=False, import_all: b
 parser = ap.ArgumentParser()
 parser.add_argument("config", type=cu.path_or_config, help='Path of configuration file')
 parser.add_argument("location", type=str, help='Import data for given location')
-#parser.add_argument("dest", type='str', help='Destination table')
-parser.add_argument("--import-all", type=bool, help='If set, reimport all data from all sources')
-parser.add_argument("--temporary", type=bool, help='If set, only temporary copy data to destination (used for testin)')
+parser.add_argument("--import-all", action='store_true', help='If set, reimport all data from all sources')
+parser.add_argument("--temporary", action='store_true', help='If set, only temporary copy data to destination (used for testin)')
 args = parser.parse_args()
 source_dest_mapping = fu.DataMappingFactory.create_mapping(**args.config[args.location])
 eng = db_utils.connect_to_metadata_db()
+#Connect source db 
+try:
+    source_dest_mapping.source.attach_db_from_config()
+except:
+    pass
 source_dest_mapping.dest.attach_db(eng)
-load_and_map(source_dest_mapping)
+load_and_map(source_dest_mapping, import_all=args.import_all)

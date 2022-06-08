@@ -5,7 +5,6 @@ DUE:
     path: DUE
     date_from: 2022-01-01T00:00:00.000
     na: ''
-
   dest:
     type: DB
     table: picarro_data
@@ -40,217 +39,21 @@ LAEG:
     date_column:  DATE(FROM_UNIXTIME(timed / 1000))
   dest:
     type: DB
-    table: EMPA_LAEG
+    table: picarro_data
     db_prefix: CarboSense_MySQL
     date_from: 2022-01-01T00:00:00.000
-    na: -999
     date_column: timestamp
+    grouping_key: LocationName
+    group: 'LAEG'
+    na: .NAN
   columns:
+    - {name: LocationName, query: ''LAEG'', datatype: str}
     - {name: timestamp, query: timed / 1000, datatype: int, na: 0}
-    - {name: CO2, query: CO2_DRY * (1 - H2O/100), datatype: float, na: -999}
+    - {name: CO2, query: CO2_DRY * (1 - H2O/100), datatype: float, na: .NAN}
     - {name: CO2_F, query:  1 - (((VALVEPOS = 5) OR (CO2_DRY IS NULL) OR (H2O IS NULL))), datatype: int, na: 0}
-    - {name: CO2_DRY, query: CO2_DRY, datatype: float, na: -999}
+    - {name: CO2_DRY, query: CO2_DRY, datatype: float, na: .NAN}
     - {name: CO2_DRY_F, query: 1 - (((VALVEPOS = 5) OR (CO2_DRY IS NULL))), datatype: int, na: 0}
-    - {name: CO, query: CO, datatype: float, na: -999}
-    - {name: CO_F, query: 1 - isnull(CO), datatype: int, na: 0}
-    - {name: H2O, query: H2O, datatype: float, na: -999}
+    - {name: H2O, query: H2O, datatype: float, na: .NAN}
     - {name: H2O_F, query:  1 - isnull(H2O), datatype: int, na: 0}
-DUE2:
-  source:
-    type: DB
-    db_prefix: empaGSN
-    table: beromuenster_12m_1min_cal
-    date_from: 2018-01-01T00:00:00.000
-    na: NULL
-    date_column:  timed / 1000
-  dest:
-    type: DB
-    table: UNIBE_BRM
-    db_prefix: CarboSense_MySQL
-    date_from: 2018-01-01T00:00:00.000
-    date_column: timestamp
-    na: -999
-  columns:
-    - {name: timestamp, query: timed / 1000, datatype: int, na: 0}
-    - {name: CO2, query: CO2_DRY * (1 - H2O/100), datatype: float, na: -999}
-    - {name: CO2_F, query:  1 - (isnull(CO2_DRY) or isnull(H2O) or CO2_DRY > 2000 OR CO2_DRY < 200), datatype: int, na: 0}
-    - {name: CO2_DRY, query: CO2_DRY, datatype: float, na: -999}
-    - {name: CO2_DRY_F, query: 1 - (isnull(CO2_DRY) or CO2_DRY > 2000 OR CO2_DRY < 200), datatype: int, na: 0}
-    - {name: CO, query: CO, datatype: float, na: -999}
-    - {name: CO_F, query: 1 - isnull(CO), datatype: int, na: 0}
-    - {name: H2O, query: H2O, datatype: float, na: -999}
-    - {name: H2O_F, query:  1 - isnull(H2O), datatype: int, na: 0}
-# GIMM:
-#   source:
-#     type: DB
-#     db_prefix: empaGSN
-#     table: gimmiz_1min_cal
-#     date_from: 2018-01-01T00:00:00.000
-#     na: NULL
-#     date_column:  timed / 1000
-#   dest:
-#     type: DB
-#     table: UNIBE_GIMM
-#     db_prefix: CarboSense_MySQL
-#     date_from: 2018-01-01T00:00:00.000
-#     na: -999
-#     date_column:  timestamp
-#   columns:
-#     - {name: timestamp, query: timed / 1000, datatype: int, na: 0}
-#     - {name: CO2, query: CO2_DRY * (1 - H2O/100), datatype: float, na: -999}
-#     - {name: CO2_F, query:  1 - (((VALVEPOS = 5) OR (CO2_DRY IS NULL) OR (H2O IS NULL))), datatype: int, na: 0}
-#     - {name: CO2_DRY, query: CO2_DRY, datatype: float, na: -999}
-#     - {name: CO2_DRY_F, query: 1 - (((VALVEPOS = 5) OR (CO2_DRY IS NULL))), datatype: int, na: 0}
-#     - {name: CO, query: CO, datatype: float, na: -999}
-#     - {name: CO_F, query: 1 - isnull(CO), datatype: int, na: 0}
-#     - {name: H2O, query: H2O, datatype: float, na: -999}
-#     - {name: H2O_F, query:  1 - isnull(H2O), datatype: int, na: 0}
-# RIG:
-#   source:
-#     type: NABEL
-#     re: RIG Gase .*\.csv
-#     path: RIG
-#     date_from: 2018-01-01T00:00:00.000
-#     na: ''
-#   dest:
-#     type: DB
-#     table: NABEL_RIG
-#     db_prefix: CarboSense_MySQL
-#     date_from: 2018-01-01T00:00:00.000
-#     na: -999
-#     date_column: timestamp
-#   columns:
-#     - {name: timestamp,  query: 'CAST(strftime(''%s'', date) as integer)', datatype: int, na: -999}
-#     - {name: 'NO', query: 'NO', datatype: float, na: -999}
-#     - {name: 'NO_F', query: CASE WHEN NO_F IS NULL THEN 1 ELSE 0 END, datatype: int, na: 0}
-#     - {name: O3, query: O3, datatype: float, na: 0}
-#     - {name: O3_F, query: CASE WHEN O3_F IS NULL THEN 1 ELSE 0 END, datatype: int, na: 0}
-#     - {name: CO2, query: CO2, datatype: float, na: -999}
-#     - {name: CO2_F, query: CASE WHEN CO2_F IS NULL THEN 1 ELSE 0 END, datatype: int, na: 0}
-#     - {name: CO2_DRY, query: CO2_DRY, datatype: float, na: -999}
-#     - {name: CO2_DRY_F, query: CASE WHEN CO2_dry_F IS NULL THEN 1 ELSE 0 END, datatype: int, na: 0}
-#     - {name: H2O, query: H2O, datatype: float, na: -999}
-#     - {name: H2O_F, query: CASE WHEN H2O_F IS NULL THEN 1 ELSE 0 END, datatype: int, na: 0}
-#     - {name: T, query: TEMP, datatype: float, na: -999}
-#     - {name: T_F, query: CASE WHEN TEMP_F IS NULL THEN 1 ELSE 0 END, datatype: int, na: 0}
-#     - {name: RH, query: FEUCHT, datatype: float, na: 0}
-#     - {name: RH_F, query: CASE WHEN FEUCHT_F IS NULL THEN 1 ELSE 0 END, datatype: int, na: 0}
-#     - {name: pressure, query: DRUCK, datatype: float, na: -999}
-#     - {name: pressure_F, query: CASE WHEN DRUCK_F IS NULL THEN 1 ELSE 0 END, datatype: float, na: -999}
 
-# HAE:
-#   source:
-#     type: NABEL
-#     re: HAE Gase .*\.csv
-#     path: HAE
-#     date_from: 2018-01-01T00:00:00.000
-#     na: ''
-#   dest:
-#     type: DB
-#     table: NABEL_HAE
-#     db_prefix: CarboSense_MySQL
-#     date_from: 2018-01-01T00:00:00.000
-#     na: -999
-#     date_column: timestamp
-#   columns:
-#     - {name: timestamp,  query: 'CAST(strftime(''%s'', date) as integer)', datatype: int, na: -999}
-#     - {name: 'NO', query: 'NO', datatype: float, na: -999}
-#     - {name: 'NO_F', query: CASE WHEN NO_F IS NULL THEN 1 ELSE 0 END, datatype: int, na: 0}
-#     - {name: NO2, query: NO2, datatype: float, na: -999}
-#     - {name: NO2_F, query: CASE WHEN NO2_F IS NULL THEN 1 ELSE 0 END, datatype: int, na: 0}
-#     - {name: O3, query: O3, datatype: float, na: 0}
-#     - {name: O3_F, query: CASE WHEN O3_F IS NULL THEN 1 ELSE 0 END, datatype: int, na: 0}
-#     - {name: CO2, query: CO2, datatype: float, na: -999}
-#     - {name: CO2_F, query: CASE WHEN CO2_F IS NULL THEN 1 ELSE 0 END, datatype: int, na: 0}
-#     - {name: CO2_DRY, query: CO2_DRY, datatype: float, na: -999}
-#     - {name: CO2_DRY_F, query: CASE WHEN CO2_dry_F IS NULL THEN 1 ELSE 0 END, datatype: int, na: 0}
-#     - {name: H2O, query: H2O, datatype: float, na: -999}
-#     - {name: H2O_F, query: CASE WHEN H2O_F IS NULL THEN 1 ELSE 0 END, datatype: int, na: 0}
-#     - {name: T, query: TEMP, datatype: float, na: -999}
-#     - {name: T_F, query: CASE WHEN TEMP_F IS NULL THEN 1 ELSE 0 END, datatype: int, na: 0}
-#     - {name: RH, query: FEUCHT, datatype: float, na: 0}
-#     - {name: RH_F, query: CASE WHEN FEUCHT_F IS NULL THEN 1 ELSE 0 END, datatype: int, na: 0}
-#     - {name: pressure, query: DRUCK, datatype: float, na: -999}
-#     - {name: pressure_F, query: CASE WHEN DRUCK_F IS NULL THEN 1 ELSE 0 END, datatype: float, na: -999}
-# PAY:
-#   source:
-#     type: NABEL
-#     re: NO NO2 O3 CO2 H2O .*\.csv
-#     path: PAY
-#     date_from: 2018-01-01T00:00:00.000
-#     na: ''
-#   dest:
-#     type: DB
-#     table: NABEL_PAY
-#     db_prefix: CarboSense_MySQL
-#     date_from: 2018-01-01T00:00:00.000
-#     na: -999
-#     date_column: timestamp
-#   columns:
-#     - {name: timestamp,  query: 'CAST(strftime(''%s'', date) as integer)', datatype: int, na: -999}
-#     - {name: 'NO', query: 'NO', datatype: float, na: -999}
-#     - {name: NO_F, query: CASE WHEN NO_F IS NULL THEN 1 ELSE 0 END, datatype: int, na: 0}
-#     - {name: NO2, query: NO2, datatype: float, na: -999}
-#     - {name: NO2_F, query: CASE WHEN NO2_F IS NULL THEN 1 ELSE 0 END, datatype: int, na: 0}
-#     - {name: O3, query: O3, datatype: float, na: 0}
-#     - {name: O3_F, query: CASE WHEN O3_F IS NULL THEN 1 ELSE 0 END, datatype: int, na: 0}
-#     - {name: CO2, query: CO2, datatype: float, na: -999}
-#     - {name: CO2_F, query: CASE WHEN CO2_F IS NULL THEN 1 ELSE 0 END, datatype: int, na: 0}
-#     - {name: CO2_DRY, query: CO2_DRY, datatype: float, na: -999}
-#     - {name: CO2_DRY_F, query: CASE WHEN CO2_dry_F IS NULL THEN 1 ELSE 0 END, datatype: int, na: 0}
-#     - {name: H2O, query: H2O, datatype: float, na: -999}
-#     - {name: H2O_F, query: CASE WHEN H2O_F IS NULL THEN 1 ELSE 0 END, datatype: int, na: 0}
-#     - {name: CO, query: CO, datatype: float, na: -999}
-#     - {name: CO_F, query: CASE WHEN CO_F IS NULL THEN 1 ELSE 0 END, datatype: int, na: 0}
-
-# BRM:
-#   source:
-#     type: DB
-#     db_prefix: empaGSN
-#     table: beromuenster_12m_1min_cal
-#     date_from: 2018-01-01T00:00:00.000
-#     na: NULL
-#     date_column:  timed / 1000
-#   dest:
-#     type: DB
-#     table: UNIBE_BRM
-#     db_prefix: CarboSense_MySQL
-#     date_from: 2018-01-01T00:00:00.000
-#     date_column: timestamp
-#     na: -999
-#   columns:
-#     - {name: timestamp, query: timed / 1000, datatype: int, na: 0}
-#     - {name: CO2, query: CO2_DRY * (1 - H2O/100), datatype: float, na: -999}
-#     - {name: CO2_F, query:  1 - (isnull(CO2_DRY) or isnull(H2O) or CO2_DRY > 2000 OR CO2_DRY < 200), datatype: int, na: 0}
-#     - {name: CO2_DRY, query: CO2_DRY, datatype: float, na: -999}
-#     - {name: CO2_DRY_F, query: 1 - (isnull(CO2_DRY) or CO2_DRY > 2000 OR CO2_DRY < 200), datatype: int, na: 0}
-#     - {name: CO, query: CO, datatype: float, na: -999}
-#     - {name: CO_F, query: 1 - isnull(CO), datatype: int, na: 0}
-#     - {name: H2O, query: H2O, datatype: float, na: -999}
-#     - {name: H2O_F, query:  1 - isnull(H2O), datatype: int, na: 0}
-# GIMM:
-#   source:
-#     type: DB
-#     db_prefix: empaGSN
-#     table: gimmiz_1min_cal
-#     date_from: 2018-01-01T00:00:00.000
-#     na: NULL
-#     date_column:  timed / 1000
-#   dest:
-#     type: DB
-#     table: UNIBE_GIMM
-#     db_prefix: CarboSense_MySQL
-#     date_from: 2018-01-01T00:00:00.000
-#     na: -999
-#     date_column:  timestamp
-#   columns:
-#     - {name: timestamp, query: timed / 1000, datatype: int, na: 0}
-#     - {name: CO2, query: CO2_DRY * (1 - H2O/100), datatype: float, na: -999}
-#     - {name: CO2_F, query:  1 - (((VALVEPOS = 5) OR (CO2_DRY IS NULL) OR (H2O IS NULL))), datatype: int, na: 0}
-#     - {name: CO2_DRY, query: CO2_DRY, datatype: float, na: -999}
-#     - {name: CO2_DRY_F, query: 1 - (((VALVEPOS = 5) OR (CO2_DRY IS NULL))), datatype: int, na: 0}
-#     - {name: CO, query: CO, datatype: float, na: -999}
-#     - {name: CO_F, query: 1 - isnull(CO), datatype: int, na: 0}
-#     - {name: H2O, query: H2O, datatype: float, na: -999}
-#     - {name: H2O_F, query:  1 - isnull(H2O), datatype: int, na: 0}
 
