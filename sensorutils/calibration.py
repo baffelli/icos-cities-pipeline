@@ -18,7 +18,7 @@ import pandas as pd
 import sqlalchemy
 import sqlalchemy as sqa
 import statsmodels.tools as smtools
-from sqlalchemy import func as func
+from sqlalchemy import alias, func as func
 from sqlalchemy.orm import aliased
 from statsmodels.regression.linear_model import OLS, RegressionResults, OLSResults
 from statsmodels.regression.rolling import RollingOLS
@@ -249,6 +249,19 @@ def query_sensor_data(session: sqa.orm.Session, id: Union[str, int], type: du.Av
     used downstream in other queries.
     """
     tb = get_table(type)
+    qr = sqa.select(tb).filter(
+        (tb.time.between(int(start.timestamp()), int(end.timestamp()))) &
+        (tb.id == id)
+    )
+    return qr
+
+
+def query_level2_data(session: sqa.orm.Session, id: Union[str, int], start: dt.datetime, end: dt.datetime) -> sqlalchemy.sql.expression.Selectable:
+    """
+    Gets the calibrated sensor data for a given id and time period. Returns a :obj:`sqalchemy.orm.Query` to be
+    used downstream in other queries.
+    """
+    tb = mods.Level2Data
     qr = sqa.select(tb).filter(
         (tb.time.between(int(start.timestamp()), int(end.timestamp()))) &
         (tb.id == id)
@@ -615,7 +628,7 @@ def apply_HPP_calibration(dt_in: pd.DataFrame, cal_pars: List[mods.CalibrationPa
     """
     def inner_pred(di: pd.DataFrame, pms: mods.CalibrationParameters) -> pd.DataFrame:
         valid = di['date'].between(pms.valid_from, pms.valid_to)
-        dt_pred = di[valid]
+        dt_pred = di[valid].copy()
         dt_pred['const'] = 1
         pms_sm = pms.to_statsmodel()
         reg_names = [n for n in pms_sm.params.keys()]
@@ -804,3 +817,55 @@ def filter_LP8_features(features: pd.DataFrame) -> pd.DataFrame:
     breakpoint()
     ir_diff = (features.set_index('date')['sensor_ir'].diff().abs()).values < 1000
     return features[rh_cond & ir_diff]
+
+
+def get_drift_correction_data(session: sqa.orm.Session, sensor_id: Union[int, str], start: dt.datetime, end: dt.datetime):
+    """
+    Get data for the senseair LP8 drift correction. To do so,
+    take the data from `co2_level2`, join it with
+    `picarro_data`, if they are co-located. Otherwise, get the data
+    from `DUE1`
+    """
+    ref_data = sqa.select(mods.PicarroData).with_only_columns(
+        mods.PicarroData.time.label("ref_time"),
+        mods.PicarroData.id.label("ref_location"),
+        mods.PicarroData.CO2_DRY.label("ref_CO2_DRY"),
+        mods.PicarroData.CO2.label("ref_CO2"),
+    ).cte()
+    ref_data_due = sqa.select(mods.PicarroData).with_only_columns(
+    mods.PicarroData.time.label("ref_DUE_time"),
+    mods.PicarroData.CO2_DRY.label("ref_DUE_CO2_DRY"),
+    mods.PicarroData.CO2.label("ref_DUE_CO2"),
+    ).filter(mods.PicarroData.id == 'LAEG').cte()
+
+    ref_data_as = aliased(mods.PicarroData, ref_data)
+    ref_data_as_due = aliased(mods.PicarroData, ref_data_due)
+
+    qr = sqa.select(mods.Level2Data, ref_data_as, ref_data_as_due, mods.Deployment).join(
+        ref_data_as,
+        (ref_data_as.time == mods.Level2Data.time) &
+        (ref_data_as.id == mods.Level2Data.location),
+        isouter=True
+    ).join(
+        ref_data_as_due,
+        (ref_data_as_due.time == mods.Level2Data.time),
+        isouter=True
+    ).join(
+        mods.Deployment,
+        (mods.Deployment.id == mods.Level2Data.id) &
+        (mods.Level2Data.time.between(
+            sqa.func.unix_timestamp(mods.Deployment.start), 
+            func.coalesce(sqa.func.unix_timestamp(mods.Deployment.end), sqa.func.unix_timestamp())
+            )
+        )
+    ).filter(
+        mods.Level2Data.time.between(start.timestamp(), end.timestamp()) &
+        (mods.Level2Data.id == sensor_id) &
+        (mods.Deployment.mode.notin_([2,3]))
+    ).add_columns(
+        (mods.Level2Data.location == ref_data_as.id).label('ref_is_collocated'),
+        func.coalesce(ref_data_as.CO2, ref_data_as_due.CO2).label('ref_combined_CO2'),
+    )
+    data = pd.read_sql_query(qr, session.connection())
+    data['date'] = pd.to_datetime(data['timestamp'], unit='s')
+    return data

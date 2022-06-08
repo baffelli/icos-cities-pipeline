@@ -385,7 +385,7 @@ class PicarroData(base.Base, TimeseriesData):
     __sa_dataclass_metadata_key__ = "sa"
     id: str = Column("LocationName", String, primary_key=True)
     time: int = Column("timestamp", Integer, primary_key=True)
-    battery: float = Column("battery", Float)
+    #battery: float = Column("battery", Float)
     valvepos: float = Column("valvepos", Float)
     CO2: float = Column(Float)
     CO2_F: int = Column(Integer)

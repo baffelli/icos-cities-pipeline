@@ -860,7 +860,7 @@ logger.debug(
 
 b_pth: pl.Path = args.plot
 # Starting date for calibration
-start = du.CS_START if args.full else dt.datetime.now() - dt.timedelta(days=60)
+start = du.ICOS_START if args.full else dt.datetime.now() - dt.timedelta(days=60)
 end = dt.datetime.now()
 backfill_days = (end - start).days
 for current_id in ids_to_process:
@@ -1007,14 +1007,14 @@ for current_id in ids_to_process:
                     logger.info(f"No calibration data between {start} and {end} ")
                     continue
             # Compute calibration features
-            target = ['cyl_CO2_comp']
-            features = ['sensor_CO2_comp']
+            target = ['cyl_CO2']
+            features = ['sensor_CO2']
             cal_features = prepare_HPP_features(cal_data, fit=True)
             #Calibration window
-            interval = 2
+            interval = 4
             #Call bottle calibration
             logger.info(f"Computing two point calibration for {id}")
-            cal_fit = cal.HPP_two_point_calibration(cal_features, target, features, window= interval)
+            cal_fit = cal.HPP_two_point_calibration(cal_features, target, features, window = interval)
             #Predict
             cal_params  = [a for a,c in cal_fit]
             cal_pred = cal.apply_HPP_calibration(cal_features, cal_params)
