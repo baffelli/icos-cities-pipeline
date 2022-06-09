@@ -22,6 +22,8 @@ _export:
 +reference_data:
     +DUE:
         sh>: python3.10 ${base_folder}/CarbosenseDatabaseTools/import_picarro_data.py ${reference_config} DUE
+    +LAEG:
+        sh>: python3.10 ${base_folder}/CarbosenseDatabaseTools/import_picarro_data.py ${reference_config} LAEG
 
 
 #Import bottle calibration
@@ -29,22 +31,24 @@ _export:
     +import_reference_bottles:
         sh>: python3.10 ${base_folder}/CarbosenseDatabaseTools/import_bottle_calibrations.py '${icos_folder}/Network/Sensors/HPP/Kalibriergas/Calibration Gas Data Processing/'  'cylinder_analysis_picarro.xlsx'
 
-#Copy meteo from server
+
 +meteo:
+    #Copy meteo from server
     +copy_meteoswiss:
         sh>: rsync -a amrs503@m2m.empa.ch:/data/meteoschweiz/*.csv ${data_folder}/METEO/MCH_DAILY_DATA_DUMP
+    #Import CSV into DB
     +import_meteoswiss:
         sh>: python3.10 MeteoSwissData4Carbosense/transfer_meteo_data.py ${base_folder}/config/meteo_data_mapping.yml '${data_folder}/METEO/MCH_DAILY_DATA_DUMP/' 'VQEA33*.csv'
+    # Interpolate pressure at locations where a sensor was deployed
     +pressure_interpolation:
         +list_locations:
-            py>: digdagutils.list_locations
-            dest: 'locations'       
-            start: ${project_begin}
+            py>: digdagutils.list_sensors
+            dest: 'sensors'       
         +compute:
             for_each>: 
-                loc: ${locations}
+                sens: ${sensors['LP8']}
             _do:
-                sh>: python3 MeteoSwissData4Carbosense/pressure_interpolation.py ${loc} DUE1 ${project_begin}
+                sh>: python3 MeteoSwissData4Carbosense/pressure_interpolation.py ${sens} DUE1 ${project_begin}
 
 #Copy raw data
 +copy_raw_data:
@@ -52,6 +56,7 @@ _export:
     +list_sensors:
         py>: digdagutils.list_sensors
         dest: 'sensors'
+    #For each sensor, copy the raw data from influx DB into "our" DB
     +load:
         for_each>:
             sens: ['LP8', 'HPP']
@@ -62,14 +67,17 @@ _export:
                 sh>: python3.10 ${base_folder}/CarbosenseDatabaseTools/dump_raw_data_from_influxdb.py ${base_folder}/config/co2_sensor_mapping.yml ${sens} ${i} ${project_begin}
 
 +level2_processing:
+    #List sensors to process
     +list_sensors:
         py>: digdagutils.list_sensors
         dest: 'sensors'
+    #For each HPP sensor, compute the bottle calibration
     +bottle_calibration:
         for_each>: 
             sens: ${sensors['HPP']}
         _do: 
             sh>: python3.10 ${base_folder}/HPP_measurement_processing/process_hpp_data.py ${cal_config} calibrate HPP ${sens} --plot ${plot_folder}
+    #Predict sensor values
     +prediction:
         for_each>:
             sens: ['LP8', 'HPP']
@@ -78,9 +86,29 @@ _export:
                 i: ${sensors[sens]}
             _do:
                 sh>: python3.10 ${base_folder}/HPP_measurement_processing/process_hpp_data.py ${cal_config} process ${sens} ${i} --plot ${plot_folder}
+    #For LP8 sensor apply the drift correction algorithm
+    +drift_correction:
+        for_each>: 
+            sens: ${sensors['LP8']}
+        _do: 
+            sh>: python3.10 ${base_folder}/HPP_measurement_processing/drif_correction.py ${cal_config} calibrate ${sens} --plot ${plot_folder}
 
 #Upload metadata to decentlab-db
 +metadata:
     +upload_metadata:
         sh>: python3  ${base_folder}/UploadProcessedMeasurementsToDecentlabDB/importer.py
 
+# #Upload data to decentlab db
+# +upload_data
+#     +upload_data:
+#         for_each>:
+#             sens: ['LP8', 'HPP']
+#         _do:
+#             for_each>: 
+#                 i: ${sensors[sens]}
+#             _do:
+#                 sh>: python3 ${base_folder}/UploadProcessedMeasurementsToDecentlabDB/upload_measurements.py ${sens} ${i}
+
+#Import calibration data (This is just an example)
+#+import_chamber:
+    #sh:> python3.10 /project/CarboSense/Software/REF_measurement_processing/import_climate_chamber_data.py climate_new '/mnt/basi/ICOS-Cities/Network/Sensors/Senseair-LP8/Calibration April 22/Run E (Additional Calibration runs)'/ '*.xlsx' picarro_data DUE7

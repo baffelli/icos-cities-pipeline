@@ -837,11 +837,11 @@ def get_drift_correction_data(session: sqa.orm.Session, sensor_id: Union[int, st
     mods.PicarroData.CO2_DRY.label("ref_DUE_CO2_DRY"),
     mods.PicarroData.CO2.label("ref_DUE_CO2"),
     ).filter(mods.PicarroData.id == 'LAEG').cte()
-
     ref_data_as = aliased(mods.PicarroData, ref_data)
     ref_data_as_due = aliased(mods.PicarroData, ref_data_due)
+    pressure_as = mods.PressureInterpolation
 
-    qr = sqa.select(mods.Level2Data, ref_data_as, ref_data_as_due, mods.Deployment).join(
+    qr = sqa.select(mods.Level2Data, ref_data_as, ref_data_as_due, mods.Deployment, pressure_as).join(
         ref_data_as,
         (ref_data_as.time == mods.Level2Data.time) &
         (ref_data_as.id == mods.Level2Data.location),
@@ -858,6 +858,10 @@ def get_drift_correction_data(session: sqa.orm.Session, sensor_id: Union[int, st
             func.coalesce(sqa.func.unix_timestamp(mods.Deployment.end), sqa.func.unix_timestamp())
             )
         )
+    ).join(
+       pressure_as,
+        (pressure_as.id == mods.Level2Data.location) &
+        (pressure_as.time == mods.Level2Data.time)
     ).filter(
         mods.Level2Data.time.between(start.timestamp(), end.timestamp()) &
         (mods.Level2Data.id == sensor_id) &
@@ -866,6 +870,7 @@ def get_drift_correction_data(session: sqa.orm.Session, sensor_id: Union[int, st
         (mods.Level2Data.location == ref_data_as.id).label('ref_is_collocated'),
         func.coalesce(ref_data_as.CO2, ref_data_as_due.CO2).label('ref_combined_CO2'),
     )
+    breakpoint()
     data = pd.read_sql_query(qr, session.connection())
     data['date'] = pd.to_datetime(data['timestamp'], unit='s')
     return data

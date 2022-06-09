@@ -582,7 +582,7 @@ class DBSource(DatabaseSource):
         return (sqa.sql.literal_column(f"{self.grouping_key}").label(label) if self.grouping_key else None)
 
 
-    def date_group_query(self, label: Optional[str] = None) -> sqa.orm.Query:
+    def date_group_query(self, label: Optional[str] = None) -> sqa.sql.ColumnElement:
         """
         Creates a :obj:`sqlalchem.orm.Query` representation of 
         the query used to identify the files in the database backend
@@ -592,7 +592,7 @@ class DBSource(DatabaseSource):
         label: str
             An optional label to rename the column of the date group
         """
-        return sqa.orm.Query(self.date_expression().label(label))
+        return self.date_expression().label(label)
 
     @check_db
     def list_files(self, group:str=None, *args) -> pd.DataFrame:
@@ -630,22 +630,19 @@ class DBSource(DatabaseSource):
 
         
         metadata = sqa.MetaData(bind=self.eng)
-        table = sqa.Table(self.table, metadata, autoload=True)
-        Session = sessionmaker(self.eng)
-        session = Session()
+        table = sqa.Table(self.table, metadata)
         lb = 'date_group'
-        dq = self.date_group_query(label=lb).with_session(
-            session).select_from(table).add_columns(*table.columns)
+        dq = sqa.select(table).add_columns(*[sqa.text('*'), self.date_group_query(label=lb), self.group_expression()])
         filts = (self.date_expression() == date.strftime('%Y-%m-%d'), )
         if (group or self.group) and self.grouping_key:
             grp = (group or self.group)
-            filts = filts + (table.c[self.grouping_key] == grp, )
+            filts = filts + (self.group_expression() == grp, )
         else:
             pass
         qs = dq.filter(*filts)
-        qs_comp = qs.statement.compile(compile_kwargs={"literal_binds": True})
+        qs_comp = qs.compile(compile_kwargs={"literal_binds": True})
         logger.debug(f"The query is {qs_comp}")
-        data = pd.read_sql(qs.statement, self.eng).drop(lb, axis=1)
+        data = pd.read_sql(qs, self.eng).drop(lb, axis=1)
         if self.na:
             dt_rep = data.replace([self.na], np.NaN)
         else:
@@ -684,7 +681,7 @@ class DBSource(DatabaseSource):
         with self.eng.connect() as con:
             tran = con.begin()
             #Add group value if missing column is missing
-            if self.grouping_key not in input_filled.columns:
+            if self.grouping_key not in input_filled.columns and self.grouping_key is not None:
                 input_filled[self.grouping_key] = (self.group or group)
             input_filled.to_sql(self.table, con, method=method,
                                 index=False, if_exists='append')

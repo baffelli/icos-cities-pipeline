@@ -422,7 +422,8 @@ class PressureInterpolation(base.Base, TimeseriesData):
     """
     __tablename__ = "pressure_interpolation"
     __sa_dataclass_metadata_key__ = "sa"
-    id: str = Column("location", String, primary_key=True)
+    sensor_id: str = Column("sensor_id", String, primary_key=True)
+    location: str = Column("location", String, primary_key=True)
     time: int = Column("timestamp", Integer, primary_key=True)
     pressure: float = Column(Float)
 
