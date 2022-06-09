@@ -545,10 +545,13 @@ class DBSource(DatabaseSource):
     na: str
         A string representing missing values
     For the other attributes, see :obj:`DataSource` or :obj:`DatabaseSource`.
+    timestamp_column: str or none
+        If set, uses this column /expression to read data instead of using the date_column expression. Might be faster if the data has an index on the timestamp
     """
     db_prefix: Optional[str] = None
     na: Optional[str | int] = None
     metadata: Optional[sqa.MetaData] = None
+    timestamp_column: Optional[str] = None
     
     def attach_db(self, eng:sqa.engine.Engine):
         """
@@ -573,6 +576,14 @@ class DBSource(DatabaseSource):
         a SQL statement for sqlalchemy. Used to construct the query in `list_files`
         """
         return sqa.sql.literal_column(f"{self.date_column}").label(label)
+
+    def timestamp_expression(self, label='timestamp') -> Optional[sqa.sql.ColumnElement]:
+        """
+        If the object has the "timestamp_column" property set, 
+        generate a sql column element to filter by this object
+        """
+        if self.timestamp_column:
+             return sqa.sql.literal_column(f"{self.timestamp_column}").label(label)
 
     def group_expression(self, label='group') -> Optional[sqa.sql.ColumnElement]:
         """
@@ -633,7 +644,11 @@ class DBSource(DatabaseSource):
         table = sqa.Table(self.table, metadata)
         lb = 'date_group'
         dq = sqa.select(table).add_columns(*[sqa.text('*'), self.date_group_query(label=lb), self.group_expression()])
-        filts = (self.date_expression() == date.strftime('%Y-%m-%d'), )
+        if self.timestamp_column is not  None:
+            first_ts, last_ts = du.day_range(date)
+            filts = (self.timestamp_expression().between(first_ts.timestamp(), last_ts.timestamp()), )
+        else:
+            filts = (self.date_expression() == date.strftime('%Y-%m-%d'), )
         if (group or self.group) and self.grouping_key:
             grp = (group or self.group)
             filts = filts + (self.group_expression() == grp, )
