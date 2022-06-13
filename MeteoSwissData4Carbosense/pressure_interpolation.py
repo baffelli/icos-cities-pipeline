@@ -65,12 +65,15 @@ def get_loc_info(session: session, location: str, start: dt.datetime) -> mods.Lo
     )
     return session.execute(qr).first()
 
-def interp_pres(dt_in: pd.DataFrame, id:int, source_loc: mods.Location, loc: mods.Location, dep: mods.Deployment) -> List[mods.PressureInterpolation]:
+def interp_pres(dt_in: pd.DataFrame, id:int, source_loc: mods.Location, loc: mods.Location, dep: mods.Deployment) -> pd.DataFrame:
     pressure_interp = pd.DataFrame({
-    'timestamp': dt_in['timestamp'], 
+    'timestamp': dt_in['timestamp'],
+    'location': loc.id,
+    'sensor_id': id,
     'pressure': calc.pressure_interpolation(dt_in['pressure'] * 100, calc.absolute_temperature(dt_in['T']), source_loc.h, loc.h + (dep.height or 0)) / 1e2
     }).replace(np.nan, None).dropna(subset='pressure')
-    return [mods.PressureInterpolation(time = tp.timestamp, location = loc.id, sensor_id=id, pressure = tp.pressure) for tp in pressure_interp.itertuples()]
+    #return [mods.PressureInterpolation(time = tp.timestamp, location = loc.id, sensor_id=id, pressure = tp.pressure) for tp in pressure_interp.itertuples()]
+    return pressure_interp
 
 
 with session() as ses:
@@ -86,6 +89,7 @@ with session() as ses:
             date_from = first_date,
             table= mods.PicarroData.__tablename__, 
             date_column='CAST(FROM_UNIXTIME(timestamp) AS DATE)', 
+            timestamp_column='timestamp', 
             column_filter='pressure IS NOT NULL',
             grouping_key='LocationName',
             group=args.reference,
@@ -96,7 +100,8 @@ with session() as ses:
         dest = fu.DBSource(
             date_from = first_date,
             table=mods.PressureInterpolation.__tablename__, 
-            date_column='CAST(FROM_UNIXTIME(timestamp) AS DATE)', 
+            date_column='CAST(FROM_UNIXTIME(timestamp) AS DATE)',
+            timestamp_column='timestamp', 
             column_filter='pressure IS NOT NULL',
             grouping_key='CONCAT(sensor_id, location)',
             group=f"{args.id}{dest_loc.id}",
@@ -107,6 +112,7 @@ with session() as ses:
         logger.info(f"Listing all pressure entries in {dest_loc.id}")
         #Filter missing
         missing = [m for m in map.list_files_missing_in_dest(all=args.import_all) if m<= dep.end]
+        method = du.create_upsert_metod(md)
         for m in missing:
             logger.info(f"Reading reference pressure for {args.id} from {args.reference} on {m}")
             sf = source.read_file(m)
@@ -118,6 +124,6 @@ with session() as ses:
             logger.info(f"Interpolating pressure for {args.id} in {dest_loc.id} on {m}")
             pi = interp_pres(sf_out, args.id, source_loc, dest_loc, dep)
             logger.info(f"Storing data")
-            [ses.merge(p) for p in pi]
-            ses.commit()
+            pi.to_sql(mods.PressureInterpolation.__tablename__, eng, if_exists='append', method=method, index=False)
+            #ses.commit()
 
