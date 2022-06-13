@@ -28,6 +28,7 @@ from sensorutils import data as du
 from sensorutils import db, log
 from sensorutils import models as mods
 from sensorutils import utils
+from sensorutils import calc
 
 import copy as cp 
 
@@ -165,9 +166,9 @@ def query_sensor_data_agg(session: sqa.orm.Session, id: Union[int, str],
     log.logger.debug(f"The query is {qr_agg}")
     return qr_agg
 
-def get_pressure_interpolation(session: sqa.orm.Session, location: str, start: dt.datetime, end: dt.datetime, averaging_time: int) -> pd.DataFrame:
+def get_pressure_interpolation(session: sqa.orm.Session, location: str, id: int, start: dt.datetime, end: dt.datetime, averaging_time: int) -> pd.DataFrame:
     """
-    Gets the (interpolated) pressure value for the location `location` 
+    Gets the (interpolated) pressure value for the location `location` and the sensor `id`
     between the times `start` and `end`
     """
     tb = mods.PressureInterpolation
@@ -176,7 +177,8 @@ def get_pressure_interpolation(session: sqa.orm.Session, location: str, start: d
     ae = make_aggregate_expression(tb.time, "time", avg_time=averaging_time)
     qr = sqa.select(tb).filter(
         (tb.time.between(start.timestamp(), end.timestamp())) &
-        (tb.id == location)
+        (tb.location == location) &
+        (tb.sensor_id == id)
         ).with_only_columns(*(aggs + [ae])).group_by(ae)
     return pd.read_sql(qr, session.connection())
 
@@ -283,6 +285,8 @@ def get_aggregations(type: du.AvailableSensors) -> dict:
                 'sensor_mcu_t': 'AVG(NULLIF(senseair_hpp_temperature_mcu, -999))',
                 'sensor_calibration_a': 'MIN(COALESCE(calibration_a, 0))',
                 'sensor_calibration_b': 'MIN(COALESCE(calibration_b, 0))',
+                'sensor_previous_calibration_a': 'MIN(COALESCE(previous_calibration_a, 0))',
+                'sensor_previous_calibration_b': 'MIN(COALESCE(previous_calibration_b, 0))',
             }
         case du.AvailableSensors.LP8:
             agg = {
@@ -314,19 +318,27 @@ def get_sensor_data(session: sqa.orm.Session, id: int, type: du.AvailableSensors
     return dt
 
 
-def get_HHP_calibration_data(session: sqa.orm.Session, id: int, start: dt.datetime, end: dt.datetime, avg_time: int = 120) -> pd.DataFrame:
+def get_HPP_calibration_data(session: sqa.orm.Session, id: int, start: dt.datetime, end: dt.datetime, avg_time: int = 120) -> pd.DataFrame:
     """
     Get the data for the senseair HPP Sensor. For each calibration period, also returns the corresponding
     cylinder analysis
     """
     qr = query_sensor_data(session, id, du.AvailableSensors.HPP, start, end)
-    qr_filt = qr.filter((mods.HPPData.calibration_a == 1) |
-                        (mods.HPPData.calibration_b == 1)).subquery()
+    qr_as = aliased(mods.HPPData, qr.subquery())
+    #Add the previous calibration value
+    qr_as_extra = sqa.select(qr_as).add_columns(
+                func.lag(qr_as.calibration_a).over(partition_by=qr_as.id, order_by=qr_as.time).label("previous_calibration_a"),
+                func.lag(qr_as.calibration_b).over(partition_by=qr_as.id, order_by=qr_as.time).label("previous_calibration_b")
+    ).subquery()
+
+    qr_filt = sqa.select(qr_as_extra).filter((qr_as_extra.c.calibration_a == 1) |
+                        (qr_as_extra.c.calibration_b == 1)).subquery()
+
     hpp_as = aliased(mods.HPPData, qr_filt)
-    ae = make_aggregate_expression(hpp_as.time, "time", avg_time)
+    ae = make_aggregate_expression(qr_filt.c.time, "time", avg_time)
     agg = get_aggregations(du.AvailableSensors.HPP)
     ac = make_aggregate_columns(agg)
-    hpp_agg = sqa.select(hpp_as).group_by(*[ae]).with_only_columns(*[ac + [ae, hpp_as.id]]).cte()
+    hpp_agg = sqa.select(qr_filt).group_by(*[ae]).with_only_columns(*[ac + [ae, hpp_as.id]]).cte()
     sf = sqa.select(mods.Sensor).filter(mods.Sensor.type == du.AvailableSensors.HPP.value).subquery()
     sens_as = aliased(mods.Sensor, sf)
     #Get sensor info
@@ -342,8 +354,8 @@ def get_HHP_calibration_data(session: sqa.orm.Session, id: int, start: dt.dateti
             sqa.func.unix_timestamp(sens_as.start),
             sqa.func.coalesce(sqa.func.unix_timestamp(sens_as.end), sqa.func.unix_timestamp()))
     ).where(
-        ((hpp_agg.c.sensor_calibration_a == 1) & (mods.CylinderDeployment.inlet == 'a')) |
-        ((hpp_agg.c.sensor_calibration_b == 1) & (mods.CylinderDeployment.inlet == 'b'))  
+        (((hpp_agg.c.sensor_calibration_a == 1) & (mods.CylinderDeployment.inlet == 'a'))) |
+        (((hpp_agg.c.sensor_calibration_b == 1) & (mods.CylinderDeployment.inlet == 'b')))
     ).order_by(hpp_agg.c.time).add_columns(sens_as.serial)
     #get the data
     res = session.execute(jq).all()
@@ -395,7 +407,7 @@ def get_cal_ts(session: sqa.orm.Session, id: int, type: du.AvailableSensors, sta
                                           e.cal_start, e.cal_end, averaging_time, picarro_aggs)
         st = du.AvailableSensors[e.sensor_type]
         #Call pressure interpolation
-        press = get_pressure_interpolation(session, e.location, e.cal_start, e.cal_end, averaging_time)
+        press = get_pressure_interpolation(session, e.location, e.sensor_id, e.cal_start, e.cal_end, averaging_time)
         sensor_res = get_sensor_data_agg(session, e.sensor_id, st,
                                          e.cal_start, e.cal_end, averaging_time, aggs)
         if not picarro_res.empty:
@@ -477,7 +489,7 @@ def make_calibration_parameters_table(table: pd.DataFrame) -> List[mods.Calibrat
     return objs
 
 
-def prepare_level2_data(dt_in: pd.DataFrame, model_id: Union[str, int]) -> List[mods.Level2Data]:
+def prepare_level2_data(dt_in: pd.DataFrame, model_id: Union[str, int],  pred_col: str = 'CO2_pred_comp') -> List[mods.Level2Data]:
     """
     Rename columns to store and produce a Leve2Data object
     """
@@ -485,7 +497,7 @@ def prepare_level2_data(dt_in: pd.DataFrame, model_id: Union[str, int]) -> List[
         'location': 'location',
         'time': 'time',
         'sensor_id': 'id',
-        'CO2_pred': 'CO2',        
+        pred_col: 'CO2',        
         'H2O': 'H2O',
         'sensor_RH': 'relative_humidity',
         'sensor_t': 'temperature',
@@ -572,7 +584,7 @@ def convert_calibration_parameters(cp: OLSResults,
                                       computed=computed, device=device)
 
 def HPP_two_point_calibration(dt_in: pd.DataFrame, endog: List[str], exog: List[str], 
-window:int = 10) -> List[Tuple[mods.CalibrationParameters, mods.ModelFitPerformance]]:
+window:int = 10, duration_threshold: int = 120) -> List[Tuple[mods.CalibrationParameters, mods.ModelFitPerformance]]:
     """
     Estimate the HPP two point calibration parameter
     using a grouped regression (grouped by `window` days) and returns a list
@@ -582,12 +594,13 @@ window:int = 10) -> List[Tuple[mods.CalibrationParameters, mods.ModelFitPerforma
 
     def inner_cal(data: pd.DataFrame) -> pd.Series:
         #Check wether there are enough two point calibrations
-        
         valid = ~data[endog+exog].isna().any(axis=1)
-        valid_final = valid & (data['inlet_elapsed'] > 240)
+        valid_final = valid & (data['inlet_elapsed'] > duration_threshold)
         data_valid = data[valid_final]
         co2_levels = data_valid[endog[0]].unique()
         span = np.abs(np.diff(co2_levels))[0] if len(co2_levels) > 1 else 0
+        if len(data_valid) == 0:
+            breakpoint()
         if span > 100:
             fit = OLS(data_valid[endog], smtools.add_constant(data_valid[exog])).fit()
         else:
@@ -748,9 +761,10 @@ def plot_HPP_calibration(dt: pd.DataFrame) -> plt.Figure:
     fig = mpl.figure.Figure()
     if not dt.empty:
         dt_scaled = dt['cal_elapsed'] * (dt['cal_cycle'] - dt['cal_cycle'].min() + 1)
+        dt_scaled = dt['date']
         ax = fig.add_subplot(211)
         sz = 0.5
-        ax.scatter(dt_scaled, dt['sensor_CO2_comp'], color=get_line_color(measurementType.ORIG), label='Uncalibrated', s=sz)
+        ax.scatter(dt_scaled, dt['sensor_CO2'], color=get_line_color(measurementType.ORIG), label='Uncalibrated', s=sz)
         ax.scatter(dt_scaled, dt['CO2_pred'], color=get_line_color(measurementType.CAL), label='Calibrated', s=sz)
         ax.scatter(dt_scaled, dt['cyl_CO2'], color=get_line_color(measurementType.REF), label='Reference', s=sz)
         ax.set_ylabel('CO2 [ppm]')
@@ -814,41 +828,44 @@ def filter_LP8_features(features: pd.DataFrame) -> pd.DataFrame:
     - no abrupt IR changes
     """
     rh_cond  = features['sensor_RH'] < 85 
-    breakpoint()
     ir_diff = (features.set_index('date')['sensor_ir'].diff().abs()).values < 1000
     return features[rh_cond & ir_diff]
 
 
-def get_drift_correction_data(session: sqa.orm.Session, sensor_id: Union[int, str], start: dt.datetime, end: dt.datetime):
+def get_drift_correction_data(session: sqa.orm.Session, sensor_id: Union[int, str], start: dt.datetime, end: dt.datetime, ref_loc=['LAEG', 'DUE1']) -> pd.DataFrame:
     """
     Get data for the senseair LP8 drift correction. To do so,
     take the data from `co2_level2`, join it with
-    `picarro_data`, if they are co-located. Otherwise, get the data
-    from `DUE1`
+    `picarro_data` with the locations in `ref_loc`. This produces a cartesian product,
+    this should be taken care by the drift correction function.
     """
-    ref_data = sqa.select(mods.PicarroData).with_only_columns(
-        mods.PicarroData.time.label("ref_time"),
+    #Get data from picarro
+    ref_data = sqa.select(mods.PicarroData, mods.Location).join(
+        mods.Location,
+        (mods.Location.id == mods.PicarroData.id) &
+        (mods.PicarroData.time.between(func.unix_timestamp(mods.Location.start), func.coalesce(func.unix_timestamp(), func.unix_timestamp(mods.Location.end))))
+    ).with_only_columns(
+        mods.PicarroData.time.label(f"ref_loc_time"),
+        mods.PicarroData.CO2_DRY.label("ref_loc_CO2_DRY"),
+        mods.PicarroData.CO2.label("ref_loc_CO2"),
+        mods.PicarroData.pressure.label("ref_loc_pressure"),
         mods.PicarroData.id.label("ref_location"),
-        mods.PicarroData.CO2_DRY.label("ref_CO2_DRY"),
-        mods.PicarroData.CO2.label("ref_CO2"),
-    ).cte()
-    ref_data_due = sqa.select(mods.PicarroData).with_only_columns(
-    mods.PicarroData.time.label("ref_DUE_time"),
-    mods.PicarroData.CO2_DRY.label("ref_DUE_CO2_DRY"),
-    mods.PicarroData.CO2.label("ref_DUE_CO2"),
-    ).filter(mods.PicarroData.id == 'LAEG').cte()
+        mods.Location.x.label('ref_loc_x'),
+        mods.Location.x.label('ref_loc_y'),
+        mods.Location.h.label("ref_h")
+    ).filter(
+        (mods.PicarroData.id.in_(ref_loc))
+        ).subquery()
     ref_data_as = aliased(mods.PicarroData, ref_data)
-    ref_data_as_due = aliased(mods.PicarroData, ref_data_due)
-    pressure_as = mods.PressureInterpolation
-
-    qr = sqa.select(mods.Level2Data, ref_data_as, ref_data_as_due, mods.Deployment, pressure_as).join(
-        ref_data_as,
-        (ref_data_as.time == mods.Level2Data.time) &
-        (ref_data_as.id == mods.Level2Data.location),
-        isouter=True
-    ).join(
-        ref_data_as_due,
-        (ref_data_as_due.time == mods.Level2Data.time),
+    pressure_as = aliased(mods.PressureInterpolation, sqa.select(mods.PressureInterpolation).with_only_columns(
+        mods.PressureInterpolation.pressure.label("pressure_interp"),
+        mods.PressureInterpolation.location,
+        mods.PressureInterpolation.sensor_id,
+        mods.PressureInterpolation.time
+    ).subquery())
+    qr = sqa.select(mods.Level2Data, ref_data, mods.Deployment, pressure_as.pressure).join(
+        ref_data,
+        (ref_data.c.ref_loc_time == mods.Level2Data.time),
         isouter=True
     ).join(
         mods.Deployment,
@@ -859,18 +876,121 @@ def get_drift_correction_data(session: sqa.orm.Session, sensor_id: Union[int, st
             )
         )
     ).join(
-       pressure_as,
-        (pressure_as.id == mods.Level2Data.location) &
-        (pressure_as.time == mods.Level2Data.time)
+        pressure_as,
+        (pressure_as.time == mods.Level2Data.time) &
+        (pressure_as.location == mods.Level2Data.location) &
+        (pressure_as.sensor_id == mods.Level2Data.id) 
     ).filter(
         mods.Level2Data.time.between(start.timestamp(), end.timestamp()) &
         (mods.Level2Data.id == sensor_id) &
         (mods.Deployment.mode.notin_([2,3]))
-    ).add_columns(
-        (mods.Level2Data.location == ref_data_as.id).label('ref_is_collocated'),
-        func.coalesce(ref_data_as.CO2, ref_data_as_due.CO2).label('ref_combined_CO2'),
     )
-    breakpoint()
+    #Data is in long format ((n_obs * n_ref) x n_columns) -> make wide
     data = pd.read_sql_query(qr, session.connection())
+    #Add information
     data['date'] = pd.to_datetime(data['timestamp'], unit='s')
     return data
+
+def prepare_HPP_features(dt: pd.DataFrame, ir_col: str = "sensor_ir_lpl", fit: bool = True, plt: str = '1d') -> pd.DataFrame:
+    """
+    Prepare features for CO2 calibration / predictions
+    """
+    dt_new = dt.copy().reset_index()
+    dt_new['date'] = pd.to_datetime(dt_new['time'], unit='s')
+    dt_new["sensor_ir_log"] = - np.log(dt_new[ir_col])
+    dt_new["sensor_ir_inverse"] = 1/(dt_new[ir_col])
+    dt_new["sensor_ir_interaction_t"] = dt_new[f"sensor_t"] / \
+        dt_new[ir_col]
+    dt_new["sensor_ir_interaction_inverse_pressure"] = dt_new['sensor_pressure'] / \
+        (dt_new[ir_col])
+    dt_new['sensor_t_abs'] = calc.absolute_temperature(dt_new['sensor_t'])
+    # Water content
+    dt_new['sensor_H2O'] = calc.rh_to_molar_mixing(
+        dt_new['sensor_RH'], dt_new['sensor_t_abs'], dt_new['sensor_pressure'])
+    # Referenced CO2
+    nc_sens = calc.normalisation_constant(dt_new['sensor_pressure'], dt_new['sensor_t_abs'])
+    dt_new['nc_sens'] = nc_sens
+    dt_new['sensor_CO2_comp'] = dt_new['sensor_CO2'] * 1/nc_sens
+    if fit:
+        dt_new['cyl_CO2_comp'] = calc.dry_to_wet_molar_mixing(dt["cyl_CO2"], dt['cyl_H2O']/100) * nc_sens
+    # Dummy variable every `plt` days
+    dt_new['time_dummy'] = dt_new['date'].round(plt).astype('str')
+    #Map to single inlet
+    dt_new['inlet'] = [[None, 'a', 'b'][i] for i in (dt_new.sensor_calibration_a + dt_new.sensor_calibration_b * 2).tolist()]
+    # Start of cylinder calibration (anytime the inlet changes)
+    dt_new['inlet_change'] = (dt_new['sensor_calibration_a'] != dt_new['sensor_previous_calibration_a']) | (dt_new['sensor_calibration_b'] != dt_new['sensor_previous_calibration_b'])
+    #One full calibration cycle corresponds to two inlet changes
+    dt_new['inlet_cycle'] = dt_new['inlet_change'].cumsum()
+    dt_new['cal_cycle'] = (((dt_new['inlet_change'].cumsum() % 2)).diff() == 1).cumsum() 
+    #Calibration cycle end
+    dt_new['cal_cycle_end'] = (~dt_new['inlet'].isnull()) & (dt_new['inlet'].shift(-1).isnull()) & (dt_new['inlet_cycle'] % 2 == 0)
+    dt_new['normal_cycle'] = dt_new['cal_cycle_end'].cumsum()
+    #Elapsed time (for calibration cycle)
+    elaps_lm = lambda x: (x['date'] - x['date'].min()).dt.total_seconds()
+    if dt_new.cal_cycle.max() > 0:
+        dt_new['inlet_elapsed'] = dt_new.groupby('inlet_cycle').apply(elaps_lm).values
+        dt_new['cal_elapsed'] = dt_new.groupby('cal_cycle').apply(elaps_lm).values
+        
+    else:
+        breakpoint()
+        dt_new['inlet_elapsed'] = 0
+        dt_new['cal_elapsed'] = 0
+    # Additional features needed for fitting
+    if dt_new.normal_cycle.max() > 0:
+        dt_new['normal_elapsed'] = dt_new.groupby('normal_cycle').apply(elaps_lm).values
+    else:
+        dt_new['normal_elapsed'] = (dt_new['date'] - dt_new['date'].min()).dt.total_seconds()
+
+    if 'ref_CO2_DRY' in dt_new.columns:
+        # Normalisation constant
+        nc = calc.normalisation_constant(dt_new['ref_pressure'] * 100, dt_new['sensor_t_abs'])
+        # Compute normalised concentrations using ideal gas law
+        dt_new['sensor_H2O_comp'] = dt_new['sensor_H2O'] * nc
+        dt_new['ref_CO2'] = calc.dry_to_wet_molar_mixing(dt_new['ref_CO2_DRY'], dt_new['ref_H2O']/100)
+        dt_new['ref_CO2_comp'] =  dt_new['ref_CO2'] * nc
+    return dt_new.reset_index()
+
+
+def prepare_LP8_features(dt: pd.DataFrame, fit: bool = True,  plt: str = '1d') -> pd.DataFrame:
+    """
+    Prepare features for LP8 calibration
+    """
+    dt_new = dt.copy().reset_index()
+    dt_new['date'] = pd.to_datetime(dt_new['time'], unit='s')
+    dt_new["sensor_ir_log"] = - np.log(dt_new["sensor_ir"])
+    dt_new["sensor_t_sq"] = dt_new[f"sensor_t"]**2
+    dt_new["sensor_t_cub"] = dt_new[f"sensor_t"]**3
+    dt_new["sensor_ir_interaction_t"] = dt_new[f"sensor_t"] / \
+        dt_new["sensor_ir"]
+    dt_new["sensor_ir_interaction_t_sq"] = dt_new[f"sensor_t_sq"] / \
+        dt_new["sensor_ir"]
+    dt_new["sensor_ir_interaction_t_cub"] = dt_new[f"sensor_t_cub"] / \
+        dt_new["sensor_ir"]
+    dt_new['sensor_CO2_interaction_t'] = dt_new[f"sensor_CO2"] / \
+        dt_new[f"sensor_t"]
+    dt_new["sensor_ir_product_t"] = dt_new["sensor_ir"] * dt_new["sensor_t"]
+    dt_new["sensor_t_abs"] = calc.absolute_temperature(dt_new['sensor_t'])
+    dt_new['time_dummy'] = dt_new['date'].dt.round(plt).dt.date.astype('str')
+    dt_new['const'] = 1
+    dt_new['sensor_H2O'] = calc.rh_to_molar_mixing(dt_new['sensor_RH'], dt_new['sensor_t_abs'], dt_new['pressure_interpolation'])
+    dt_new['sensor_ir_interaction_H2O'] = dt_new["sensor_ir"] / \
+    dt_new['sensor_H2O']
+    dt_new['sensor_ir_interaction_pressure'] = dt_new['pressure_interpolation'] / dt_new['sensor_ir']
+    dt_new["nc_sens"] = calc.normalisation_constant(dt_new['pressure_interpolation'] , dt_new['sensor_t_abs'])
+    # Additional features needed for fitting but not for prediction
+    if fit:
+        try:
+            dt_new['ref_t_abs'] = calc.absolute_temperature(dt_new['ref_T'])
+            # Normalisation constant
+            dt_new["nc"] = calc.normalisation_constant(dt_new['ref_pressure'] * 100, dt_new['ref_t_abs'])
+            # Number of molecule (not concentration) at current conditions  using ideal gas law
+            #Dry to wet
+            dt_new['ref_CO2'] = calc.dry_to_wet_molar_mixing(
+                dt_new['ref_CO2_DRY'], dt_new['ref_H2O']/100)
+            #Compensate for pressure and temperature
+            dt_new['ref_CO2_comp'] = dt_new['ref_CO2'] * dt_new["nc"]
+        except KeyError:
+            dt_new["nc"] = calc.T0 / dt_new['sensor_t_abs'] 
+            pass
+    return dt_new
+

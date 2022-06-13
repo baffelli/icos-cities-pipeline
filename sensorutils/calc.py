@@ -88,7 +88,7 @@ def rh_to_molar_mixing(rh:float, t:float, p:float) -> float:
     p: float
         Pressure in Pa
     """
-    return saturation_vapor_pressure(t) * rh / 100  * 1/p
+    return saturation_vapor_pressure(t) * rh / 100  * 1/p * 100
 
 def molar_mixing_to_rh(ppm: float, t: float, p: float) -> float:
     """
@@ -115,3 +115,16 @@ def pressure_interpolation(p_ref: float, t_ref: float, h_ref: float, h_stat: flo
 
 def psi_to_bar(p: float) -> float:
     return p * 0.0689476
+
+def normalisation_constant(p:float, t:float) -> float:
+    """
+    Computes the STP normalisation constant used to normalise CO2 levels
+    to standard temperature and pressure
+    """
+    return p / P0 * T0 / t
+
+def normalise_concentration(c: float, p: float, t: float) -> float:
+    """
+    Normalises the concentration to STP (From PPM to number concentration)
+    """
+    return c * normalisation_constant(p, t)

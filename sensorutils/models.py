@@ -4,19 +4,20 @@ to represent database objects
 """
 from abc import ABC, ABCMeta
 from dataclasses import dataclass, field
+from multiprocessing.sharedctypes import Value
 from tkinter.tix import Select
 
 from sensorutils import base
 
 
-import sqlalchemy
+import sqlalchemy 
 
 
 import datetime as dt
 
 from sqlalchemy import (Column, DateTime, Float, ForeignKey, Integer, String,
                         engine, Date, PrimaryKeyConstraint)
-from sqlalchemy.orm import relationship, column_property, query_expression, aliased, object_session, foreign, remote
+from sqlalchemy.orm import relationship, column_property, query_expression, aliased, object_session, foreign, remote, util, Mapper
 from sqlalchemy.ext.declarative import declarative_base, declared_attr
 from sqlalchemy import func
 
@@ -374,7 +375,12 @@ class HPPData(base.Base, TimeseriesData):
     senseair_hpp_temperature_mcu: float = Column(Float)
     sensirion_sht21_temperature: float = Column(Float)
     sensirion_sht21_humidity: float = Column(Float)
-
+    previous_calibration_a: int = column_property(
+        func.lag(calibration_a).over(partition_by=id, order_by=time).label("previous_calibration_a")
+    )
+    previous_calibration_b: int = column_property(
+        func.lag(calibration_b).over(partition_by=id, order_by=time).label("previous_calibration_b")
+    )
 
 @dataclass
 class PicarroData(base.Base, TimeseriesData):
@@ -440,3 +446,19 @@ class PredictionPerformance(base.Base):
     rmse: Optional[float] = Column(Float)
     bias: Optional[float] = Column(Float)
     correlation: Optional[float] = Column(Float)
+
+
+def get_column_names(tb: Union[base.Base, util.AliasedClass]) -> List[str]:
+    """
+    Given an ORM mapped class, return
+    a list of columns as strings
+    """
+    insp = sqlalchemy.inspect(tb)
+    match insp:
+        case util.AliasedInsp() as als:
+            print('aliased')
+            cl = als.selectable.c
+        case Mapper() as mp:
+            print('mapper')
+            cl = mp.c
+    return [c.key for c in cl]
