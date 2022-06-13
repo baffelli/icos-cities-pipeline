@@ -73,12 +73,11 @@ def configure_paths(base: str) -> None:
     Configure paths used in subsequent tasks
     """
     lg = os.getlogin()
-    username = lg
     proj_folder = f"{base}"
     base_folder = f'{base}/Software'
     data_folder = f'{base}/Data'
     icos_folder = f'/mnt/{lg}/ICOS-Cities'
-    plot_folder = f'{username}/Network/Processing/'
+    plot_folder = f'{icos_folder}/Network/Processing/'
     reference_config = f'{base_folder}/config/picarro_mapping.yml'
     cal_config =  f'{base_folder}/config/calibration_mapping.yml'
     digdag.env.store({k:v for k,v in locals().items()})
