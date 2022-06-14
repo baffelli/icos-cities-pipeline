@@ -375,12 +375,12 @@ class HPPData(base.Base, TimeseriesData):
     senseair_hpp_temperature_mcu: float = Column(Float)
     sensirion_sht21_temperature: float = Column(Float)
     sensirion_sht21_humidity: float = Column(Float)
-    previous_calibration_a: int = column_property(
-        func.lag(calibration_a).over(partition_by=id, order_by=time).label("previous_calibration_a")
-    )
-    previous_calibration_b: int = column_property(
-        func.lag(calibration_b).over(partition_by=id, order_by=time).label("previous_calibration_b")
-    )
+    # previous_calibration_a: int = column_property(
+    #     func.lag(calibration_a).over(partition_by=id, order_by=time).label("previous_calibration_a")
+    # )
+    # previous_calibration_b: int = column_property(
+    #     func.lag(calibration_b).over(partition_by=id, order_by=time).label("previous_calibration_b")
+    # )
 
 @dataclass
 class PicarroData(base.Base, TimeseriesData):

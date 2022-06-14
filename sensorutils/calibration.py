@@ -9,7 +9,7 @@ from asyncio.log import logger
 from dataclasses import asdict, dataclass
 from operator import mod
 from statistics import correlation
-from typing import Dict, List, NamedTuple, Optional, Tuple, Union
+from typing import Dict, List, NamedTuple, NoReturn, Optional, Tuple, Union
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
@@ -331,8 +331,11 @@ def get_HPP_calibration_data(session: sqa.orm.Session, id: int, start: dt.dateti
                 func.lag(qr_as.calibration_b).over(partition_by=qr_as.id, order_by=qr_as.time).label("previous_calibration_b")
     ).subquery()
 
-    qr_filt = sqa.select(qr_as_extra).filter((qr_as_extra.c.calibration_a == 1) |
-                        (qr_as_extra.c.calibration_b == 1)).subquery()
+    qr_filt = sqa.select(qr_as_extra).filter(
+        ((qr_as_extra.c.calibration_a == 1) |
+        (qr_as_extra.c.calibration_b == 1)) 
+        #~((qr_as_extra.c.calibration_a == 1)& (qr_as_extra.c.calibration_b == 1)) 
+    ).subquery()
 
     hpp_as = aliased(mods.HPPData, qr_filt)
     ae = make_aggregate_expression(qr_filt.c.time, "time", avg_time)
@@ -365,7 +368,7 @@ def get_HPP_calibration_data(session: sqa.orm.Session, id: int, start: dt.dateti
     res_unpack = [ unpack_row(b) for b in res]
     if res_unpack:
         md = {k:type(v) for k,v in res_unpack[0].items() if k not in ('CylinderDeployment')}
-        dt = pd.json_normalize(res_unpack, record_path='CylinderDeployment', meta=list(md.keys())).astype(md)
+        dt = pd.json_normalize(res_unpack, record_path='CylinderDeployment', meta=list(md.keys())).convert_dtypes()
     else:
         dt = pd.DataFrame()
     return dt
@@ -584,29 +587,34 @@ def convert_calibration_parameters(cp: OLSResults,
                                       computed=computed, device=device)
 
 def HPP_two_point_calibration(dt_in: pd.DataFrame, endog: List[str], exog: List[str], 
-window:int = 10, duration_threshold: int = 120) -> List[Tuple[mods.CalibrationParameters, mods.ModelFitPerformance]]:
+window:int = 10, duration_threshold: int = 240) -> List[Tuple[mods.CalibrationParameters, mods.ModelFitPerformance]]:
     """
     Estimate the HPP two point calibration parameter
     using a grouped regression (grouped by `window` days) and returns a list
     of `sensorutils.models.CalibrationParameters`.
     Only use the measurement value after 240 seconds from the inlet change
     """
+    def filter_cal(data: pd.DataFrame) -> pd.DataFrame:
+        """
+        Filters the data for the HPP two point calibration
+        """
+        valid = ~data[endog+exog].isna().any(axis=1)
+        max_dur = dt.timedelta(hours=2).total_seconds()
+        valid_final = valid & \
+        (data['inlet_elapsed'].between(duration_threshold, max_dur)) & \
+        data.inlet.isin(['a', 'b']) & (data['cal_elapsed'].between(duration_threshold, max_dur))
+        data_valid = data[valid_final]
+        return data_valid
 
     def inner_cal(data: pd.DataFrame) -> pd.Series:
-        #Check wether there are enough two point calibrations
-        valid = ~data[endog+exog].isna().any(axis=1)
-        valid_final = valid & (data['inlet_elapsed'] > duration_threshold)
-        data_valid = data[valid_final]
-        co2_levels = data_valid[endog[0]].unique()
+        co2_levels = data[endog[0]].unique()
         span = np.abs(np.diff(co2_levels))[0] if len(co2_levels) > 1 else 0
-        if len(data_valid) == 0:
-            breakpoint()
         if span > 100:
-            fit = OLS(data_valid[endog], smtools.add_constant(data_valid[exog])).fit()
+            fit = OLS(data[endog].astype(float), smtools.add_constant(data[exog].astype(float))).fit()
         else:
-            diff = data_valid[endog].values - data_valid[exog].values
-            data_valid['const'] = 1
-            fit_orig = OLS(diff,data_valid['const']).fit()
+            diff = data[endog].values - data[exog].values
+            data['const'] = 1
+            fit_orig = OLS(diff.astype(np.float), data['const']).fit()
             params = fit_orig.params
             new_params =  pd.concat([params, pd.Series({exog[0]:1})])
             fit = cp.deepcopy(fit_orig)
@@ -614,7 +622,10 @@ window:int = 10, duration_threshold: int = 120) -> List[Tuple[mods.CalibrationPa
         cq = mods.ModelFitPerformance(rmse=np.sqrt(np.mean(fit.resid**2)), bias=np.mean(np.abs(fit.resid)), correlation=fit.rsquared)
         return pd.Series({'parameters':fit, 'quality':cq})
     #Group by time window and apply calibration
-    cal_par = dt_in.set_index('date').groupby(["id", "serial", pd.Grouper(freq=f'{window}d')]).apply(lambda x: inner_cal(x))
+
+    cal_par = filter_cal(dt_in).set_index('date').\
+        groupby(["id", "serial", pd.Grouper(freq=f'{window}d')]).\
+        apply(lambda x: inner_cal(x.convert_dtypes()))
     #Add next calibration date
     cal_par_out = cal_par.reset_index()
     cal_par_out['next_cal'] = cal_par_out.date.shift(-1).fillna(du.NAT)
@@ -630,7 +641,6 @@ window:int = 10, duration_threshold: int = 120) -> List[Tuple[mods.CalibrationPa
             m.serial), m.quality) for m in cal_par_out.itertuples()
     ]
     return par_objs
-    #Iterate and make object
 
 
 def apply_HPP_calibration(dt_in: pd.DataFrame, cal_pars: List[mods.CalibrationParameters]) -> pd.DataFrame:
@@ -645,9 +655,9 @@ def apply_HPP_calibration(dt_in: pd.DataFrame, cal_pars: List[mods.CalibrationPa
         dt_pred['const'] = 1
         pms_sm = pms.to_statsmodel()
         reg_names = [n for n in pms_sm.params.keys()]
-        dt_pred['CO2_pred'] = pms_sm.predict(dt_pred[reg_names]) 
+        dt_pred['CO2_pred'] = pms_sm.predict(dt_pred[reg_names].convert_dtypes())
         return dt_pred
-    pred_objs = pd.concat([inner_pred(dt_in, pm) for pm in cal_pars])
+    pred_objs = pd.concat([inner_pred(dt_in, pm) for pm in cal_pars]).replace({pd.NA: np.nan}).convert_dtypes()
     return pred_objs
 
 
@@ -756,22 +766,23 @@ def plot_HPP_calibration(dt: pd.DataFrame) -> plt.Figure:
     Plots the Senseair HPP two point calibration timeseries
     (for one day)
     """
-    dt_min, dt_max = dt['date'].min(), dt['date'].max()
-    date_form = DateFormatter("%H-%M")
+    # dt_min, dt_max = dt['date'].min(), dt['date'].max()
+    # date_form = DateFormatter("%H-%M")
     fig = mpl.figure.Figure()
-    if not dt.empty:
-        dt_scaled = dt['cal_elapsed'] * (dt['cal_cycle'] - dt['cal_cycle'].min() + 1)
-        dt_scaled = dt['date']
+    dt_valid = dt[~dt.sensor_CO2.isna()]
+    if not dt_valid.empty and 'sensor_CO2' in dt_valid.columns:
+        #dt_scaled = dt['cal_elapsed'] * (dt['cal_cycle'] - dt['cal_cycle'].min() + 1)
+        dt_scaled = dt_valid['date']
         ax = fig.add_subplot(211)
         sz = 0.5
-        ax.scatter(dt_scaled, dt['sensor_CO2'], color=get_line_color(measurementType.ORIG), label='Uncalibrated', s=sz)
-        ax.scatter(dt_scaled, dt['CO2_pred'], color=get_line_color(measurementType.CAL), label='Calibrated', s=sz)
-        ax.scatter(dt_scaled, dt['cyl_CO2'], color=get_line_color(measurementType.REF), label='Reference', s=sz)
+        ax.scatter(dt_scaled, dt_valid['sensor_CO2'], color=get_line_color(measurementType.ORIG), label='Uncalibrated', s=sz)
+        ax.scatter(dt_scaled, dt_valid['CO2_pred'], color=get_line_color(measurementType.CAL), label='Calibrated', s=sz)
+        ax.scatter(dt_scaled, dt_valid['cyl_CO2'], color=get_line_color(measurementType.REF), label='Reference', s=sz)
         ax.set_ylabel('CO2 [ppm]')
         ax.set_ylim([300, 700])
         ax.legend()
         ax1 = fig.add_subplot(212)
-        ax1.scatter(dt_scaled, dt['sensor_RH'], color=get_line_color(measurementType.ORIG), s=sz)
+        ax1.scatter(dt_scaled, dt_valid['sensor_RH'], color=get_line_color(measurementType.ORIG), s=sz)
         ax1.set_ylim([0, 30])
         ax1.set_ylabel('RH [%]')
         ax1.set_xlabel('Elapsed time')
@@ -891,6 +902,12 @@ def get_drift_correction_data(session: sqa.orm.Session, sensor_id: Union[int, st
     data['date'] = pd.to_datetime(data['timestamp'], unit='s')
     return data
 
+def map_inlets(inlet_a: pd.Series, inlet_b: pd.Series) -> pd.Series:
+    """
+    Combines two series with binary values into one series with the values
+    'a' and 'b' depending on wether `inlet_a` or `inlet_b` are set to 1.
+    """
+    return pd.Series([['', 'a', 'b', ''][i] for i in (inlet_a + inlet_b * 2)],  dtype="string")
 def prepare_HPP_features(dt: pd.DataFrame, ir_col: str = "sensor_ir_lpl", fit: bool = True, plt: str = '1d') -> pd.DataFrame:
     """
     Prepare features for CO2 calibration / predictions
@@ -916,9 +933,10 @@ def prepare_HPP_features(dt: pd.DataFrame, ir_col: str = "sensor_ir_lpl", fit: b
     # Dummy variable every `plt` days
     dt_new['time_dummy'] = dt_new['date'].round(plt).astype('str')
     #Map to single inlet
-    dt_new['inlet'] = [[None, 'a', 'b'][i] for i in (dt_new.sensor_calibration_a + dt_new.sensor_calibration_b * 2).tolist()]
+    dt_new['inlet'] = map_inlets(dt_new.sensor_calibration_a, dt_new.sensor_calibration_b)
+    dt_new['previous_inlet'] = map_inlets(dt_new.sensor_previous_calibration_a, dt_new.sensor_previous_calibration_b)
     # Start of cylinder calibration (anytime the inlet changes)
-    dt_new['inlet_change'] = (dt_new['sensor_calibration_a'] != dt_new['sensor_previous_calibration_a']) | (dt_new['sensor_calibration_b'] != dt_new['sensor_previous_calibration_b'])
+    dt_new['inlet_change'] = (dt_new['inlet'] != dt_new['previous_inlet'])
     #One full calibration cycle corresponds to two inlet changes
     dt_new['inlet_cycle'] = dt_new['inlet_change'].cumsum()
     dt_new['cal_cycle'] = (((dt_new['inlet_change'].cumsum() % 2)).diff() == 1).cumsum() 
@@ -932,7 +950,6 @@ def prepare_HPP_features(dt: pd.DataFrame, ir_col: str = "sensor_ir_lpl", fit: b
         dt_new['cal_elapsed'] = dt_new.groupby('cal_cycle').apply(elaps_lm).values
         
     else:
-        breakpoint()
         dt_new['inlet_elapsed'] = 0
         dt_new['cal_elapsed'] = 0
     # Additional features needed for fitting
@@ -940,7 +957,6 @@ def prepare_HPP_features(dt: pd.DataFrame, ir_col: str = "sensor_ir_lpl", fit: b
         dt_new['normal_elapsed'] = dt_new.groupby('normal_cycle').apply(elaps_lm).values
     else:
         dt_new['normal_elapsed'] = (dt_new['date'] - dt_new['date'].min()).dt.total_seconds()
-
     if 'ref_CO2_DRY' in dt_new.columns:
         # Normalisation constant
         nc = calc.normalisation_constant(dt_new['ref_pressure'] * 100, dt_new['sensor_t_abs'])

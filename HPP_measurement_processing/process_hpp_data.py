@@ -586,7 +586,7 @@ for current_id in ids_to_process:
             with Session() as session:
                 cal_data = cal.get_HPP_calibration_data(session, id, start, end, av_t)
                 if cal_data.empty:
-                    logger.info(f"No calibration data between {start} and {end} ")
+                    logger.info(f"No calibration data for {id} between {start} and {end} ")
                     continue
             # Compute calibration features
             target = ['cyl_CO2']
@@ -601,18 +601,19 @@ for current_id in ids_to_process:
             cal_params  = [a for a,c in cal_fit]
             cal_pred = cal.apply_HPP_calibration(cal_features, cal_params)
             #Plot
-            figs = cal_pred.set_index('date').groupby('cal_cycle').resample('1d').apply(lambda x: pd.Series({'plot':cal.plot_HPP_calibration(x.reset_index())})).reset_index()
+            figs = cal_pred.set_index('date').groupby(pd.Grouper(freq='1d')).apply(lambda x: pd.Series({'plot':cal.plot_HPP_calibration(x.reset_index())})).reset_index()
             wp_path = b_pth.with_name(f'HPP_bottle_cal_{id}_.pdf')
             #Create titles
-            titles = figs.apply(lambda x: f"{x.date}, cycle: {x.cal_cycle}", axis=1).tolist()
+            titles = figs.apply(lambda x: f"{x.date}, cycle: {x.date}", axis=1).tolist()
             save_multipage(figs['plot'].tolist(), wp_path,  titles)
             with Session() as session:
                 logger.info(f"Storing calibration parameters for {id} in the database")
                 for el, qual in cal_fit:
-                    el_ad = cal.update_hpp_calibration(session, el)
-                    qual.model_id = el_ad.id
-                    session.add(qual)
-                    session.commit()
+                    if el:
+                        el_ad = cal.update_hpp_calibration(session, el)
+                        qual.model_id = el_ad.id
+                        session.add(qual)
+                        session.commit()
         case "process", (du.AvailableSensors.HPP as st):
             wp_path = b_pth.with_name(f'HPP_predictions_{id}.pdf')
             pdf = PdfPages(wp_path, 'a')
