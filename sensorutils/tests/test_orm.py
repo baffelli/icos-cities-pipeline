@@ -41,9 +41,10 @@ class TestOrm(unittest.TestCase):
         print(ci)
 
     def testGetLP8Data(self):
-        fd = dt.datetime.now() - dt.timedelta(days=14)
+        fd = dt.datetime.now() - dt.timedelta(days=3)
         with self.session() as ses:
-            ci = cal.get_sensor_data(ses, 1151, sda.AvailableSensors.LP8, fd, dt.datetime.now())
+            ci = cal.get_sensor_data(ses, 1016, sda.AvailableSensors.LP8, fd, dt.datetime.now())
+        breakpoint()
         print(ci)
     
     def testGrouper(self):
