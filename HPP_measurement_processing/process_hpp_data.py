@@ -408,6 +408,8 @@ parser.add_argument('id', type=int, nargs='?',
                     help="If passed, only process one sensor")
 parser.add_argument('--full', default=False, action='store_true',
                     help="Partial processing or full data")
+parser.add_argument('--backfill', type=int, default=60,
+                    help="Number of days to backfill")
 args = parser.parse_args()
 
 # Load configuration
@@ -441,7 +443,7 @@ logger.debug(
 
 b_pth: pl.Path = args.plot
 # Starting date for calibration
-start = du.ICOS_START if args.full else dt.datetime.now() - dt.timedelta(days=60)
+start = du.ICOS_START if args.full else dt.datetime.now() - dt.timedelta(days=args.backfill)
 end = dt.datetime.now()
 backfill_days = (end - start).days
 for current_id in ids_to_process:
@@ -588,39 +590,45 @@ for current_id in ids_to_process:
                 if cal_data.empty:
                     logger.info(f"No calibration data for {id} between {start} and {end} ")
                     continue
+            breakpoint()
             # Compute calibration features
             target = ['cyl_CO2']
             features = ['sensor_CO2']
             cal_features = cal.prepare_HPP_features(cal_data, fit=True)
-            #Calibration window
-            interval = 2
-            #Call bottle calibration
-            logger.info(f"Computing two point calibration for {id}")
-            cal_fit = cal.HPP_two_point_calibration(cal_features, target, features, window = interval)
-            #Predict
-            cal_params  = [a for a,c in cal_fit]
-            cal_pred = cal.apply_HPP_calibration(cal_features, cal_params)
-            #Plot
-            figs = cal_pred.set_index('date').groupby(pd.Grouper(freq='1d')).apply(lambda x: pd.Series({'plot':cal.plot_HPP_calibration(x.reset_index())})).reset_index()
-            wp_path = b_pth.with_name(f'HPP_bottle_cal_{id}_.pdf')
-            #Create titles
-            titles = figs.apply(lambda x: f"{x.date}, cycle: {x.date}", axis=1).tolist()
-            save_multipage(figs['plot'].tolist(), wp_path,  titles)
-            with Session() as session:
-                logger.info(f"Storing calibration parameters for {id} in the database")
-                for el, qual in cal_fit:
-                    if el:
-                        el_ad = cal.update_hpp_calibration(session, el)
-                        qual.model_id = el_ad.id
-                        session.add(qual)
-                        session.commit()
+            cal_features_filtered = cal.filter_cal(cal_features, endog=features, exog=target)
+            if not cal_features_filtered.empty:
+                #Calibration window
+                interval = 2
+                #Call bottle calibration
+                logger.info(f"Computing two point calibration for {id}")
+                cal_fit = cal.HPP_two_point_calibration(cal_features_filtered, target, features, window = interval)
+                #Predict
+                cal_params  = [a for a,c in cal_fit]
+                cal_pred = cal.apply_HPP_calibration(cal_features, cal_params)
+                #Plot
+                figs = cal_pred.set_index('date').groupby(pd.Grouper(freq='1d')).apply(lambda x: pd.Series({'plot':cal.plot_HPP_calibration(x.reset_index())})).reset_index()
+                wp_path = b_pth.with_name(f'HPP_bottle_cal_{id}_.pdf')
+                #Create titles
+                titles = figs.apply(lambda x: f"{x.date}, cycle: {x.date}", axis=1).tolist()
+                save_multipage(figs['plot'].tolist(), wp_path,  titles)
+                with Session() as session:
+                    logger.info(f"Storing calibration parameters for {id} in the database")
+                    for el, qual in cal_fit:
+                        if el:
+                            el_ad = cal.update_hpp_calibration(session, el)
+                            qual.model_id = el_ad.id
+                            session.add(qual)
+                            session.commit()
+            else:
+                logger.info(f"No valid calibrations for {id} between {start} and {end}")
+                continue
         case "process", (du.AvailableSensors.HPP as st):
             wp_path = b_pth.with_name(f'HPP_predictions_{id}.pdf')
             pdf = PdfPages(wp_path, 'a')
             av_t = get_averaging_time(st, True)
             #List missing dates
             missing_dates = data_mapping.list_files_missing_in_dest(
-            group=id, all=args.full,  backfill=15)
+            group=id, all=args.full,  backfill=args.backfill)
             #Iterate over dates
             for current_date in missing_dates:
                 day_start, day_end = du.day_range(current_date)
@@ -644,9 +652,10 @@ for current_id in ids_to_process:
                         #Plot
                         #Filter the first minute afte the beginnig of a measurement cycle before plotting
                         min_elapsed = 240
-                        cal_pred_plot = cal_pred[cal_pred['inlet'].isnull() & (cal_pred.normal_elapsed > min_elapsed)]
+                        cal_pred_plot = cal_pred[(cal_pred['inlet'] == '') & (cal_pred.normal_elapsed > min_elapsed)]
                         ts_plot = cal.plot_CO2_calibration(cal_pred_plot, orig_col="sensor_CO2", ref_col="ref_CO2")
-                        ts_plot.suptitle(f"HPP {id} on {current_date}")
+                        loc = cal_pred.location.unique()
+                        ts_plot.suptitle(f"HPP {id} on {current_date} at {loc}")
                         pdf.savefig(ts_plot)
                         if 'ref_CO2' in cal_pred.columns:
                             pred_quality = cal.compute_quality_indices(cal_pred, ref_col="ref_CO2", fit=False)

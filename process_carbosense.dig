@@ -64,7 +64,7 @@ _export:
             for_each>: 
                 i: ${sensors[sens]}
             _do:
-                sh>: python3.10 ${base_folder}/CarbosenseDatabaseTools/dump_raw_data_from_influxdb.py ${base_folder}/config/co2_sensor_mapping.yml ${sens} ${i} ${project_begin}
+                sh>: python3.10 ${base_folder}/CarbosenseDatabaseTools/dump_raw_data_from_influxdb.py ${base_folder}/config/co2_sensor_mapping.yml ${sens} ${i} ${project_begin} --backfill 10
 
 +level2_processing:
     #List sensors to process
@@ -76,22 +76,24 @@ _export:
         for_each>: 
             sens: ${sensors['HPP']}
         _do: 
-            sh>: python3.10 ${base_folder}/HPP_measurement_processing/process_hpp_data.py ${cal_config} calibrate HPP ${sens} --plot ${plot_folder}
+            sh>: python3.10 ${base_folder}/HPP_measurement_processing/process_hpp_data.py ${cal_config} calibrate HPP ${sens} --plot ${plot_folder}  --backfill 10
     #Predict sensor values
-    +prediction:
-        for_each>:
-            sens: ['LP8', 'HPP']
+    +hpp_prediction:
+        for_each>: 
+            i: ${sensors['HPP']}
         _do:
-            for_each>: 
-                i: ${sensors[sens]}
-            _do:
-                sh>: python3.10 ${base_folder}/HPP_measurement_processing/process_hpp_data.py ${cal_config} process ${sens} ${i} --plot ${plot_folder}
+            sh>: python3.10 ${base_folder}/HPP_measurement_processing/process_hpp_data.py ${cal_config} process HPP ${i} --plot ${plot_folder}  --backfill 10
+    +lp8_prediction:
+        for_each>: 
+            i: ${sensors['LP8']}
+        _do:
+            sh>: python3.10 ${base_folder}/HPP_measurement_processing/process_hpp_data.py ${cal_config} process LP8 ${i} --plot ${plot_folder}  --backfill 10
     #For LP8 sensor apply the drift correction algorithm
     +drift_correction:
         for_each>: 
             sens: ${sensors['LP8']}
         _do: 
-            sh>: python3.10 ${base_folder}/HPP_measurement_processing/drif_correction.py ${cal_config} calibrate ${sens} --plot ${plot_folder}
+            sh>: python3.10 ${base_folder}/HPP_measurement_processing/drift_correction.py ${sens} --plot ${plot_folder}
 
 #Upload metadata to decentlab-db
 +metadata:

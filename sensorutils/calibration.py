@@ -160,9 +160,10 @@ def query_sensor_data_agg(session: sqa.orm.Session, id: Union[int, str],
     """
     tb = get_table(type)
     aggs = make_aggregate_columns(aggregations)
-    ae = make_aggregate_expression(tb.time, "time", avg_time=averaging_time)
-    qr = query_sensor_data(session, id, type, start, end)
-    qr_agg = qr.with_only_columns(*(aggs + [ae])).group_by(ae)
+    qr = query_sensor_data(session, id, type, start, end).cte()
+    qr_as = aliased(tb, qr)
+    ae = make_aggregate_expression(qr_as.time, "time", avg_time=averaging_time)
+    qr_agg = sqa.select(qr_as).with_only_columns(*(aggs + [ae])).group_by(ae)
     log.logger.debug(f"The query is {qr_agg}")
     return qr_agg
 
@@ -271,9 +272,9 @@ def query_level2_data(session: sqa.orm.Session, id: Union[str, int], start: dt.d
     return qr
 
 
-def get_aggregations(type: du.AvailableSensors) -> dict:
-    match type:
-        case du.AvailableSensors.HPP:
+def get_aggregations(type: du.AvailableSensors, fit: bool=True) -> dict:
+    match type, fit:
+        case du.AvailableSensors.HPP, False:
             agg = {
                 'sensor_CO2': 'AVG(NULLIF(senseair_hpp_co2_filtered, -999))',
                 'sensor_pressure': 'AVG(NULLIF(senseair_hpp_pressure_filtered, -999))',
@@ -288,7 +289,22 @@ def get_aggregations(type: du.AvailableSensors) -> dict:
                 'sensor_previous_calibration_a': 'MIN(COALESCE(previous_calibration_a, 0))',
                 'sensor_previous_calibration_b': 'MIN(COALESCE(previous_calibration_b, 0))',
             }
-        case du.AvailableSensors.LP8:
+        case du.AvailableSensors.HPP, True:
+            agg = {
+                'sensor_CO2': 'AVG(NULLIF(senseair_hpp_co2_filtered, -999))',
+                'sensor_pressure': 'AVG(NULLIF(senseair_hpp_pressure_filtered, -999))',
+                'sensor_RH': 'AVG(NULLIF(sensirion_sht21_humidity, -999))',
+                'sensor_t': 'AVG(NULLIF(sensirion_sht21_temperature, -999))',
+                'sensor_ir_lpl': 'AVG(NULLIF(senseair_hpp_lpl_signal, -999))',
+                'sensor_ir': 'AVG(NULLIF(senseair_hpp_ir_signal, -999))',
+                'sensor_detector_t': 'AVG(NULLIF(senseair_hpp_temperature_detector, -999))',
+                'sensor_mcu_t': 'AVG(NULLIF(senseair_hpp_temperature_mcu, -999))',
+                'sensor_calibration_a': 'MIN(COALESCE(calibration_a, 0))',
+                'sensor_calibration_b': 'MIN(COALESCE(calibration_b, 0))',
+                'sensor_previous_calibration_a': 'MIN(COALESCE(previous_calibration_a, 0))',
+                'sensor_previous_calibration_b': 'MIN(COALESCE(previous_calibration_b, 0))',
+            }
+        case du.AvailableSensors.LP8, _:
             agg = {
                 'sensor_CO2': 'AVG(NULLIF(senseair_lp8_co2, -999))',
                 'sensor_RH': 'AVG(NULLIF(sensirion_sht21_humidity, -999))',
@@ -296,7 +312,7 @@ def get_aggregations(type: du.AvailableSensors) -> dict:
                 'sensor_ir': 'AVG(NULLIF(senseair_lp8_ir, -999))',
                 'sensor_detector_t': 'AVG(NULLIF(senseair_lp8_temperature, -999))',
             }
-        case du.AvailableSensors.PICARRO:
+        case du.AvailableSensors.PICARRO, _:
             agg = {
                 'ref_CO2_DRY': 'AVG(IF(CO2_DRY = -999 OR CO2_DRY_F = 0, NULL, CO2_DRY))',
                 'ref_CO2_DRY_SD': 'STDDEV(IF(CO2_DRY = -999 OR CO2_DRY_F = 0, NULL, CO2_DRY))',
@@ -318,7 +334,7 @@ def get_sensor_data(session: sqa.orm.Session, id: int, type: du.AvailableSensors
     return dt
 
 
-def get_HPP_calibration_data(session: sqa.orm.Session, id: int, start: dt.datetime, end: dt.datetime, avg_time: int = 120) -> pd.DataFrame:
+def get_HPP_calibration_data(session: sqa.orm.Session, id: int, start: dt.datetime, end: dt.datetime, avg_time: int = 120, fit=True) -> pd.DataFrame:
     """
     Get the data for the senseair HPP Sensor. For each calibration period, also returns the corresponding
     cylinder analysis
@@ -330,16 +346,16 @@ def get_HPP_calibration_data(session: sqa.orm.Session, id: int, start: dt.dateti
                 func.lag(qr_as.calibration_a).over(partition_by=qr_as.id, order_by=qr_as.time).label("previous_calibration_a"),
                 func.lag(qr_as.calibration_b).over(partition_by=qr_as.id, order_by=qr_as.time).label("previous_calibration_b")
     ).subquery()
-
-    qr_filt = sqa.select(qr_as_extra).filter(
-        ((qr_as_extra.c.calibration_a == 1) |
-        (qr_as_extra.c.calibration_b == 1)) 
-        #~((qr_as_extra.c.calibration_a == 1)& (qr_as_extra.c.calibration_b == 1)) 
-    ).subquery()
-
+    if fit:
+        qr_filt = sqa.select(qr_as_extra).filter(
+            ((qr_as_extra.c.calibration_a == 1) |
+            (qr_as_extra.c.calibration_b == 1)) 
+        ).subquery()
+    else:
+        sqa.select(qr_as_extra).subquery()
     hpp_as = aliased(mods.HPPData, qr_filt)
     ae = make_aggregate_expression(qr_filt.c.time, "time", avg_time)
-    agg = get_aggregations(du.AvailableSensors.HPP)
+    agg = get_aggregations(du.AvailableSensors.HPP, fit=True)
     ac = make_aggregate_columns(agg)
     hpp_agg = sqa.select(qr_filt).group_by(*[ae]).with_only_columns(*[ac + [ae, hpp_as.id]]).cte()
     sf = sqa.select(mods.Sensor).filter(mods.Sensor.type == du.AvailableSensors.HPP.value).subquery()
@@ -402,7 +418,7 @@ def get_cal_ts(session: sqa.orm.Session, id: int, type: du.AvailableSensors, sta
     """
     cal_entries = get_calibration_info(session, id, type, dep=dep)
     valid = limit_cal_entry(cal_entries, start, end, modes=modes)
-    aggs = get_aggregations(type)
+    aggs = get_aggregations(type, fit=False)
     picarro_aggs = get_aggregations(du.AvailableSensors.PICARRO)
 
     def iterate_cal_info(e: CalDataRow) -> pd.DataFrame:
@@ -586,60 +602,69 @@ def convert_calibration_parameters(cp: OLSResults,
                                       valid_to=valid_to,
                                       computed=computed, device=device)
 
+
+def filter_cal(data: pd.DataFrame, endog='sensor_CO2', exog='cyl_CO2', duration_threshold: int = 120) -> pd.DataFrame:
+    """
+    Filters the data for the HPP two point calibration
+    """
+    valid = ~data[endog+exog].isna().any(axis=1)
+    max_dur = dt.timedelta(hours=2).total_seconds()
+    valid_final = valid & \
+    (data['inlet_elapsed'].between(duration_threshold, max_dur)) & \
+    data.inlet.isin(['a', 'b']) & (data['cal_elapsed'].between(duration_threshold, max_dur))
+    data_valid = data[valid_final]
+    return data_valid
+
+
 def HPP_two_point_calibration(dt_in: pd.DataFrame, endog: List[str], exog: List[str], 
-window:int = 10, duration_threshold: int = 240) -> List[Tuple[mods.CalibrationParameters, mods.ModelFitPerformance]]:
+window:int = 10, duration_threshold: int = 240) -> Optional[List[Tuple[Optional[mods.CalibrationParameters], Optional[mods.ModelFitPerformance]]]]:
     """
     Estimate the HPP two point calibration parameter
     using a grouped regression (grouped by `window` days) and returns a list
     of `sensorutils.models.CalibrationParameters`.
     Only use the measurement value after 240 seconds from the inlet change
     """
-    def filter_cal(data: pd.DataFrame) -> pd.DataFrame:
-        """
-        Filters the data for the HPP two point calibration
-        """
-        valid = ~data[endog+exog].isna().any(axis=1)
-        max_dur = dt.timedelta(hours=2).total_seconds()
-        valid_final = valid & \
-        (data['inlet_elapsed'].between(duration_threshold, max_dur)) & \
-        data.inlet.isin(['a', 'b']) & (data['cal_elapsed'].between(duration_threshold, max_dur))
-        data_valid = data[valid_final]
-        return data_valid
-
     def inner_cal(data: pd.DataFrame) -> pd.Series:
-        co2_levels = data[endog[0]].unique()
-        span = np.abs(np.diff(co2_levels))[0] if len(co2_levels) > 1 else 0
-        if span > 100:
-            fit = OLS(data[endog].astype(float), smtools.add_constant(data[exog].astype(float))).fit()
+        if not data.empty:
+            co2_levels = data[endog[0]].unique()
+            span = np.abs(np.diff(co2_levels))[0] if len(co2_levels) > 1 else 0
+            if span > 100:
+                fit = OLS(data[endog].astype(float), smtools.add_constant(data[exog].astype(float))).fit()
+            else:
+                diff = data[endog].values - data[exog].values
+                data['const'] = 1
+                fit_orig = OLS(diff.astype(float), data['const']).fit()
+                params = fit_orig.params
+                new_params =  pd.concat([params, pd.Series({exog[0]:1})])
+                fit = cp.deepcopy(fit_orig)
+                fit.params = new_params
+            cq = mods.ModelFitPerformance(rmse=np.sqrt(np.mean(fit.resid**2)), bias=np.mean(np.abs(fit.resid)), correlation=fit.rsquared)
         else:
-            diff = data[endog].values - data[exog].values
-            data['const'] = 1
-            fit_orig = OLS(diff.astype(np.float), data['const']).fit()
-            params = fit_orig.params
-            new_params =  pd.concat([params, pd.Series({exog[0]:1})])
-            fit = cp.deepcopy(fit_orig)
-            fit.params = new_params
-        cq = mods.ModelFitPerformance(rmse=np.sqrt(np.mean(fit.resid**2)), bias=np.mean(np.abs(fit.resid)), correlation=fit.rsquared)
+            cq = None
+            fit = None
         return pd.Series({'parameters':fit, 'quality':cq})
     #Group by time window and apply calibration
-
-    cal_par = filter_cal(dt_in).set_index('date').\
+    cal_par = dt_in.set_index('date').\
         groupby(["id", "serial", pd.Grouper(freq=f'{window}d')]).\
         apply(lambda x: inner_cal(x.convert_dtypes()))
     #Add next calibration date
-    cal_par_out = cal_par.reset_index()
-    cal_par_out['next_cal'] = cal_par_out.date.shift(-1).fillna(du.NAT)
-    cal_par_out['species'] = endog[0]
-    par_objs = [
-        (convert_calibration_parameters(
-            m.parameters,
-            m.species,
-            du.AvailableSensors.HPP,
-            m.date.to_pydatetime(),
-            m.next_cal.to_pydatetime(),
-            dt.datetime.now(),
-            m.serial), m.quality) for m in cal_par_out.itertuples()
-    ]
+    if not cal_par.empty:
+        cal_par_out = cal_par.reset_index()
+        cal_par_out['next_cal'] = cal_par_out.date.shift(-1).fillna(du.NAT)
+        cal_par_out['species'] = endog[0]
+        par_objs = [
+            (convert_calibration_parameters(
+                m.parameters,
+                m.species,
+                du.AvailableSensors.HPP,
+                m.date.to_pydatetime(),
+                m.next_cal.to_pydatetime(),
+                dt.datetime.now(),
+                m.serial), m.quality) for m in cal_par_out.itertuples() if m.parameters
+        ]
+    else:
+        par_objs = []
+
     return par_objs
 
 
@@ -655,9 +680,9 @@ def apply_HPP_calibration(dt_in: pd.DataFrame, cal_pars: List[mods.CalibrationPa
         dt_pred['const'] = 1
         pms_sm = pms.to_statsmodel()
         reg_names = [n for n in pms_sm.params.keys()]
-        dt_pred['CO2_pred'] = pms_sm.predict(dt_pred[reg_names].convert_dtypes())
+        dt_pred['CO2_pred'] = pms_sm.predict(dt_pred[reg_names].astype(float))
         return dt_pred
-    pred_objs = pd.concat([inner_pred(dt_in, pm) for pm in cal_pars]).replace({pd.NA: np.nan}).convert_dtypes()
+    pred_objs = pd.concat([inner_pred(dt_in, pm) for pm in cal_pars]).replace({pd.NA: np.nan})
     return pred_objs
 
 
@@ -928,10 +953,6 @@ def prepare_HPP_features(dt: pd.DataFrame, ir_col: str = "sensor_ir_lpl", fit: b
     nc_sens = calc.normalisation_constant(dt_new['sensor_pressure'], dt_new['sensor_t_abs'])
     dt_new['nc_sens'] = nc_sens
     dt_new['sensor_CO2_comp'] = dt_new['sensor_CO2'] * 1/nc_sens
-    if fit:
-        dt_new['cyl_CO2_comp'] = calc.dry_to_wet_molar_mixing(dt["cyl_CO2"], dt['cyl_H2O']/100) * nc_sens
-    # Dummy variable every `plt` days
-    dt_new['time_dummy'] = dt_new['date'].round(plt).astype('str')
     #Map to single inlet
     dt_new['inlet'] = map_inlets(dt_new.sensor_calibration_a, dt_new.sensor_calibration_b)
     dt_new['previous_inlet'] = map_inlets(dt_new.sensor_previous_calibration_a, dt_new.sensor_previous_calibration_b)

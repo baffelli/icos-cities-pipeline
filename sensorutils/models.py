@@ -375,12 +375,12 @@ class HPPData(base.Base, TimeseriesData):
     senseair_hpp_temperature_mcu: float = Column(Float)
     sensirion_sht21_temperature: float = Column(Float)
     sensirion_sht21_humidity: float = Column(Float)
-    # previous_calibration_a: int = column_property(
-    #     func.lag(calibration_a).over(partition_by=id, order_by=time).label("previous_calibration_a")
-    # )
-    # previous_calibration_b: int = column_property(
-    #     func.lag(calibration_b).over(partition_by=id, order_by=time).label("previous_calibration_b")
-    # )
+    previous_calibration_a: int = column_property(
+        func.lag(calibration_a).over(partition_by=id, order_by=time).label("previous_calibration_a")
+    )
+    previous_calibration_b: int = column_property(
+        func.lag(calibration_b).over(partition_by=id, order_by=time).label("previous_calibration_b")
+    )
 
 @dataclass
 class PicarroData(base.Base, TimeseriesData):
@@ -403,11 +403,15 @@ class PicarroData(base.Base, TimeseriesData):
     pressure_F: int = Column(Integer)
     RH: float = Column(Float)
     RH_F: int = Column(Integer)
+    T : float = Column(Float)
     calibration_mode: str = Column(String)
     chamber_status: int = Column(Integer)
 
 @dataclass
 class Level2Data(base.Base, TimeseriesData):
+    """
+    ORM mapping for the level 2 (calibrated) sensor data
+    """
     __tablename__ = "co2_level2"
     __sa_dataclass_metadata_key__ = "sa"
     id: str = Column("sensor_id", String, primary_key=True)
@@ -420,6 +424,27 @@ class Level2Data(base.Base, TimeseriesData):
     relative_humidity: float = Column(Float)
     pressure: float = Column(Float)
     inlet: float = Column(String)
+
+@dataclass
+class Level3Data(base.Base, TimeseriesData):
+    """
+    ORM mapping for the level 3 (calibrated + drift corrected) sensor data
+    """
+    __tablename__ = "co2_level3"
+    __sa_dataclass_metadata_key__ = "sa"
+    id: str = Column("sensor_id", String, primary_key=True)
+    location: str = Column("location", String, primary_key=True)
+    time: int = Column("timestamp", Integer, primary_key=True)
+    model_id: int = Column("calibration_model_id", Integer)
+    CO2: float = Column(Float)
+    CO2_drift_corrected: float = Column(Float)
+    H2O: float = Column(Float)
+    temperature: float = Column(Float)
+    relative_humidity: float = Column(Float)
+    pressure: float = Column(Float)
+    inlet: float = Column(String)
+
+
 
 @dataclass
 class PressureInterpolation(base.Base, TimeseriesData):
