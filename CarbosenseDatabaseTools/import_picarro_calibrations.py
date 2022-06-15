@@ -44,7 +44,6 @@ for source in du.read_calibration_config(args.config):
     #Replace CO2_DRY with CO2
     cal_data['compound'] = cal_data['compound'].replace('CO2_DRY', 'CO2')
     cal_params = du.make_calibration_parameters_table(cal_data.dropna().query("compound == 'CO2'"))
-    import pdb; pdb.set_trace()
     #Serialise objects
     for cp in cal_params:
         session.add(cp)
