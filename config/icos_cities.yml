@@ -4,30 +4,35 @@ channels:
   - bioconda
   - defaults
 dependencies:
-  - pymysql
-  - sqlalchemy
+  - python=3.10
+  - scikit-learn
+  - scipy
   - pylint
-  - urllib3
-  - requests
-  - pysftp
+  - nco
   - mysql-client
+  - autopep8
+  - pytest
+  - watchdog
   - pyodbc
   - xarray
-  - influxdb
-  - watchdog
-  - nco
-  - scipy
-  - matplotlib
+  - statsmodels
   - keyring
   - pytables
-  - parsimonious
-  - mypy
+  - urllib3
   - dataclasses
-  - pytest
-  - xlrd
-  - openpyxl
-  - scikit-learn
-  - statsmodels
+  - requests
+  - parsimonious
   - pep8
-  - autopep8
+  - xlrd
+  - influxdb
+  - openpyxl
+  - mypy
+  - matplotlib
+  - pysftp
+  - sqlalchemy
+  - pymysql
+  - pandas
+  - openjdk=11
+  - sphinx
+  - numba
 prefix: /newhome/basi/.conda/envs/icos-cities
