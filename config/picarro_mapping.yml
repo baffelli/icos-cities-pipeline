@@ -42,12 +42,13 @@ LAEG:
     table: picarro_data
     db_prefix: CarboSense_MySQL
     date_from: 2022-01-01T00:00:00.000
-    date_column: timestamp
+    date_column:  DATE(FROM_UNIXTIME(timestamp))
+    timestamp_column: timestamp
     grouping_key: LocationName
     group: 'LAEG'
     na: .NAN
   columns:
-    - {name: LocationName, query: ''LAEG'', datatype: str}
+    - {name: LocationName, query: "'LAEG'", datatype: str, na: 'LAEG'}
     - {name: timestamp, query: timed / 1000, datatype: int, na: 0}
     - {name: CO2, query: CO2_DRY * (1 - H2O/100), datatype: float, na: .NAN}
     - {name: CO2_F, query:  1 - (((VALVEPOS = 5) OR (CO2_DRY IS NULL) OR (H2O IS NULL))), datatype: int, na: 0}
