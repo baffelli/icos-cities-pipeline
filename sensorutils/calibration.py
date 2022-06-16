@@ -111,6 +111,16 @@ class measurementType(enum.Enum):
     CAL = 'cal'
     ORIG = 'orig'
 
+
+class CalModes(enum.Enum):
+    """
+    Enum to represent different CV modes for the calibration
+    """
+    CHAMBER = [2, 3]
+    COLLOCATION = [1]
+    MIXED = [1, 2, 3]
+
+
 def get_line_color(tp: measurementType, cm: mpl.colors.Colormap = plt.cm.get_cmap('Set2')) -> Tuple:
     match tp:
         case measurementType.CAL:
@@ -408,7 +418,7 @@ def limit_cal_entry(entries: List[CalDataRow], start: dt.datetime, end: dt.datet
     return valid
 
 
-def get_cal_ts(session: sqa.orm.Session, id: int, type: du.AvailableSensors, start: dt.datetime, end: dt.datetime, averaging_time: int, dep: bool = False, modes: Optional[List[int]] = None) -> List[Optional[CalData]]:
+def get_cal_ts(session: sqa.orm.Session, id: int, type: du.AvailableSensors, start: dt.datetime, end: dt.datetime, averaging_time: int, dep: bool = False, modes: Optional[CalModes] = None) -> List[Optional[CalData]]:
     """
     Gets the timeseries of (raw) calibration data for a given `id` between the `start` and `end`
     times. If the sensor is collocated with a picarro instrument, also returns the data
@@ -417,7 +427,7 @@ def get_cal_ts(session: sqa.orm.Session, id: int, type: du.AvailableSensors, sta
     If modes
     """
     cal_entries = get_calibration_info(session, id, type, dep=dep)
-    valid = limit_cal_entry(cal_entries, start, end, modes=modes)
+    valid = limit_cal_entry(cal_entries, start, end, modes=(modes.value if modes else None))
     aggs = get_aggregations(type, fit=False)
     picarro_aggs = get_aggregations(du.AvailableSensors.PICARRO)
 

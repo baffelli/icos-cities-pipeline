@@ -87,9 +87,16 @@ To setup automount, ask Stephan Henne from 503 or Patrick Burckhalter from the I
 ### Install DigDag
 Follow the instructions [here](http://docs.digdag.io/getting_started.html#downloading-the-latest-version) to install the latest version of digdag. 
 
+Additionally, configure the maximum number of task by modifying the file `~/.config/digdag/digdag` adding the entry:
+```
+executor.task_max_run = 3000
+```
+
 Digdag is used to automate the run of the pipeline at daily intervals. You might have to install jdk on conda if the currently available version from the OS doesn't let you run digdag.
 
 The pipeline is self-explaining, all the processing steps are listed in the digdag DAG file.
+
+
 
 ## Running the pipeline
 ### Manual run

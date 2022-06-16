@@ -54,10 +54,11 @@ ICOS_MISSING = -999
 
 
 """
-Start date of carbosense
+Start date of carbosense and of ICOS-Cities
 """
 CS_START = dt.datetime(2018, 1, 1)
 ICOS_START = dt.datetime(2022, 1, 1)
+
 class ClimateChamberStatusCode(enum.Enum):
     """
     Enum class to list possible error

@@ -1,6 +1,8 @@
 """
 Module to store the ORM class models
-to represent database objects
+to represent database objects.
+For information on how to map a new table to a python class, check https://docs.sqlalchemy.org/en/14/orm/mapping_styles.html#declarative-mapping
+If you rename a mapped table on the database, do not forget to change the corresponding __tablename__ attribute in the declarative mapping
 """
 from abc import ABC, ABCMeta
 from dataclasses import dataclass, field
@@ -114,7 +116,7 @@ class Deployment(SensBase):
     mode: Optional[int] = Column('cal_mode', Integer)
     height: float = Column("HeightAboveGround", Float)
     inlet_height: float = Column("Inlet_HeightAboveGround", Float)
-
+    orientation: float = Column(Float)
 
 @dataclass
 class Calibration(SensBase):
@@ -391,7 +393,6 @@ class PicarroData(base.Base, TimeseriesData):
     __sa_dataclass_metadata_key__ = "sa"
     id: str = Column("LocationName", String, primary_key=True)
     time: int = Column("timestamp", Integer, primary_key=True)
-    #battery: float = Column("battery", Float)
     valvepos: float = Column("valvepos", Float)
     CO2: float = Column(Float)
     CO2_F: int = Column(Integer)

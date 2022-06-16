@@ -32,6 +32,10 @@ M  = 0.0289644
 R_STAR =  8.3144598 
 
 def absolute_temperature(t: float):
+    """
+    Computes the absolute temperature in K 
+    from a given temperature in C
+    """
     return t + T0
 
 
@@ -114,6 +118,9 @@ def pressure_interpolation(p_ref: float, t_ref: float, h_ref: float, h_stat: flo
 
 
 def psi_to_bar(p: float) -> float:
+    """
+    Convert a pressure given in psi to bar
+    """
     return p * 0.0689476
 
 def normalisation_constant(p:float, t:float) -> float:

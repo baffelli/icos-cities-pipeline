@@ -12,11 +12,11 @@ timezone: Europe/Zurich
 #Export date
 _export:
     project_begin: "${moment('20220101', 'YYYYMMDD').format('YYYY-MM-DDThh:mm:ss')}"
+    PYTHONBREAKPOINT: 0
 
 +setup:
     #Disable python breakpoints
     sh>: export PYTHONBREAKPOINT=0
-
 
 #Import reference data from DUE1 (and later from other locations)
 +reference_data:
@@ -25,11 +25,18 @@ _export:
     +LAEG:
         sh>: python3.10 ${base_folder}/CarbosenseDatabaseTools/import_picarro_data.py ${reference_config} LAEG
 
+# #TODO dump metadata daily to files
+# #+dump_metadata:
+#     py>: dump_table
+#     table: ['Location', 'Deployment', 'Sensors', 'SensorUnits', 'cylinder_deployment', 'ref_gas_cylinder', 'ref_gas_cylinder_analysis']
+
+
 
 #Import bottle calibration
 +reference_gas:
     +import_reference_bottles:
         sh>: python3.10 ${base_folder}/CarbosenseDatabaseTools/import_bottle_calibrations.py '${icos_folder}/Network/Sensors/HPP/Kalibriergas/Calibration Gas Data Processing/'  'cylinder_analysis_picarro.xlsx'
+
 
 
 +meteo:
@@ -88,6 +95,7 @@ _export:
             i: ${sensors['LP8']}
         _do:
             sh>: python3.10 ${base_folder}/HPP_measurement_processing/process_hpp_data.py ${cal_config} process LP8 ${i} --plot ${plot_folder}  --backfill 10
++level3_processing:
     #For LP8 sensor apply the drift correction algorithm
     +drift_correction:
         for_each>: 
@@ -101,15 +109,14 @@ _export:
         sh>: python3  ${base_folder}/UploadProcessedMeasurementsToDecentlabDB/importer.py
 
 # #Upload data to decentlab db
-# +upload_data
-#     +upload_data:
-#         for_each>:
-#             sens: ['LP8', 'HPP']
-#         _do:
-#             for_each>: 
-#                 i: ${sensors[sens]}
-#             _do:
-#                 sh>: python3 ${base_folder}/UploadProcessedMeasurementsToDecentlabDB/upload_measurements.py ${sens} ${i}
++upload_data:
+    for_each>:
+        sens: ['LP8', 'HPP']
+    _do:
+        for_each>: 
+            i: ${sensors[sens]}
+        _do:
+            sh>: python3 ${base_folder}/UploadProcessedMeasurementsToDecentlabDB/upload_measurements.py  ${base_folder}/config/decentlab_upload_mapping.py ${i}
 
 #Import calibration data (This is just an example)
 #+import_chamber:

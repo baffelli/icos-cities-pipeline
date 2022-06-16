@@ -170,13 +170,7 @@ def split_HPP_cal_data(dt_in: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame]
     return dt_in[cal_period], dt_in[~cal_period]
 
 
-class CalModes(enum.Enum):
-    """
-    Enum to represent different CV modes for the calibration
-    """
-    CHAMBER = [2, 3]
-    COLLOCATION = [1]
-    MIXED = [1, 2, 3]
+
 
 
 def split_stable_conditions(dt_in: pd.DataFrame, col: pd.Series) -> Tuple[pd.Series, pd.Series]:
@@ -189,7 +183,7 @@ def split_stable_conditions(dt_in: pd.DataFrame, col: pd.Series) -> Tuple[pd.Ser
 
 def cal_cv_split(dt_in: pd.DataFrame,
                  sensor: du.AvailableSensors,
-                 mode: CalModes = CalModes.MIXED,
+                 mode: cal.CalModes = cal.CalModes.MIXED,
                  duration: float = 7,
                  date_col: str = 'date') -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
@@ -214,17 +208,17 @@ def cal_cv_split(dt_in: pd.DataFrame,
     """
     dt_copy = dt_in.copy()
     match mode:
-        case CalModes.COLLOCATION, _:
+        case cal.CalModes.COLLOCATION, _:
             cal_period = dt_in['cal_mode'].isin(mode.value)
             cal_start = dt_in[cal_period][date_col].min()
             cal_end = dt_in[cal_period][date_col].max() + \
                 dt.timedelta(days=duration)
-        case CalModes.CHAMBER:
+        case cal.CalModes.CHAMBER:
             cal_period = dt_in['cal_mode'].isin(mode.value)
             cal_start = dt_in[cal_period][date_col].min()
             cal_end = cal_start + \
                 dt.timedelta(days=duration)
-        case CalModes.MIXED:
+        case cal.CalModes.MIXED:
             cal_period = dt_in['cal_mode'].isin(mode.value)
             cal_start = dt_in[cal_period][date_col].min()
             cal_end = cal_start + dt.timedelta(days=duration)
@@ -410,6 +404,8 @@ parser.add_argument('--full', default=False, action='store_true',
                     help="Partial processing or full data")
 parser.add_argument('--backfill', type=int, default=60,
                     help="Number of days to backfill")
+parser.add_argument('--end', type=dt.datetime.fromisoformat, default=dt.datetime.now(),
+                    help="Date of end")
 args = parser.parse_args()
 
 # Load configuration
@@ -444,7 +440,7 @@ logger.debug(
 b_pth: pl.Path = args.plot
 # Starting date for calibration
 start = du.ICOS_START if args.full else dt.datetime.now() - dt.timedelta(days=args.backfill)
-end = dt.datetime.now()
+end = dt.datetime.now() if not args.end else args.end
 backfill_days = (end - start).days
 for current_id in ids_to_process:
     id = current_id.value
@@ -516,6 +512,7 @@ for current_id in ids_to_process:
             tg_col = 'ref_CO2_comp'
             orig_col = 'sensor_CO2'
             pred_col = 'CO2_pred'
+            #These columns are generated in cal.prepare_LP8_features in the calibration module
             reg = ["sensor_ir_log", "const", "sensor_t", "sensor_t_sq", "sensor_t_cub",
                    "sensor_ir_interaction_t", "sensor_ir_interaction_t_sq",
                    "sensor_ir_interaction_t_cub", "pressure_interpolation"]
@@ -526,7 +523,7 @@ for current_id in ids_to_process:
             try:
                 with Session() as ses:
                     cal_data_all_serial = cal.get_cal_ts(
-                        ses, id, st, start, dt.datetime.now(), av_t * 2, modes=[2], dep=True)
+                        ses, id, st, start, dt.datetime.now(), av_t * 2, modes=cal.CalModes.CHAMBER, dep=True)
             except ValueError as e:
                 logger.info(
                     f"There is not measurement data for sensor {id} between {start} and {dt.datetime.now()}")
@@ -539,7 +536,7 @@ for current_id in ids_to_process:
                 dur = (cal_features['date'].max() - cal_features['date'].min())
                 try:
                     cal_df, test_df = cal_cv_split(
-                        cal_features.reset_index(), duration=dur.days, mode=CalModes.CHAMBER, sensor=args.sensor_type)
+                        cal_features.reset_index(), duration=dur.days, mode=cal.CalModes.CHAMBER, sensor=args.sensor_type)
                     cal_fit = LP8_CO2_calibration(
                         cal_df, reg, target=tg_col, dummy=False)
                     cal_df.to_csv( b_pth.with_name(f'LP8_features_{id}.pdf'))
@@ -553,8 +550,9 @@ for current_id in ids_to_process:
                 # Predict the full series
                 co2_pred_all = predict_CO2(cal_features, cal_fit_nd)
                 # Fit RH model to find the sensors threshold
+                #TODO determine an indvididual RH threshold for each sensor
                 # fit_rh_threshold(co2_pred_all)
-                #Plot day by day
+                #Plot full timeseries
                 ts_plot = cal.plot_CO2_calibration(co2_pred, pred_col=pred_col, orig_col=orig_col, ref_col=tg_col)
                 base_name = f"{st.name}_{id}_{cd.serial}_{cd.start:%Y%m%d}_{cd.end:%Y%m%d}"
                 wp_path = b_pth.with_name(f'{base_name}.pdf')
@@ -590,7 +588,6 @@ for current_id in ids_to_process:
                 if cal_data.empty:
                     logger.info(f"No calibration data for {id} between {start} and {end} ")
                     continue
-            breakpoint()
             # Compute calibration features
             target = ['cyl_CO2']
             features = ['sensor_CO2']
@@ -605,7 +602,7 @@ for current_id in ids_to_process:
                 #Predict
                 cal_params  = [a for a,c in cal_fit]
                 cal_pred = cal.apply_HPP_calibration(cal_features, cal_params)
-                #Plot
+                #Plot (one plot by day)
                 figs = cal_pred.set_index('date').groupby(pd.Grouper(freq='1d')).apply(lambda x: pd.Series({'plot':cal.plot_HPP_calibration(x.reset_index())})).reset_index()
                 wp_path = b_pth.with_name(f'HPP_bottle_cal_{id}_.pdf')
                 #Create titles

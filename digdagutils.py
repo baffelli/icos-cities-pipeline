@@ -80,6 +80,8 @@ def configure_paths(base: str) -> None:
     plot_folder = f'{icos_folder}/Network/Processing/'
     reference_config = f'{base_folder}/config/picarro_mapping.yml'
     cal_config =  f'{base_folder}/config/calibration_mapping.yml'
+    #FIXME do not use locals because Laura gets upset
+    digdag.executor.task_max_run = 10000
     digdag.env.store({k:v for k,v in locals().items()})
 
 

@@ -5,6 +5,7 @@ logger = logging
 logger.basicConfig(format=' %(levelname)s %(asctime)s (%(pathname)s - %(funcName)s - %(message)s):', level=logging.INFO)
 
 
+
 def log_execution(fun:Callable) -> Callable:
     """
     Decorator to log the execution of arbitrary functions

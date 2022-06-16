@@ -66,7 +66,8 @@ def create_upsert_metod(meta: db.MetaData) -> Callable:
             raise db.exc.SQLAlchemyError((str(e)[1:100]))
     return method
 
-
+#TODO make it possible to use an alternate db e.g SQLLITE or duckdb
+#TODO make it use the configuration from secrets.yaml
 def connect_to_metadata_db(group: str = 'CarboSense_MySQL', conf_path: str = "~/.my.cnf") -> eng.Engine:
     """
     Connects to the ICOS-Cities/CarboSense MariaDB Database using
