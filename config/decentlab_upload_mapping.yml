@@ -1,16 +1,17 @@
 HPP:
   source:
     type: DB
-    table: hpp_data
-    date_from: 2022-01-01T00:00:00.000
-    grouping_key: SensorUnit_ID
-    date_column: DATE(FROM_UNIXTIME(time))
-    na: -999
-  dest:
-    type: DB
     table: co2_level2
     date_from: 2022-01-01T00:00:00.000
     grouping_key: sensor_id
+    date_column: DATE(FROM_UNIXTIME(time))
+    timestamp_comlumn: time
+    na: .NaN
+  dest:
+    type: InfluxDB
+    table: measurements
+    date_from: 2022-01-01T00:00:00.000
+    node: sensor_id
     date_column:  DATE(FROM_UNIXTIME(timestamp))
   columns:
     - {name: time,  source_name: 'time', datatype: int, na: Null}

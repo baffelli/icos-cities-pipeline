@@ -3,18 +3,20 @@ HPP:
     type: DB
     table: hpp_data
     date_from: 2022-01-01T00:00:00.000
-    grouping_key: SensorUnit_ID
+    grouping_key: 
+      sensor_id: SensorUnit_ID
     date_column: DATE(FROM_UNIXTIME(time))
     na: -999
   dest:
     type: DB
     table: co2_level2
     date_from: 2022-01-01T00:00:00.000
-    grouping_key: sensor_id
+    grouping_key: 
+      sensor_id: sensor_id
     date_column:  DATE(FROM_UNIXTIME(timestamp))
   columns:
     - {name: time,  source_name: 'time', datatype: int, na: Null}
-    - {name: SensorUnit_ID, source_name: node, datatype: int, na: Null}
+    - {name: sensor_id, source_name: node, datatype: int, na: Null}
     - {name: battery, source_name: battery, datatype: float, na: 0}
     - {name: calibration_a, source_name: 'calibration', datatype: int, na: 0}
     - {name: calibration_a, source_name: 'calibration-a', datatype: int, na: 0}
@@ -35,18 +37,21 @@ LP8:
     type: DB
     table: lp8_data
     date_from: 2022-01-01T00:00:00.000
-    grouping_key: SensorUnit_ID
+    grouping_key: 
+      sensor_id: SensorUnit_ID
     date_column: DATE(FROM_UNIXTIME(time))
     na: -999
   dest:
     type: DB
     table: co2_level2
     date_from: 2022-01-01T00:00:00.000
-    grouping_key: sensor_id
+    grouping_key: 
+      sensor_id: sensor_id
     date_column:  DATE(FROM_UNIXTIME(timestamp))
+  #The column mapping is not used here
   columns:
     - {name: time,  source_name: 'time', datatype: int, na: Null}
-    - {name: SensorUnit_ID, source_name: node, datatype: int, na: Null}
+    - {name: sensor_id, source_name: node, datatype: int, na: Null}
     - {name: battery, source_name: battery, datatype: float, na: 0}
     - {name: calibration_a, source_name: 'calibration', datatype: int, na: 0}
     - {name: calibration_a, source_name: 'calibration-a', datatype: int, na: 0}

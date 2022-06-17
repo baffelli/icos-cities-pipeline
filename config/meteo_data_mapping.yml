@@ -16,7 +16,8 @@ MCH:
     table: meteo_data
     db_prefix: CarboSense_MySQL
     date_from: 2022-01-01T00:00:00.000
-    #grouping_key: LocationName
+    grouping_key: 
+      location: LocationName
     date_column: 'CAST(FROM_UNIXTIME(timestamp) AS DATE)'
     na: -999
   columns:

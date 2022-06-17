@@ -421,6 +421,7 @@ db_metadata.reflect()
 data_mapping.connect_all_db(source_eng=engine, dest_eng=engine)
 
 
+
 # Create ORM session
 Session = sessionmaker(engine)
 # List all ids
@@ -451,7 +452,7 @@ for current_id in ids_to_process:
             av_t = get_averaging_time(st, fit=False)
             # List files missing in destination (only process them)
             missing_dates = data_mapping.list_files_missing_in_dest(
-                group=id, all=args.full, backfill=backfill_days)
+                group=dict(sensor_id=id), all=args.full, backfill=backfill_days)
             logger.info(f"The missing dates for {id} are {missing_dates}")
             # Get calibration parameters
             wp_path = b_pth.with_name(f'LP8_predictions_{id}.pdf')
@@ -625,7 +626,7 @@ for current_id in ids_to_process:
             av_t = get_averaging_time(st, True)
             #List missing dates
             missing_dates = data_mapping.list_files_missing_in_dest(
-            group=id, all=args.full,  backfill=args.backfill)
+            group=dict(sensor_id=id), all=args.full,  backfill=args.backfill)
             #Iterate over dates
             for current_date in missing_dates:
                 day_start, day_end = du.day_range(current_date)
@@ -654,6 +655,7 @@ for current_id in ids_to_process:
                         loc = cal_pred.location.unique()
                         ts_plot.suptitle(f"HPP {id} on {current_date} at {loc}")
                         pdf.savefig(ts_plot)
+                        logger.info(f"Storing processed data for {id} on {current_date}")
                         if 'ref_CO2' in cal_pred.columns:
                             pred_quality = cal.compute_quality_indices(cal_pred, ref_col="ref_CO2", fit=False)
                             pred_quality_st = dc.replace(pred_quality, **{'date': current_date.date(), 'model_id': cp.id, 'sensor_id':id})

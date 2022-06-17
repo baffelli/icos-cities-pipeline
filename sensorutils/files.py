@@ -170,8 +170,9 @@ def format_nabel_date(date: dt.datetime) -> str:
 
 def get_available_measurements_on_db(engine: sqa.engine.Engine, md: sqa.MetaData, station: str,
                                      date_column: sqa.sql.expression.ColumnElement,
-                                     grouping_column: Optional[sqa.sql.expression.ColumnElement] = None,
-                                     group_id: Optional[Union[str, int]] = None,
+                                     grouping_expression: Optional[List[sqa.sql.expression.ColumnElement]],
+                                    #  grouping_column: Optional[List[sqa.sql.expression.ColumnElement]] = None,
+                                    #  group_id: Optional[List[Union[str, int]]] = None,
                                      first_date: Optional[dt.datetime] = None,
                                      filter: Optional[str] = None
                                      ) -> pd.DataFrame:
@@ -207,25 +208,25 @@ def get_available_measurements_on_db(engine: sqa.engine.Engine, md: sqa.MetaData
         A sqlalchemy engine
 
     """
-    table = sqa.Table(station, md, autoload=True)
-    cols = [date_column, grouping_column] if grouping_column is not None else [date_column]
-    #dq = sqa.select(*cols).distinct().select_from(table)
-    if group_id is not None and grouping_column is not None:
-        filt = (grouping_column == group_id, )
-    else:
-        filt = ()
-    if first_date:
-       filt = filt + (date_column > first_date,)
-    else:
-        pass
-    if filter is not None:
-        filt = filt + (sqa.text(filter),)
-    else:
-        pass
-    qs = sqa.select(table).filter(*filt).subquery()
-    qf = sqa.select(*cols).distinct().select_from(qs)
-    logger.debug(f'The query is {qf}')
-    return pd.read_sql_query(qf, engine, parse_dates=['date']).reset_index()
+    # table = sqa.Table(station, md, autoload=True)
+    # cols = [date_column, grouping_column] if grouping_column is not None else [date_column]
+    # #dq = sqa.select(*cols).distinct().select_from(table)
+    # if group_id is not None and grouping_column is not None:
+    #     filt = (, )
+    # else:
+    #     filt = ()
+    # if first_date:
+    #    filt = filt + (date_column > first_date,)
+    # else:
+    #     pass
+    # if filter is not None:
+    #     filt = filt + (sqa.text(filter),)
+    # else:
+    #     pass
+    # qs = sqa.select(table).filter(*filt).subquery()
+    # qf = sqa.select(*cols).distinct().select_from(qs)
+    # logger.debug(f'The query is {qf}')
+    # return pd.read_sql_query(qf, engine, parse_dates=['date']).reset_index()
 
 
 def get_all_picarro_files(station: str, rexp: str = '.*\.(csv|CSV)') -> List[pl.Path]:
@@ -493,11 +494,11 @@ class DatabaseSource(DataSource):
         The database table where the data is located
     date_column: str
         A column name or SQL expression to generate a date used to group the dats
-    grouping_key: str or none
+    grouping_key: list of str or none
         A column name or SQL expression used to generate an additional grouping, eg if
         data for every value of `date_column` consists of several subgroups and only certain of those groups
         should be transfered
-    group: str or none
+    group: list of str or none
         The value of the `grouping_key` group that should be used 
     column_filter: str or none
         Extra column filter to identify valid entries
@@ -505,8 +506,8 @@ class DatabaseSource(DataSource):
     """
     table: str
     date_column: str
-    group: Optional[Union[str, int]] = None
-    grouping_key: Optional[str] = None
+    group: Optional[Dict[str, Union[str, int]]] = None
+    grouping_key: Optional[Dict[str,str]] = None
     eng: Optional[Union[sqa.engine.Engine, influxdb.client.InfluxDBClient]] = None
     column_filter: Optional[str] = None
 
@@ -585,13 +586,20 @@ class DBSource(DatabaseSource):
         if self.timestamp_column:
              return sqa.sql.literal_column(f"{self.timestamp_column}").label(label)
 
-    def group_expression(self, label='group') -> Optional[sqa.sql.ColumnElement]:
+    def group_expression(self, label='group') -> Optional[Dict[str, sqa.sql.ColumnElement]]:
         """
         Safely transforms the :obj:`grouping_key` expression into
         a SQL statement for sqlalchemy. Used to construct the query in `list_files`
         """
-        return (sqa.sql.literal_column(f"{self.grouping_key}").label(label) if self.grouping_key else None)
+        return {k: sqa.sql.literal_column(f"{v}").label(k) for k,v in self.grouping_key.items() if self.grouping_key}
+        #return (sqa.sql.literal_column(f"{self.grouping_key}").label(label) if self.grouping_key else None)
 
+    def group_comparison(self, groups=Dict[str, Union[str, int]]) -> List[sqa.sql.expression.ColumnOperators]:
+        """
+        Prepare the comparison expression for the grouping key
+        """
+        ge = self.group_expression()
+        return [group_exp == groups[group_key] for group_key, group_exp in ge.items()]
 
     def date_group_query(self, label: Optional[str] = None) -> sqa.sql.ColumnElement:
         """
@@ -606,7 +614,7 @@ class DBSource(DatabaseSource):
         return self.date_expression().label(label)
 
     @check_db
-    def list_files(self, group:str=None, *args) -> pd.DataFrame:
+    def list_files(self, group:Optional[Dict[str, Union[str, int]]]=None, *args) -> pd.DataFrame:
         """
         Lists all available *files* on the data source. One *file* is assumed to be the set of all measurements sharing the same date.
 
@@ -615,14 +623,21 @@ class DBSource(DatabaseSource):
         pandas.DataFrame
             A dataframe with the available files
         """
-        meas = get_available_measurements_on_db(
-            self.eng, self.metadata, self.table, date_column=self.date_expression(), grouping_column=self.group_expression(), 
-            group_id=(group or self.group), first_date=self.date_from, filter=self.column_filter)
-        meas_full = meas
-        # if self.group:
-        #     meas_full['group_id'] = self.group
-        meas_full['path'] = self.table
-        return meas_full
+        #Get select  expression
+        table = sqa.Table(self.table, self.metadata, autoload=True)
+        cols = [self.date_expression(), *self.group_expression().values()]
+        filt = ()
+        if self.date_from:
+            filt = filt + ((self.date_expression() > self.date_from),)
+        if self.column_filter is not None:
+            filt = filt + (sqa.text(self.column_filter),)
+        if self.group or group:
+            filt =  filt + (*self.group_comparison(group or self.group),)
+        qs = sqa.select(table).filter(*filt).subquery()
+        qf = sqa.select(*cols).distinct().select_from(qs)
+        logger.debug(f'The query is {qf}')
+        return pd.read_sql_query(qf, self.eng, parse_dates=['date']).reset_index()
+
 
     @check_db
     def read_file(self, date: dt.datetime, group:Optional[Union[str, int]]=None):
@@ -643,7 +658,7 @@ class DBSource(DatabaseSource):
         metadata = sqa.MetaData(bind=self.eng)
         table = sqa.Table(self.table, metadata)
         lb = 'date_group'
-        dq = sqa.select(table).add_columns(*[sqa.text('*'), self.date_group_query(label=lb), self.group_expression()])
+        dq = sqa.select(table).add_columns(*[sqa.text('*'), self.date_group_query(label=lb), *self.group_expression().values()])
         if self.timestamp_column is not  None:
             first_ts, last_ts = du.day_range(date)
             filts = (self.timestamp_expression().between(first_ts.timestamp(), last_ts.timestamp()), )
@@ -651,7 +666,7 @@ class DBSource(DatabaseSource):
             filts = (self.date_expression() == date.strftime('%Y-%m-%d'), )
         if (group or self.group) and self.grouping_key:
             grp = (group or self.group)
-            filts = filts + (self.group_expression() == grp, )
+            filts = filts + (*self.group_comparison(grp), )
         else:
             pass
         qs = dq.filter(*filts)
@@ -696,17 +711,22 @@ class DBSource(DatabaseSource):
         with self.eng.connect() as con:
             tran = con.begin()
             #Add group value if missing column is missing
-            if self.grouping_key not in input_filled.columns and self.grouping_key is not None:
-                input_filled[self.grouping_key] = (self.group or group)
+            if self.grouping_key and (self.group or group):
+                grp = self.group or group
+                missing_keys = set(self.grouping_key.values()) - set(input_filled.columns)
+                group_values = {self.grouping_key[k]:v for k,v in grp.items() if k in self.grouping_key.keys()}
+                for k,v in group_values.items():
+                    if k in missing_keys:
+                        input_filled[k] = v
             input_filled.to_sql(self.table, con, method=method,
                                 index=False, if_exists='append')
             
-            if group and self.grouping_key:
-                new_data = session.query(output_table).filter(output_table.columns[self.date_column].between(
-                input[self.date_column].min(), input[self.date_column].max())
-                & (output_table.columns[self.grouping_key] == group))
-                affected = pd.read_sql(new_data.statement.compile(compile_kwargs={"literal_binds": True}), con)
-                logger.debug(f"Affected rows {affected}")
+            # if group and self.grouping_key:
+            #     new_data = session.query(output_table).filter(output_table.columns[self.date_column].between(
+            #     input[self.date_column].min(), input[self.date_column].max())
+            #     & (output_table.columns[self.grouping_key] == group))
+            #     affected = pd.read_sql(new_data.statement.compile(compile_kwargs={"literal_binds": True}), con)
+            #     logger.debug(f"Affected rows {affected}")
             if temporary:
                 logger.debug("Rolling back as the temporary flag was set")
                 tran.rollback()
@@ -734,19 +754,33 @@ class InfluxdbSource(DatabaseSource):
     To set the sensor, the object uses the 'group' attribute.
     The object expexcts that you pass a :obj:`influxdb.InfluxDBClient` connection in order
     for the methods to work. This can be done at run time by monkey patching.
+    The `date_column` here is set to be `time` by default (it is a timestamp) and gets
+    converted by the client. This in unlike the other SQL DataSources where the conversion is specified by the user
     """
     eng: Optional[influxdb.client.InfluxDBClient] = None
-    group: Optional[Union[str, int]] = None
-    grouping_key: Optional[str] = 'node'
+    group: Optional[Dict[str, Union[str, int]]] = None
+    grouping_key: Optional[Dict[str,str]] = None
     date_column: str = 'time'
 
     def attach_db(self, db: influxdb.InfluxDBClient) -> None:
         self.eng = db
+    
+    def group_expression(self, group: Optional[List[Union[str, int]]]):
+        """
+        Prepare the filter expression to filter only a certain group from the database
+        """
+        grps = (group or self.group)
+        group_comp = [f"{current_key} =~ /{(grps[current_key])}/ AND" for current_key, current_group in self.grouping_key.items()]
+        return "".join(group_comp)
+
+    def grouping_expression(self) -> str:
+        return ",".join(self.grouping_key.values())
 
     @check_db
-    def list_files(self, *args, group=None) -> pd.DataFrame:
+    def list_files(self, *args, group:Optional[Dict[str, Union[str, int]]]=None) -> pd.DataFrame:
         if self.eng:
-            gq = f"{self.grouping_key} =~ /{(group or self.group)}/ AND" if (group or self.group) else ""
+            gq = self.group_expression(group)
+            #gq = f"{self.grouping_key} =~ /{(group or self.group)}/ AND" if (group or self.group) else ""
             q = f"""
             SELECT
             *
@@ -765,12 +799,13 @@ class InfluxdbSource(DatabaseSource):
                 available_data['date'] = pd.to_datetime(
                     available_data[self.date_column], unit='s')
                 available_data['path'] = self.table
-                available_data['group'] = group
+                for k, v in zip(self.grouping_key.values(), (group or self.group)):
+                    available_data[k] = v
             else:
                 available_data = pd.DataFrame(columns=['date'])
             return available_data
     @check_db
-    def read_file(self, date: dt.datetime, group:str=None, av_time:Optional[str]=None) -> pd.DataFrame:
+    def read_file(self, date: dt.datetime,  group:Optional[Dict[str, Union[str, int]]]=None, av_time:Optional[str]=None) -> pd.DataFrame:
         """
         Reads a date of measurements from the influxdb db
         with the given date. Optionally specify `group`
@@ -783,7 +818,8 @@ class InfluxdbSource(DatabaseSource):
         min_ts, max_ts = [
             f"{ut.localize(d).isoformat()}" for d in day_ts(date)]
         #Make query componend conditionally
-        gq = f"{self.grouping_key} =~ /{group}/ AND" if group else ""
+        #gq = f"{self.grouping_key} =~ /{group}/ AND" if group else ""
+        gq = self.group_expression(group)
         aq = f", time({av_time})" if av_time else ""
         sq = 'mean("value") AS value' if av_time else "value"
         query = \
@@ -794,14 +830,14 @@ class InfluxdbSource(DatabaseSource):
         (
             SELECT {sq} FROM "measurements" WHERE {gq}
             sensor =~ /senseair*|sensirion*|battery|calibration*/ AND "time" > $start_ts AND "time" < $end_ts
-            GROUP BY "{self.grouping_key}","sensor"{aq} fill(previous)
+            GROUP BY "{self.grouping_expression()}","sensor"{aq} fill(previous)
         )
         """
         logger.debug(f'The query is {query}')
         fs = self.eng.query(query, epoch='s', bind_params={
                                "group": group, "start_ts": min_ts, "end_ts": max_ts})
         df = du.influxql_results_to_df(fs)
-        grp = [self.date_column, self.grouping_key] if self.grouping_key else [
+        grp = [self.date_column, *self.grouping_key.values()] if self.grouping_key else [
             self.date_column]
         df_wide = du.reshape_influxql_results(df, grp, 'sensor', 'value')
         return df_wide
@@ -1126,7 +1162,7 @@ class SourceMapping():
         self.source = connect_db(self.source, source_eng)
         self.dest = connect_db(self.dest, dest_eng)
 
-    def list_files_missing_in_dest(self, group=None, all: bool = False, backfill: int = 3) -> List[Tuple[dt.datetime, Optional[pl.Path]]]:
+    def list_files_missing_in_dest(self, group:Optional[Dict[str, Union[str, int]]]=None, all: bool = False, backfill: int = 3) -> List[Tuple[dt.datetime, Optional[pl.Path]]]:
         """
         Lists the files available in the source that are missing in the destination. Using the `backfill` parameter,
         a certain number of files in the past (with respect to current date) is added to the list

@@ -91,8 +91,8 @@ with session() as ses:
             date_column='CAST(FROM_UNIXTIME(timestamp) AS DATE)', 
             timestamp_column='timestamp', 
             column_filter='pressure IS NOT NULL',
-            grouping_key='LocationName',
-            group=args.reference,
+            grouping_key=dict(location='LocationName'),
+            group=dict(location=args.reference),
             metadata=md,
             na=-999,
             eng = eng)
@@ -103,8 +103,8 @@ with session() as ses:
             date_column='CAST(FROM_UNIXTIME(timestamp) AS DATE)',
             timestamp_column='timestamp', 
             column_filter='pressure IS NOT NULL',
-            grouping_key='CONCAT(sensor_id, location)',
-            group=f"{args.id}{dest_loc.id}",
+            grouping_key=dict(sensor_id='sensor_id', location='location'),
+            group=dict(sensor_id=args.id, location=dest_loc.id),
             metadata=md,
             na = -999,
             eng = eng)

@@ -86,11 +86,11 @@ else:
 #Iterate over all sensors
 for row in sensor_ids.itertuples():
 	logger.info(f"Listing missing files for sensor  {row.SensorUnit_ID}")
-	missing = mapping.list_files_missing_in_dest(group=row.SensorUnit_ID, backfill=args.backfill)
+	missing = mapping.list_files_missing_in_dest(group=dict(node=row.SensorUnit_ID), backfill=args.backfill)
 	logger.info(f"The missing files for sensor {row.SensorUnit_ID} are {missing}")
 	for m in missing:
 		logger.info(f"Loading file {m} for sensor {row.SensorUnit_ID}")
-		source_file = mapping.source.read_file(m, group=row.SensorUnit_ID)
+		source_file = mapping.source.read_file(m, group=dict(node=row.SensorUnit_ID))
 		dest_file = mapping.map_file(source_file)
 		affected = mapping.dest.write_file(dest_file)
 		logger.info(f"Done transfering")

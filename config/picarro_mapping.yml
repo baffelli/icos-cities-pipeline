@@ -11,12 +11,14 @@ DUE:
     db_prefix: CarboSense_MySQL
     date_from: 2022-01-01T00:00:00.000
     date_column: DATE(FROM_UNIXTIME(timestamp))
-    grouping_key: LocationName
-    group: 'DUE1'
+    grouping_key: 
+      location: LocationName
+    group: 
+      location: 'DUE1'
     na: .NAN
   columns:
     - {name: timestamp,  query: 'CAST(strftime(''%s'', date) as integer)', datatype: int, na: .NAN}
-    - {name: LocationName, query: "'DUE1'", datatype: str, na: NULL}
+    # - {name: LocationName, query: "'DUE1'", datatype: str, na: NULL}
     - {name: T, query: 'IIF(TEMP_F IS NULL, TEMP, NULL)', datatype: float, na: .NAN}
     - {name: T_F, query: 'IIF(TEMP_F IS NULL, 1, 0)', datatype: int, na: 0}
     - {name: RH, query: 'IIF(FEUCHT_F IS NULL, FEUCHT, NULL)', datatype: float, na: 0}
@@ -44,8 +46,10 @@ LAEG:
     date_from: 2022-01-01T00:00:00.000
     date_column:  DATE(FROM_UNIXTIME(timestamp))
     timestamp_column: timestamp
-    grouping_key: LocationName
-    group: 'LAEG'
+    grouping_key: 
+      location: LocationName
+    group: 
+      location: 'LAEG'
     na: .NAN
   columns:
     - {name: LocationName, query: "'LAEG'", datatype: str, na: 'LAEG'}
