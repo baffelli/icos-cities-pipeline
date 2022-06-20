@@ -146,14 +146,16 @@ HPP:
     type: influxDB
     path: measurements
     date_from: 2017-01-01T00:00:00.000
-    grouping_key: node
+    grouping_key: 
+      node: node
   dest:
     type: DB
     path: hpp_data
     db_prefix: CarboSense_MySQL
     date_from: 2017-01-01T00:00:00.000
-    grouping_key: SensorUnit_ID
-    date_column: time
+    grouping_key: 
+      node: SensorUnit_ID
+    date_column: DATE(FROM_UNIXTIME(time))
     na: -999
   columns:
     - {name: time,  source_name: 'time', datatype: int, na: Null}
@@ -161,7 +163,9 @@ HPP:
     - {name: battery, source_name: battery, datatype: float, na: 0}
 ```
 
-This defines a datasource mapping between the `source` and the `dest` systems. The source system is an InfluxDB database (the pipeline assumes by default this system to be the Decentlab one, but it can be easily changed, see the source code for this) with the *table* *measurements*. The field `grouping_key` is used to define a column identifying unique sensors in the source table so that incremental transfer is enabled. Because InfluxDB uses `time` as a default timestamp column, no `date_column` is define for the source system. The destination system in this example is the table *hpp_data* on the database defined by the prefix *CarboSense_MySQL* in the `.my.cnf` file as described [above](#configure-database-connections). 
+This defines a datasource mapping between the `source` and the `dest` systems. The source system is an InfluxDB database (the pipeline assumes by default this system to be the Decentlab one, but it can be easily changed, see the source code for this) with the *table* *measurements*. The field `grouping_key` is used to define a dictionary of columns identifying unique sensors in the source table so that incremental transfer is enabled. To make this work, the dictionary keys for both source and destination must match (or either of them should be left empty if either source or destination contains a single group).
+
+Because InfluxDB uses `time` as a default timestamp column, no `date_column` is define for the source system. The destination system in this example is the table *hpp_data* on the database defined by the prefix *CarboSense_MySQL* in the `.my.cnf` file as described [above](#configure-database-connections). 
 
 The section `columns` contains the mapping between the source and the destination columns. The `name` key specifies the name of the column in the destination system, the `source_name` the name in the source system. Instrad of `source_name`, a SQL query can be used with `query` to perform data transformations. The query will be then run against an in-memory SQLLite database. 
 

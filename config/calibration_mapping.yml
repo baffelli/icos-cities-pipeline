@@ -40,6 +40,7 @@ LP8:
     grouping_key: 
       sensor_id: SensorUnit_ID
     date_column: DATE(FROM_UNIXTIME(time))
+    column_filter: senseair_lp8_co2 IS NOT NULL
     na: -999
   dest:
     type: DB
@@ -48,6 +49,7 @@ LP8:
     grouping_key: 
       sensor_id: sensor_id
     date_column:  DATE(FROM_UNIXTIME(timestamp))
+    column_filter: CO2 IS NOT NULL
   #The column mapping is not used here
   columns:
     - {name: time,  source_name: 'time', datatype: int, na: Null}

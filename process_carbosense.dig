@@ -116,7 +116,7 @@ _export:
         for_each>: 
             i: ${sensors[sens]}
         _do:
-            sh>: python3 ${base_folder}/UploadProcessedMeasurementsToDecentlabDB/upload_measurements.py  ${base_folder}/config/decentlab_upload_mapping.py ${i}
+            sh>: python3 ${base_folder}/UploadProcessedMeasurementsToDecentlabDB/upload_measurements.py  ${base_folder}/config/decentlab_upload_mapping.py  ${sens} ${i}
 
 #Import calibration data (This is just an example)
 #+import_chamber:

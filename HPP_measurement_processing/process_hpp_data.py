@@ -453,6 +453,7 @@ for current_id in ids_to_process:
             # List files missing in destination (only process them)
             missing_dates = data_mapping.list_files_missing_in_dest(
                 group=dict(sensor_id=id), all=args.full, backfill=backfill_days)
+
             logger.info(f"The missing dates for {id} are {missing_dates}")
             # Get calibration parameters
             wp_path = b_pth.with_name(f'LP8_predictions_{id}.pdf')
@@ -471,13 +472,13 @@ for current_id in ids_to_process:
                         ses, serialnumber, when=date_start)
                     if pm is None:
                         logger.info(
-                            f"No calibration parameters for unit {id} with serialnumber {serialnumber} on {date}")
+                            f"No calibration parameters for unit {id} with serialnumber {serialnumber} on {date}, this date cannot be processed")
                         continue
                     # Remove the dummy if the model has any
                     model_fit = remove_dummies(
                         pm.to_statsmodel(), "time_dummy")
                     cal_sets = [d.data for d in cal.get_cal_ts(
-                        ses, id, st, date_start, date_end, av_t, dep=True) if d]
+                        ses, id, st, date_start, date_end, av_t, dep=True) if d and 'pressure_interpolation' in d.data.columns]
                     if not cal_sets:
                         continue
                     else:

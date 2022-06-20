@@ -1020,8 +1020,8 @@ def prepare_LP8_features(dt: pd.DataFrame, fit: bool = True,  plt: str = '1d') -
     dt_new['time_dummy'] = dt_new['date'].dt.round(plt).dt.date.astype('str')
     dt_new['const'] = 1
     dt_new['sensor_H2O'] = calc.rh_to_molar_mixing(dt_new['sensor_RH'], dt_new['sensor_t_abs'], dt_new['pressure_interpolation'])
-    dt_new['sensor_ir_interaction_H2O'] = dt_new["sensor_ir"] / \
-    dt_new['sensor_H2O']
+    # dt_new['sensor_ir_interaction_H2O'] = dt_new["sensor_ir"] / \
+    # dt_new['sensor_H2O']
     dt_new['sensor_ir_interaction_pressure'] = dt_new['pressure_interpolation'] / dt_new['sensor_ir']
     dt_new["nc_sens"] = calc.normalisation_constant(dt_new['pressure_interpolation'] , dt_new['sensor_t_abs'])
     # Additional features needed for fitting but not for prediction

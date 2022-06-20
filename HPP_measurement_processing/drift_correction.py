@@ -86,7 +86,7 @@ def prepare_data(in_data: pd.DataFrame, quant:float=0.1, duration:str = '11d', f
     Inner function to generate the parameters used for the LP8 drift
     correction
     """
-    #Add pressure interpolation
+    #Function to fit elapsed time at a given location
     def elapsed(s: pd.Series) -> pd.Series:
         return (s - s.min()).dt.days
     out_data = in_data.copy()
@@ -95,13 +95,15 @@ def prepare_data(in_data: pd.DataFrame, quant:float=0.1, duration:str = '11d', f
         drift_data_offset = out_data.set_index('date').rolling(duration)[[('ref_loc_CO2', ref_stn), ('ref_loc_CO2', master_stn), ('CO2'), ('temperature')]].apply(lambda x: x.quantile(quant))
         drift_data_offset['offset'] =  drift_data_offset[('ref_loc_CO2', ref_stn)] - drift_data_offset[('CO2')] 
         out_data['offset'] = drift_data_offset.reset_index()['offset']
+        for stn in [master_stn, ref_stn]:
+            out_data[('ref_loc_CO2_quantile', stn)] = drift_data_offset.reset_index()[('ref_loc_CO2', stn)]
         out_data['temperature_quantile'] = drift_data_offset.reset_index()['temperature']
     out_data['temperature_sq'] = out_data['temperature']**2
     out_data['hour'] = out_data['date'].dt.hour
     out_data['location_elapsed'] =  out_data.reset_index().groupby('location')['date'].transform(elapsed)
     return out_data
 
-def fit_drift(in_data: pd.DataFrame, target:str = 'offset', regs: List[str] = ['location_elapsed', 'temperature', 'temperature_sq'] ) -> mods.CalibrationParameters:
+def fit_drift(in_data: pd.DataFrame, target:Union[str, Tuple[str,str]] = 'offset', regs: List[str] = ['location_elapsed', 'temperature', 'temperature_sq'] ) -> mods.CalibrationParameters:
     """
     Fits a regression model to estimate the time-dependent sensor drift
     """
@@ -112,18 +114,21 @@ def fit_drift(in_data: pd.DataFrame, target:str = 'offset', regs: List[str] = ['
     sensor_id = str(int(in_data.sensor_id.unique()[0]))
     return mods.CalibrationParameters(species="CO2", 
     valid_from = in_data.date.min(), 
-    valid_to=in_data.date.max(), 
+    valid_to = in_data.date.max(), 
     computed = dt.datetime.now(), 
     device = sensor_id, parameters = pms)
 
-def predict_drift(in_data: pd.DataFrame, model: OLSResults) -> pd.DataFrame:
+def predict_drift(in_data: pd.DataFrame, model: OLSResults, two_point:bool=False) -> pd.DataFrame:
     """
     Given a fitted drift model, predict the offset for every entry in the dataframe
     `in_data`
     """
     out_data = in_data.copy()
     cols = [c for c in model.params.keys() if c in in_data.columns]
-    out_data['CO2_drift_corrected'] = out_data['CO2'] + model.predict(add_constant(in_data[cols]))
+    if two_point:
+        out_data['CO2_drift_corrected'] = model.predict(add_constant(in_data[cols]))
+    else:
+        out_data['CO2_drift_corrected'] = out_data['CO2'] + model.predict(add_constant(in_data[cols]))
     return out_data
 
 
@@ -167,29 +172,49 @@ def plot_drift_correction(dt: pd.DataFrame ) -> plt.figure:
     return fig
 
 
-def apply_drift_correction(data: pd.DataFrame, fitted: mods.CalibrationParameters, date_col = 'date') -> pd.DataFrame:
+def apply_drift_correction(data: pd.DataFrame, fitted: mods.CalibrationParameters, date_col = 'date', two_point: bool = False) -> pd.DataFrame:
     """
     Given a :obj:`pandas.DataFrame` and a fitted model in the form of :obj:`sensorutils.models.CalibrationParameters`, applies
     the model `fitted` to `data` only keeping the portion of the data within the validity period of the model fit.
     """
     valid = data[date_col].between(fitted.valid_from, fitted.valid_to)
     data_valid = data[valid]
-    return predict_drift(data_valid, fitted.to_statsmodel())
+    return predict_drift(data_valid, fitted.to_statsmodel(), two_point)
 
+
+#Reference stations
 refs = ['LAEG', 'DUE1']
+#Sampling time for quantiles
+group_freq = '1w'
+resample_duration = '1h'
+
+
 with Session() as session:
     drift_data = pivot_drift_data(cal.get_drift_correction_data(session, args.id, start, end, ref_loc=refs), ref_loc=refs)
 
 
-group_freq = '1w'
-resample_duration = '1h'
+#Apply correction for each deployment
+for loc, local_offset_data in drift_data.groupby('location'):
+    #Decide the type of calibration depending on where the sensor was deployed
+    #If the sensor was collocated with a picarro sensor, compute a two point 
+    #regression versus that reference, otherwise only fit
+    #the offset (computed as the difference between reference and sensor value over a sliding window using `ref_stn` location as reference value)
+    if loc in refs:
+        target = ('ref_loc_CO2', loc)
+        regressors = ['CO2', 'temperature']
+        two_point = True
+    else:
+        target = 'offset'
+        regressors = ['location_elapsed', 'temperature']
+        two_point = False
+    #Prepare data
+    drift_data_offset = prepare_data(local_offset_data.set_index('date').groupby('location').resample(resample_duration).mean().reset_index(), master_stn=refs[0], ref_stn=refs[1])
+    
+    offset_fits = drift_data_offset.set_index('date').groupby(pd.Grouper(freq=group_freq)).apply(lambda x: fit_drift(x.reset_index(), target=target, regs=regressors))
+    prediction_data = prepare_data(local_offset_data.reset_index(), fit=False, master_stn=refs[0], ref_stn=refs[1]).set_index('date')
+    #Iterate over the fits and apply the correction
+    data_corrected = pd.concat([apply_drift_correction(prediction_data.reset_index(), x, two_point=two_point) for x in offset_fits.tolist()])
 
-drift_data_offset = prepare_data(drift_data.set_index('date').groupby('location').resample(resample_duration).mean().reset_index(), master_stn=refs[0], ref_stn=refs[1])
-offset_fits = drift_data_offset.set_index('date').groupby(pd.Grouper(freq=group_freq)).apply(lambda x: fit_drift(x.reset_index()))
-prediction_data = prepare_data(drift_data.reset_index(), fit=False, master_stn=refs[0], ref_stn=refs[1]).set_index('date')
-
-
-data_corrected = pd.concat([apply_drift_correction(prediction_data.reset_index(), x) for x in offset_fits.tolist()])
 plt_path = args.plot.with_name(f"drift_correction_{args.id}.pdf")
 with PdfPages(plt_path) as pdf:
     data_corrected.set_index('date').groupby(pd.Grouper(freq='7d')).apply(lambda x: pdf.savefig(plot_drift_correction(x.reset_index())))

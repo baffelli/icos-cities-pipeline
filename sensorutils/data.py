@@ -358,6 +358,12 @@ def reshape_influxql_results(res: pd.DataFrame, keys:List[str], names:str, value
     """
     return pd.pivot_table(res, index=keys, columns=names, values=value).reset_index()
 
+def prepare_df_for_influxdb(data: pd.DataFrame, keys=['time', 'node']) -> Dict:
+    """
+    Prepares a dataframe to be stored in influxdb by converting
+    from long to wide and adding information on the series
+    """
+
 
 def map_climate_chamber_status_code(ec: ClimateChamberStatusCode) -> int:
     match ec:
