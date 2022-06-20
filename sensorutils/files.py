@@ -21,6 +21,9 @@ import re as re
 from sensorutils import data as du
 from sensorutils import db as db_utils
 
+from influxdb import SeriesHelper
+
+
 import json
 import sqlalchemy as sqa
 from sqlalchemy.orm import sessionmaker, Session
@@ -515,6 +518,14 @@ class DatabaseSource(DataSource):
     def attach_db(self, db:Any) -> None:
         pass
 
+    # def make_group_dict(self, *values) -> dict:
+    #     """
+    #     Makes a dictionary used to 
+    #     filter a given group by taking a list of values
+    #     as input (mapping by position)
+    #     """
+    #     []
+
 def check_db(fun):
     """
     This decorator ensures that the instance of the object with the decorated method
@@ -591,7 +602,11 @@ class DBSource(DatabaseSource):
         Safely transforms the :obj:`grouping_key` expression into
         a SQL statement for sqlalchemy. Used to construct the query in `list_files`
         """
-        return {k: sqa.sql.literal_column(f"{v}").label(k) for k,v in self.grouping_key.items() if self.grouping_key}
+        if self.grouping_key is not None:
+            grp = {k: sqa.sql.literal_column(f"{v}").label(k) for k,v in self.grouping_key.items() if self.grouping_key}
+        else:
+            grp = {}
+        return grp
         #return (sqa.sql.literal_column(f"{self.grouping_key}").label(label) if self.grouping_key else None)
 
     def group_comparison(self, groups=Dict[str, Union[str, int]]) -> List[sqa.sql.expression.ColumnOperators]:
@@ -635,7 +650,8 @@ class DBSource(DatabaseSource):
             filt =  filt + (*self.group_comparison(group or self.group),)
         qs = sqa.select(table).filter(*filt).subquery()
         qf = sqa.select(*cols).distinct().select_from(qs)
-        logger.debug(f'The query is {qf}')
+        qc = qf.compile()
+        logger.info(f'The query is {qc}')
         return pd.read_sql_query(qf, self.eng, parse_dates=['date']).reset_index()
 
 
@@ -669,6 +685,7 @@ class DBSource(DatabaseSource):
             filts = filts + (*self.group_comparison(grp), )
         else:
             pass
+
         qs = dq.filter(*filts)
         qs_comp = qs.compile(compile_kwargs={"literal_binds": True})
         logger.debug(f"The query is {qs_comp}")
@@ -761,6 +778,8 @@ class InfluxdbSource(DatabaseSource):
     group: Optional[Dict[str, Union[str, int]]] = None
     grouping_key: Optional[Dict[str,str]] = None
     date_column: str = 'time'
+    db: Optional[str] = None
+    tags: Optional[Dict[str, str]] = None
 
     def attach_db(self, db: influxdb.InfluxDBClient) -> None:
         self.eng = db
@@ -828,7 +847,7 @@ class InfluxdbSource(DatabaseSource):
         *
         FROM
         (
-            SELECT {sq} FROM "measurements" WHERE {gq}
+            SELECT {sq} FROM "{self.table}" WHERE {gq}
             sensor =~ /senseair*|sensirion*|battery|calibration*/ AND "time" > $start_ts AND "time" < $end_ts
             GROUP BY "{self.grouping_expression()}","sensor"{aq} fill(previous)
         )
@@ -842,10 +861,61 @@ class InfluxdbSource(DatabaseSource):
         df_wide = du.reshape_influxql_results(df, grp, 'sensor', 'value')
         return df_wide
 
-    @check_db
-    def write_file(self, input: pd.DataFrame, temporary: bool = False) -> None:
-        pass
+    def prepare_series(self, data: pd.DataFrame, extra_tags: Optional[list[str]] = None) -> SeriesHelper:
+        """
+        Given the current data source, prepares an `influxdb.SeriesHelper` object
+        to write the data to the data source
+        """
+        tag_string = "".join([f"{k}={v}" for k,v in self.tags.items()]) if self.tags else ""
+        f"{self.table},{tag_string},"
+        class CurrentHelper(SeriesHelper):
+            """Instantiate SeriesHelper to write points to the backend."""
 
+            class Meta:
+                """Meta class stores time series helper configuration."""
+
+                # The client should be an instance of InfluxDBClient.
+                client = self.eng
+
+                # The series name must be a string. Add dependent fields/tags
+                # in curly brackets.
+                series_name = f'{self.table}'
+
+                # Defines all the fields in this time series.
+                fields = [c for c in data.columns]
+
+                # Defines all the tags for the series.
+                tags = [k for k in self.tags.keys() if self.tags] + extra_tags
+
+                # Defines the number of data points to store prior to writing
+                # on the wire.
+                bulk_size = 5
+                time_precision = 's'
+                # autocommit must be set to True when using bulk_size
+                autocommit = True
+        return CurrentHelper
+
+    @check_db
+    def write_file(self, input: pd.DataFrame, group:Optional[Dict[str,Union[int, str]]], temporary: bool = False) -> None:
+        """
+        Writes a dataset back  to influxdb
+        """
+        grps = group or self.group
+        #Make data long
+        group_keys = [k for k in grps.keys() if grps]
+        data_long = pd.melt(input, id_vars=['time'] + group_keys).rename(columns={'variable':'sensor'})
+        data_long['time'] = data_long['time']
+        #Extract tags
+        keep = ['value', 'time'] + group_keys
+        extra_tags = [c for  c in data_long.columns if c not in keep]
+        Helper = self.prepare_series(data_long[keep], extra_tags)
+        for row in data_long.to_dict(orient='records'):
+            #Split fields data and tags
+            data_row = {k:v for k,v in row.items() if k in keep}
+            tag_row = {k:v for k,v in row.items() if k in extra_tags}
+            Helper(**data_row, **(tag_row| (self.tags or {})))
+        Helper.commit()
+        logger.info("Done copying file")
 
 def day_ts(day: dt.datetime) -> Tuple[dt.datetime, dt.datetime]:
     """
@@ -1015,7 +1085,7 @@ class NabelSource(DataSource):
         pandas.DataFrame
             The dataframe with all measurements
         """
-        fl = self.list_files()
+        fl = self.list_files(group=group)
         fl_to_read = fl[fl['date'] == date]
 
         ds = pd.concat([read_nabel_csv(f)
@@ -1182,7 +1252,7 @@ class SourceMapping():
         destination_files = self.dest.list_files(group=group).sort_values('date').drop_duplicates()
         if len(source_files) > 0:
             source_dates = source_files['date'].dt.to_pydatetime()
-            dest_dates = destination_files['date'].dt.to_pydatetime()
+            dest_dates = destination_files['date'].dt.to_pydatetime() if not destination_files.empty else {}
             # Find dates to backfill
             backfill_dates = set(
                 source_dates[(dt.datetime.now() - source_dates) <= dt.timedelta(days=backfill)])

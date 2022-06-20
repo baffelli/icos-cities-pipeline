@@ -3,63 +3,45 @@ HPP:
     type: DB
     table: co2_level2
     date_from: 2022-01-01T00:00:00.000
-    grouping_key: sensor_id
-    date_column: DATE(FROM_UNIXTIME(time))
-    timestamp_comlumn: time
+    grouping_key: 
+      node: sensor_id
+    timestamp_column: timestamp
+    date_column:  DATE(FROM_UNIXTIME(timestamp))
     na: .NaN
   dest:
-    type: InfluxDB
+    type: influxDB
+    db: processed
     table: measurements
     date_from: 2022-01-01T00:00:00.000
-    node: sensor_id
-    date_column:  DATE(FROM_UNIXTIME(timestamp))
+    grouping_key: 
+      node: node
   columns:
-    - {name: time,  source_name: 'time', datatype: int, na: Null}
-    - {name: SensorUnit_ID, source_name: node, datatype: int, na: Null}
-    - {name: battery, source_name: battery, datatype: float, na: 0}
-    - {name: calibration_a, source_name: 'calibration', datatype: int, na: 0}
-    - {name: calibration_a, source_name: 'calibration-a', datatype: int, na: 0}
-    - {name: calibration_b, source_name: 'calibration-b', datatype: int, na: 0}
-    - {name: senseair_hpp_co2_filtered, source_name: 'senseair-hpp-co2-filtered', datatype: float, na: Null}
-    - {name: senseair_hpp_ir_signal, source_name: 'senseair-hpp-ir-signal', datatype: float, na: Null}
-    - {name: senseair_hpp_lpl_signal, source_name: 'senseair-hpp-lpl-signal', datatype: float, na: Null}
-    - {name: senseair_hpp_ntc5_diff_temp, source_name: 'senseair-hpp-ntc5-diff-temp', datatype: float, na: Null}  
-    - {name: senseair_hpp_ntc6_se_temp, source_name: 'senseair-hpp-ntc6-se-temp', datatype: float, na: Null}  
-    - {name: senseair_hpp_pressure_filtered, source_name: 'senseair-hpp-pressure-filtered', datatype: float, na: Null}  
-    - {name: senseair_hpp_status, source_name: 'senseair-hpp-status', datatype: int, na: 0}  
-    - {name: senseair_hpp_temperature_detector, source_name: 'senseair-hpp-temperature-detector', datatype: float, na: Null}  
-    - {name: senseair_hpp_temperature_mcu, source_name: 'senseair-hpp-temperature-mcu', datatype: float, na: Null} 
-    - {name: sensirion_sht21_humidity, source_name: 'sensirion-sht21-humidity', datatype: float, na: Null}   
-    - {name: sensirion_sht21_temperature, source_name: 'sensirion-sht21-temperature', datatype: float, na: Null}      
+    - {name: time,  source_name: 'timestamp', datatype: int, na: Null}
+    - {name: node, source_name: sensor_id, datatype: int, na: Null}
+    - {name: CO2, source_name: CO2, datatype: float, na: Null}
 LP8:
   source:
     type: DB
-    table: lp8_data
-    date_from: 2022-01-01T00:00:00.000
-    grouping_key: SensorUnit_ID
-    date_column: DATE(FROM_UNIXTIME(time))
-    na: -999
-  dest:
-    type: DB
     table: co2_level2
     date_from: 2022-01-01T00:00:00.000
-    grouping_key: sensor_id
-    date_column:  DATE(FROM_UNIXTIME(timestamp))
+    grouping_key: 
+      node: sensor_id
+    date_column: DATE(FROM_UNIXTIME(timestamp))
+    timestamp_column: timestamp
+    na: -999
+  dest:
+    type: influxDB
+    db: processed
+    table: measurements
+    date_from: 2022-01-01T00:00:00.000
+    grouping_key: 
+      node: node
+    tags:
+      channel: lp8_level_00
+      title: 'co2 [ppm]'
+      unit: 'ppm'
   columns:
-    - {name: time,  source_name: 'time', datatype: int, na: Null}
-    - {name: SensorUnit_ID, source_name: node, datatype: int, na: Null}
-    - {name: battery, source_name: battery, datatype: float, na: 0}
-    - {name: calibration_a, source_name: 'calibration', datatype: int, na: 0}
-    - {name: calibration_a, source_name: 'calibration-a', datatype: int, na: 0}
-    - {name: calibration_b, source_name: 'calibration-b', datatype: int, na: 0}
-    - {name: senseair_hpp_co2_filtered, source_name: 'senseair-hpp-co2-filtered', datatype: float, na: Null}
-    - {name: senseair_hpp_ir_signal, source_name: 'senseair-hpp-ir-signal', datatype: float, na: Null}
-    - {name: senseair_hpp_lpl_signal, source_name: 'senseair-hpp-lpl-signal', datatype: float, na: Null}
-    - {name: senseair_hpp_ntc5_diff_temp, source_name: 'senseair-hpp-ntc5-diff-temp', datatype: float, na: Null}  
-    - {name: senseair_hpp_ntc6_se_temp, source_name: 'senseair-hpp-ntc6-se-temp', datatype: float, na: Null}  
-    - {name: senseair_hpp_pressure_filtered, source_name: 'senseair-hpp-pressure-filtered', datatype: float, na: Null}  
-    - {name: senseair_hpp_status, source_name: 'senseair-hpp-status', datatype: int, na: 0}  
-    - {name: senseair_hpp_temperature_detector, source_name: 'senseair-hpp-temperature-detector', datatype: float, na: Null}  
-    - {name: senseair_hpp_temperature_mcu, source_name: 'senseair-hpp-temperature-mcu', datatype: float, na: Null} 
-    - {name: sensirion_sht21_humidity, source_name: 'sensirion-sht21-humidity', datatype: float, na: Null}   
-    - {name: sensirion_sht21_temperature, source_name: 'sensirion-sht21-temperature', datatype: float, na: Null}      
+    - {name: time,  source_name: 'timestamp', datatype: int, na: Null}
+    - {name: node, source_name: sensor_id, datatype: str, na: Null}
+    - {name: co2, source_name: CO2, datatype: float, na: Null}
+
