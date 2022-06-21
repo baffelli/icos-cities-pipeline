@@ -101,7 +101,7 @@ _export:
         for_each>: 
             sens: ${sensors['LP8']}
         _do: 
-            sh>: python3.10 ${base_folder}/HPP_measurement_processing/drift_correction.py ${sens} --plot ${plot_folder}
+            sh>: python3.10 ${base_folder}/HPP_measurement_processing/drift_correction.py LP8 ${sens} --plot ${plot_folder}
 
 #Upload metadata to decentlab-db
 +metadata:

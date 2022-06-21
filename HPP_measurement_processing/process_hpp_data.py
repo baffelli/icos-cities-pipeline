@@ -133,11 +133,14 @@ def LP8_CO2_calibration(dt_in: pd.DataFrame, regs: List[str], target: str = 'ref
 def predict_CO2(dt_in: pd.DataFrame, model: sm.regression.linear_model.RegressionResultsWrapper) -> pd.DataFrame:
     """
     Apply the model in `model` to
-    predict the CO2 concentration
+    predict the CO2 concentration.
+    It assumes that `dt_in` has a column called `nc_sens` that 
+    gives the STP normalisation constant for the sensor
     """
     dt_out = dt_in.copy()
-    dt_out["CO2_pred"] = model.predict(dt_out[model.model.exog_names]) 
-    dt_out["CO2_pred_comp"] = dt_out["CO2_pred"] * 1/dt_out["nc_sens"]
+    dt_out["CO2_pred"] = model.predict(dt_out[model.model.exog_names]) * 1/dt_out["nc_sens"]
+    #Compensate pressure / temperature effects (assumes )
+    dt_out["CO2_pred_comp"] = dt_out["CO2_pred"]  *  dt_out["nc_sens"]
 
     return dt_out
 
@@ -456,7 +459,8 @@ for current_id in ids_to_process:
 
             logger.info(f"The missing dates for {id} are {missing_dates}")
             # Get calibration parameters
-            wp_path = b_pth.with_name(f'LP8_predictions_{id}.pdf')
+            # The / operator here is used to concatenate paths
+            wp_path = b_pth / (f'LP8_predictions_{id}.pdf')
             pdf = PdfPages(wp_path, 'a')
             # Iterate over missing dates
             for date in missing_dates:
@@ -488,15 +492,19 @@ for current_id in ids_to_process:
                     prediction_features = cal.prepare_LP8_features(
                         cal_data_clean, fit=True)
                     # Predict
-                    ref_col = 'ref_CO2_comp'
+                    ref_col = 'ref_CO2'
                     pred_col = 'CO2_pred'
                     orig_col = 'sensor_CO2'
                     predicted = predict_CO2(prediction_features, model_fit)
                     l2_dt = cal.prepare_level2_data(predicted, pm.id, pred_col=pred_col)
                     cal.persist_level2_data(ses, l2_dt)
+                    #FIXME make it more flexible, e.g by designing a filtering function 
+                    t_threshold = 35
+                    co2_pred_filtered = predicted[predicted["sensor_t"] < t_threshold]
+                    #breakpoint()
                     #Check prediction quality
                     if 'ref_CO2' in predicted.columns:
-                        pred_quality = cal.compute_quality_indices(predicted, ref_col=ref_col, fit=False)
+                        pred_quality = cal.compute_quality_indices(co2_pred_filtered, ref_col=ref_col, fit=False)
                         pred_quality_st = dc.replace(pred_quality, **{'date': date.date(), 'model_id': pm.id, 'sensor_id':id})
                         ses.merge(pred_quality_st)
                     ses.commit()
@@ -512,6 +520,7 @@ for current_id in ids_to_process:
         case "calibrate",  (du.AvailableSensors.LP8 as st):
             # Define regressors and target columns 
             tg_col = 'ref_CO2_comp'
+            ref_col = 'ref_CO2'
             orig_col = 'sensor_CO2'
             pred_col = 'CO2_pred'
             #These columns are generated in cal.prepare_LP8_features in the calibration module
@@ -541,7 +550,7 @@ for current_id in ids_to_process:
                         cal_features.reset_index(), duration=dur.days, mode=cal.CalModes.CHAMBER, sensor=args.sensor_type)
                     cal_fit = LP8_CO2_calibration(
                         cal_df, reg, target=tg_col, dummy=False)
-                    cal_df.to_csv( b_pth.with_name(f'LP8_features_{id}.pdf'))
+                    cal_df.to_csv( b_pth / (f'LP8_features_{id}.pdf'))
                 except (ValueError, DataError) as E:
                     logger.exception(E)
                     logger.info("No valid data for {id}")
@@ -555,17 +564,18 @@ for current_id in ids_to_process:
                 #TODO determine an indvididual RH threshold for each sensor
                 # fit_rh_threshold(co2_pred_all)
                 #Plot full timeseries
-                ts_plot = cal.plot_CO2_calibration(co2_pred, pred_col=pred_col, orig_col=orig_col, ref_col=tg_col)
+                ts_plot = cal.plot_CO2_calibration(co2_pred, pred_col=pred_col, orig_col=orig_col, ref_col=ref_col)
                 base_name = f"{st.name}_{id}_{cd.serial}_{cd.start:%Y%m%d}_{cd.end:%Y%m%d}"
-                wp_path = b_pth.with_name(f'{base_name}.pdf')
+                wp_path = b_pth / (f'{base_name}.pdf')
                 ts_plot.savefig(wp_path)
                 # Persist parameters
                 computed_when = dt.datetime.now()
                 cal_obj = cal.convert_calibration_parameters(
                     cal_fit, "CO2", args.sensor_type, cd.data.cal_end.max(), cd.next, computed_when, cd.serial)
                 # Compute model statistics
+
                 model_statistics = cal.compute_quality_indices(
-                    co2_pred, ref_col=tg_col, pred_col=pred_col)
+                    co2_pred, ref_col=tg_col, pred_col=pred_col, t_threshold=30)
                 # Persist fit and model statistics
                 with Session() as session:
                     if not model_statistics.valid():
@@ -606,7 +616,7 @@ for current_id in ids_to_process:
                 cal_pred = cal.apply_HPP_calibration(cal_features, cal_params)
                 #Plot (one plot by day)
                 figs = cal_pred.set_index('date').groupby(pd.Grouper(freq='1d')).apply(lambda x: pd.Series({'plot':cal.plot_HPP_calibration(x.reset_index())})).reset_index()
-                wp_path = b_pth.with_name(f'HPP_bottle_cal_{id}_.pdf')
+                wp_path = b_pth / (f'HPP_bottle_cal_{id}_.pdf')
                 #Create titles
                 titles = figs.apply(lambda x: f"{x.date}, cycle: {x.date}", axis=1).tolist()
                 save_multipage(figs['plot'].tolist(), wp_path,  titles)
@@ -622,7 +632,7 @@ for current_id in ids_to_process:
                 logger.info(f"No valid calibrations for {id} between {start} and {end}")
                 continue
         case "process", (du.AvailableSensors.HPP as st):
-            wp_path = b_pth.with_name(f'HPP_predictions_{id}.pdf')
+            wp_path = b_pth / (f'HPP_predictions_{id}.pdf')
             pdf = PdfPages(wp_path, 'a')
             av_t = get_averaging_time(st, True)
             #List missing dates

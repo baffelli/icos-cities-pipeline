@@ -579,8 +579,9 @@ def none_if_nan(value: np.number) -> Optional[float]:
 def compute_quality_indices(pred: pd.DataFrame, ref_col='ref_CO2', pred_col='CO2_pred', fit=True) -> mods.ModelFitPerformance:
     """
     Compute model quality indicators for a dataframe of model predictions
-    and return a dict of the statistics
+    and return a dict of the statistics.
     """
+
     res_rmse = none_if_nan(rmse(pred[ref_col],  pred[pred_col]))
     res_bias = none_if_nan(bias(pred[ref_col],  pred[pred_col]))
     res_cor = none_if_nan(pred[ref_col].corr(pred[pred_col]))
@@ -1029,7 +1030,7 @@ def prepare_LP8_features(dt: pd.DataFrame, fit: bool = True,  plt: str = '1d') -
         try:
             dt_new['ref_t_abs'] = calc.absolute_temperature(dt_new['ref_T'])
             # Normalisation constant
-            dt_new["nc"] = calc.normalisation_constant(dt_new['ref_pressure'] * 100, dt_new['ref_t_abs'])
+            dt_new["nc"] = calc.normalisation_constant(dt_new['ref_pressure'], dt_new['ref_t_abs'])
             # Number of molecule (not concentration) at current conditions  using ideal gas law
             #Dry to wet
             dt_new['ref_CO2'] = calc.dry_to_wet_molar_mixing(
