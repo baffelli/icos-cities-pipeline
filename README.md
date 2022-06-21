@@ -4,10 +4,17 @@ This repository contains *almost* all the code, configurations and scripts neede
 
 ## Setup the Pipeline
 To setup a working pipeline, you need to follow the steps below. In case of problems, you can contact Simone Baffelli. In the following sections, we assume you work on a Linux system with python>=3.10 and with an working installation of conda/anaconda.
+
+To enable conda on DDM06, follow these steps:
+1. Login on the server and load the conda module using: `module load anaconda`
+2. Enable conda using `conda init`.
+
+You are set!
+
 ### Install dependencies with conda
-Using conda, install all the dependencies from [icos-cities.yaml](config/icos-cities.yaml):
+Using conda, install all the dependencies from [icos-cities.yaml](config/icos-cities.yml):
 ```bash
-conda env create -f config/environment.yml
+conda env create -f config/icos-cities.yml
 ```
 The environment is called *icos-cities*. 
 To activate the environment, use:
