@@ -45,6 +45,7 @@ import subprocess as sp
 
 from sqlalchemy.orm import aliased
 
+import dataclasses
 """
 This module contains functions used to interact with files and read and write specific file formats used in this 
 project
@@ -773,6 +774,8 @@ class InfluxdbSource(DatabaseSource):
     for the methods to work. This can be done at run time by monkey patching.
     The `date_column` here is set to be `time` by default (it is a timestamp) and gets
     converted by the client. This in unlike the other SQL DataSources where the conversion is specified by the user
+    The `sensors` optional value is a list of sensors that is turned into a regex to select only the tags values corresponding
+    to the desired sensors
     """
     eng: Optional[influxdb.client.InfluxDBClient] = None
     group: Optional[Dict[str, Union[str, int]]] = None
@@ -780,10 +783,18 @@ class InfluxdbSource(DatabaseSource):
     date_column: str = 'time'
     db: Optional[str] = None
     tags: Optional[Dict[str, str]] = None
+    sensors: List[str] =  dataclasses.field(default_factory=lambda: ['senseair*', 'sensirion*', 'bosch*', 'vaisala*', 'battery*', 'licor*', 'calibration*'])
 
     def attach_db(self, db: influxdb.InfluxDBClient) -> None:
         self.eng = db
     
+    def sensors_re(self) -> str:
+        """
+        Make a regular expression to select only the desired sensor types (~ similar to columns in 
+        relational DBs) using the `sensors` attribute
+        """
+        return f"/{'|'.join(self.sensors)}/"
+
     def group_expression(self, group: Optional[List[Union[str, int]]]):
         """
         Prepare the filter expression to filter only a certain group from the database
@@ -805,7 +816,7 @@ class InfluxdbSource(DatabaseSource):
             *
             FROM
             (
-            SELECT FIRST("value") AS value FROM "{self.table}" WHERE {gq} sensor =~ /senseair|sensirion|battery|calibration/ AND time > '{self.date_from}' GROUP BY time(1d)
+            SELECT FIRST("value") AS value FROM "{self.table}" WHERE {gq} sensor =~ {self.sensors_re()} AND time > '{self.date_from}' GROUP BY time(1d)
             )
             """
             logger.info(f"The influxDB Query is: {q}")
@@ -848,7 +859,7 @@ class InfluxdbSource(DatabaseSource):
         FROM
         (
             SELECT {sq} FROM "{self.table}" WHERE {gq}
-            sensor =~ /senseair*|sensirion*|battery|calibration*/ AND "time" > $start_ts AND "time" < $end_ts
+            sensor =~  {self.sensors_re()}  AND "time" > $start_ts AND "time" < $end_ts
             GROUP BY "{self.grouping_expression()}","sensor"{aq} fill(previous)
         )
         """

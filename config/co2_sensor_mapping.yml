@@ -65,3 +65,32 @@ LP8:
       - {name: 'senseair_lp8_vcap', source_name: 'senseair-lp8-vcap', datatype: int, na: Null}
       - {name: sensirion_sht21_humidity, source_name: 'sensirion-sht21-humidity', datatype: float, na: Null}   
       - {name: sensirion_sht21_temperature, source_name: 'sensirion-sht21-temperature', datatype: float, na: Null}
+Vaisala:
+  source:
+      type: influxDB
+      table: measurements
+      date_from: 2017-01-01T00:00:00.000
+      grouping_key: 
+        node: node
+  dest:
+      type: DB
+      table: vaisala_data
+      db_prefix: CarboSense_MySQL
+      date_from: 2017-01-01T00:00:00.000
+      grouping_key: 
+        node: SensorUnit_ID
+      date_column: DATE(FROM_UNIXTIME(time))
+      na: -999
+  columns:
+      - {name: time,  source_name: 'time', datatype: int, na: Null}
+      - {name: SensorUnit_ID, source_name: node, datatype: int, na: Null}
+      - {name: battery, source_name: battery, datatype: float, na: 0}
+      - {name: calibration_a, source_name: 'calibration-a', datatype: int, na: 0}
+      - {name: calibration_b, source_name: 'calibration-b', datatype: int, na: 0}
+      - {name: vaisala_gmp343_co2, source_name: 'vaisala-gmp343-co2', datatype: float, na: Null}
+      - {name: bosch_bmp280_pressure, source_name: 'bosch-bmp280-pressure', datatype: float, na: Null}
+      - {name: vaisala_gmp343_temperature, source_name: 'vaisala-gmp343-temperature', datatype: float, na: Null}
+      - {name: sensirion_sht21_humidity, source_name: 'sensirion-sht21-humidity', datatype: float, na: Null}   
+      - {name: sensirion_sht21_temperature, source_name: 'sensirion-sht21-temperature', datatype: float, na: Null}     
+      - {name: sensirion_sht30_humidity, source_name: 'sensirion-sht30-humidity', datatype: float, na: Null}   
+      - {name: sensirion_sht30_temperature, source_name: 'sensirion-sht30-temperature', datatype: float, na: Null} 

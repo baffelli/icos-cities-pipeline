@@ -48,7 +48,7 @@ def parse_range(input_range:str) -> Optional[List[int]]:
 
 parser = ap.ArgumentParser(description='Import raw data from decentlab into database')
 parser.add_argument('config', type=cu.path_or_config, help='Path to the datasource mapping configuration file or a dict of config')
-parser.add_argument('sensor_type', type=str, choices=['HPP','LP8'], help='Sensor type to import')
+parser.add_argument('sensor_type', type=du.AvailableSensors, help='Sensor type to import')
 parser.add_argument('id', type=parse_range, nargs='?', help='Sensor id to import: either number or numeric range start-end')
 parser.add_argument('start', type=dt.fromisoformat, help='First date to import')
 parser.add_argument('--import-all', default=False, action='store_true', help='Import all data or only incremental import?')
@@ -57,8 +57,7 @@ parser.add_argument('--backfill', default=0, type=int, help='Backfill time for i
 args = parser.parse_args()
 logger.info('Started')
 #Mapping table <> sensor type
-table_mapping = {'HPP':"hpp_data", "LP8":'lp8_data'}
-
+breakpoint()
 
 #Get API key from secrets
 passw = sec.get_key('decentlab')
@@ -68,7 +67,7 @@ client = dl.decentlab_client(token=passw)
 logger.info('Connecting to the DB')
 engine = db_utils.connect_to_metadata_db()
 #Set the start date of the loading
-cfg = args.config[args.sensor_type]
+cfg = args.config[args.sensor_type.value]
 cfg['dest']['date_from'] = args.start
 cfg['source']['date_from'] = args.start
 mapping = fu.DataMappingFactory.create_mapping(**cfg)
@@ -79,14 +78,15 @@ mapping.dest.attach_db(engine)
 #List all ids
 if not args.id:
 	logger.info(f"Getting all ids for sensor type {args.sensor_type}")
-	sensor_ids = db_utils.list_all_sensor_ids(args.sensor_type, engine)
+	sensor_ids = db_utils.list_all_sensor_ids(args.sensor_type.value, engine)
 else:
 	logger.info('Processing only sensor with id {args.id}')
 	sensor_ids = pd.DataFrame({'SensorUnit_ID':args.id})
 #Iterate over all sensors
 for row in sensor_ids.itertuples():
 	logger.info(f"Listing missing files for sensor  {row.SensorUnit_ID}")
-	missing = mapping.list_files_missing_in_dest(group=dict(node=row.SensorUnit_ID), backfill=args.backfill)
+	all_missing = mapping.list_files_missing_in_dest(group=dict(node=row.SensorUnit_ID), backfill=args.backfill, all=args.import_all)
+	missing = [m for m in all_missing if m >= args.start]
 	logger.info(f"The missing files for sensor {row.SensorUnit_ID} are {missing}")
 	for m in missing:
 		logger.info(f"Loading file {m} for sensor {row.SensorUnit_ID}")
