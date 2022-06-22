@@ -38,11 +38,11 @@ The configuration is specified in a yaml file, see the repository for an example
 
 
 
-def load_and_map(mapping: fu.SourceMapping, temporary: bool=False, import_all: bool=False) -> None:
+def load_and_map(mapping: fu.SourceMapping, backfill: int, temporary: bool=False, import_all: bool=False) -> None:
     #Iterate over the mapping
     log.logger.info(f'Listing missing files for {mapping.dest}')
     #Get Missing files
-    missing_files = mapping.list_files_missing_in_dest(backfill=5, all=import_all, group=mapping.dest.group)
+    missing_files = mapping.list_files_missing_in_dest(backfill=backfill, all=import_all, group=mapping.dest.group)
     #Iterate over files
     for date in missing_files:
         log.logger.info(f'Transfering file for {mapping.dest} at date {date}')
@@ -52,6 +52,7 @@ parser = ap.ArgumentParser()
 parser.add_argument("config", type=cu.path_or_config, help='Path of configuration file')
 parser.add_argument("location", type=str, help='Import data for given location')
 parser.add_argument("--import-all", action='store_true', help='If set, reimport all data from all sources')
+parser.add_argument("--backfill", type=int, default=10, help='How many days to backfill data')
 parser.add_argument("--temporary", action='store_true', help='If set, only temporary copy data to destination (used for testin)')
 args = parser.parse_args()
 source_dest_mapping = fu.DataMappingFactory.create_mapping(**args.config[args.location])
@@ -62,4 +63,4 @@ try:
 except:
     pass
 source_dest_mapping.dest.attach_db(eng)
-load_and_map(source_dest_mapping, import_all=args.import_all)
+load_and_map(source_dest_mapping, args.backfill, import_all=args.import_all)

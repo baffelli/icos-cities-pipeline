@@ -385,6 +385,32 @@ class HPPData(base.Base, TimeseriesData):
     )
 
 @dataclass
+class VaisalaData(base.Base, TimeseriesData):
+    """
+    ORM object to represent the raw Vaisala GMP343 Data
+    """
+    __tablename__ = "vaisala_data"
+    __sa_dataclass_metadata_key__ = "sa"
+    id: int = Column("SensorUnit_ID", Integer, primary_key=True)
+    time: int = Column("time", Integer, primary_key=True)
+    battery: float = Column("battery", Float)
+    calibration_a: int  = Column(Integer)
+    calibration_b: int  = Column(Integer)
+    vaisala_gmp343_co2: float = Column(Float)
+    vaisala_gmp343_temperature: float = Column(Float)
+    bosch_bmp280_pressure: float = Column(Float)
+    sensirion_sht30_humidity: float = Column(Float)
+    sensirion_sht30_temperature: float = Column(Float)
+    sensirion_sht21_temperature: float = Column(Float)
+    sensirion_sht21_humidity: float = Column(Float)
+    previous_calibration_a: int = column_property(
+        func.lag(calibration_a).over(partition_by=id, order_by=time).label("previous_calibration_a")
+    )
+    previous_calibration_b: int = column_property(
+        func.lag(calibration_b).over(partition_by=id, order_by=time).label("previous_calibration_b")
+    )
+
+@dataclass
 class PicarroData(base.Base, TimeseriesData):
     """
     ORM object to represent the raw Picarro Data

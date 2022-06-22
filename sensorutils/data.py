@@ -81,6 +81,7 @@ class AvailableSensors(enum.Enum):
     LP8:str = "LP8"
     PICARRO:str = "Picarro"
     Vaisala:str = "Vaisala"
+    Licor:str = "Licor"
 
 
 @dataclass

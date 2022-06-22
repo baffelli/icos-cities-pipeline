@@ -369,6 +369,7 @@ def read_nabel_csv(path: Union[pl.Path, str], encoding: str = 'latin-1') -> pd.D
                        keep_default_na=True, sep=nabel_sep, index_col=False,  na_values=['', ])
     # CET -> UTC
     data['date'] = pd.to_datetime(data['date'], format=nabel_format) - dt.timedelta(hours=1)
+    breakpoint()
     data_filt = data.set_index('date').dropna(how='all').reset_index()
     #Skip problems due to CEST - > CET
     data_valid_date = data_filt[~data_filt['date'].isnull()]

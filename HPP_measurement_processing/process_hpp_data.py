@@ -288,11 +288,11 @@ def save_multipage(plots: List[plt.Figure], base_path: pl.Path, names: List[str]
 
 def get_averaging_time(sensor: du.AvailableSensors, fit: bool = True) -> int:
     match sensor, fit:
-        case du.AvailableSensors.HPP, True:
+        case (du.AvailableSensors.HPP | du.AvailableSensors.Vaisala | du.AvailableSensors.Licor), True:
             av_sec = 60
         case du.AvailableSensors.LP8, True:
             av_sec = 600
-        case du.AvailableSensors.HPP, False:
+        case (du.AvailableSensors.HPP | du.AvailableSensors.Vaisala | du.AvailableSensors.Licor), False:
             av_sec = 60
         case du.AvailableSensors.LP8, False:
             av_sec = 600
@@ -307,6 +307,8 @@ def filter_valid_sensor_ids(data: pd.DataFrame, sensor_type: du.AvailableSensors
         case du.AvailableSensors.HPP:
             vd = data[data[sc].between(400, 500)]
         case du.AvailableSensors.LP8:
+            vd = data
+        case _:
             vd = data
     return vd
 
@@ -434,8 +436,7 @@ ids = filter_valid_sensor_ids(db_utils.list_all_sensor_ids(
 # Make an enum of all valid ids
 valid_ids = make_valid_sensors(ids['SensorUnit_ID'])
 # Find the ids to process
-ids_to_process = [valid_ids(args.id)] if args.id else [
-    v for k, v in valid_ids.__members__.items()]
+ids_to_process = [valid_ids(args.id)] if args.id else [v for k, v in valid_ids.__members__.items()]
 logger.debug(f"Processing mode: '{args.mode}'")
 logger.debug(
     f"Processing sensor type '{args.sensor_type}' with ids:\n {ids_to_process}")
@@ -445,7 +446,10 @@ b_pth: pl.Path = args.plot
 # Starting date for calibration
 start = du.ICOS_START if args.full else dt.datetime.now() - dt.timedelta(days=args.backfill)
 end = dt.datetime.now() if not args.end else args.end
+#Number of days to backfill
 backfill_days = (end - start).days
+#Species to calibrate
+species = 'CO2'
 for current_id in ids_to_process:
     id = current_id.value
     logger.debug(f"Processing sensor id {id}")
@@ -501,7 +505,6 @@ for current_id in ids_to_process:
                     #FIXME make it more flexible, e.g by designing a filtering function 
                     t_threshold = 35
                     co2_pred_filtered = predicted[predicted["sensor_t"] < t_threshold]
-                    #breakpoint()
                     #Check prediction quality
                     if 'ref_CO2' in predicted.columns:
                         pred_quality = cal.compute_quality_indices(co2_pred_filtered, ref_col=ref_col, fit=False)
@@ -571,11 +574,11 @@ for current_id in ids_to_process:
                 # Persist parameters
                 computed_when = dt.datetime.now()
                 cal_obj = cal.convert_calibration_parameters(
-                    cal_fit, "CO2", args.sensor_type, cd.data.cal_end.max(), cd.next, computed_when, cd.serial)
+                    cal_fit, species, args.sensor_type, cd.data.cal_end.max(), cd.next, computed_when, cd.serial)
                 # Compute model statistics
-
+                t_threshold = 33
                 model_statistics = cal.compute_quality_indices(
-                    co2_pred, ref_col=tg_col, pred_col=pred_col, t_threshold=30)
+                    co2_pred, ref_col=tg_col, pred_col=pred_col, t_threshold=t_threshold)
                 # Persist fit and model statistics
                 with Session() as session:
                     if not model_statistics.valid():
@@ -590,19 +593,20 @@ for current_id in ids_to_process:
                     model_statistics.model_id = cal_obj.id
                     session.add(model_statistics)
                     session.commit()
-
-        case "calibrate", (du.AvailableSensors.HPP as st):    
+        #Calibration for HPP, Vaisala and Licor is the same
+        case "calibrate", (du.AvailableSensors.HPP | du.AvailableSensors.Vaisala | du.AvailableSensors.Licor) as st:    
             # Get averaging duration
             av_t = get_averaging_time(st, True)
             # Get data during bottle calibration
             with Session() as session:
-                cal_data = cal.get_HPP_calibration_data(session, id, start, end, av_t)
+                cal_data = cal.get_HPP_calibration_data(session, st, id, start, end, av_t)
                 if cal_data.empty:
                     logger.info(f"No calibration data for {id} between {start} and {end} ")
                     continue
             # Compute calibration features
             target = ['cyl_CO2']
             features = ['sensor_CO2']
+            
             cal_features = cal.prepare_HPP_features(cal_data, fit=True)
             cal_features_filtered = cal.filter_cal(cal_features, endog=features, exog=target)
             if not cal_features_filtered.empty:
@@ -610,13 +614,13 @@ for current_id in ids_to_process:
                 interval = 2
                 #Call bottle calibration
                 logger.info(f"Computing two point calibration for {id}")
-                cal_fit = cal.HPP_two_point_calibration(cal_features_filtered, target, features, window = interval)
+                cal_fit = cal.HPP_two_point_calibration(cal_features_filtered, st, target, features, window = interval, species=species)
                 #Predict
                 cal_params  = [a for a,c in cal_fit]
                 cal_pred = cal.apply_HPP_calibration(cal_features, cal_params)
                 #Plot (one plot by day)
                 figs = cal_pred.set_index('date').groupby(pd.Grouper(freq='1d')).apply(lambda x: pd.Series({'plot':cal.plot_HPP_calibration(x.reset_index())})).reset_index()
-                wp_path = b_pth / (f'HPP_bottle_cal_{id}_.pdf')
+                wp_path = b_pth / (f'{st.value}_bottle_cal_{id}_.pdf')
                 #Create titles
                 titles = figs.apply(lambda x: f"{x.date}, cycle: {x.date}", axis=1).tolist()
                 save_multipage(figs['plot'].tolist(), wp_path,  titles)
@@ -631,8 +635,8 @@ for current_id in ids_to_process:
             else:
                 logger.info(f"No valid calibrations for {id} between {start} and {end}")
                 continue
-        case "process", (du.AvailableSensors.HPP as st):
-            wp_path = b_pth / (f'HPP_predictions_{id}.pdf')
+        case "process", (du.AvailableSensors.HPP | du.AvailableSensors.Vaisala | du.AvailableSensors.Licor) as st:
+            wp_path = b_pth / (f'{st.value}_predictions_{id}.pdf')
             pdf = PdfPages(wp_path, 'a')
             av_t = get_averaging_time(st, True)
             #List missing dates
@@ -643,15 +647,17 @@ for current_id in ids_to_process:
                 day_start, day_end = du.day_range(current_date)
                 serialnumber = db_utils.get_serialnumber(engine, id, st.value, day_start, day_end)
                 with Session() as session:
-                    cp = cal.get_HPP_calibration(session, serialnumber, current_date)
+                    cp = cal.get_HPP_calibration(session, serialnumber, current_date, species=species)
                     if not cp:
-                        logger.info(f"No calibration for HPP {id} on {current_date}, skipping")
+                        logger.info(f"No calibration for {st} {id} on {current_date}, skipping")
                         continue
                     cal_data_all = cal.get_cal_ts(session, id, st, day_start, day_end, av_t, dep=True)
                     cal_sets = [d.data for d in cal_data_all if d]
                     if not cal_sets:
                         continue
                     else:
+                        orig_col = "sensor_CO2"
+                        ref_col = "ref_CO2"
                         cal_data = pd.concat(cal_sets)
                         cal_features =  cal.prepare_HPP_features(cal_data, fit=False)
                         cal_pred = cal.apply_HPP_calibration(cal_features, [cp])
@@ -662,13 +668,13 @@ for current_id in ids_to_process:
                         #Filter the first minute afte the beginnig of a measurement cycle before plotting
                         min_elapsed = 240
                         cal_pred_plot = cal_pred[(cal_pred['inlet'] == '') & (cal_pred.normal_elapsed > min_elapsed)]
-                        ts_plot = cal.plot_CO2_calibration(cal_pred_plot, orig_col="sensor_CO2", ref_col="ref_CO2")
+                        ts_plot = cal.plot_CO2_calibration(cal_pred_plot, orig_col=orig_col, ref_col=ref_col)
                         loc = cal_pred.location.unique()
-                        ts_plot.suptitle(f"HPP {id} on {current_date} at {loc}")
+                        ts_plot.suptitle(f"{st.value} {id} on {current_date} at {loc}")
                         pdf.savefig(ts_plot)
                         logger.info(f"Storing processed data for {id} on {current_date}")
                         if 'ref_CO2' in cal_pred.columns:
-                            pred_quality = cal.compute_quality_indices(cal_pred, ref_col="ref_CO2", fit=False)
+                            pred_quality = cal.compute_quality_indices(cal_pred, ref_col=ref_col, fit=False)
                             pred_quality_st = dc.replace(pred_quality, **{'date': current_date.date(), 'model_id': cp.id, 'sensor_id':id})
                             session.merge(pred_quality_st)
                             session.commit()

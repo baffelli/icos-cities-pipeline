@@ -2,7 +2,7 @@ HPP:
   source:
     type: influxDB
     table: measurements
-    date_from: 2017-01-01T00:00:00.000
+    date_from: 2022-01-01T00:00:00.000
     grouping_key: 
       node: node
   dest:
@@ -36,7 +36,7 @@ LP8:
   source:
       type: influxDB
       table: measurements
-      date_from: 2017-01-01T00:00:00.000
+      date_from: 2022-01-01T00:00:00.000
       grouping_key: 
         node: node
   dest:
@@ -69,7 +69,7 @@ Vaisala:
   source:
       type: influxDB
       table: measurements
-      date_from: 2017-01-01T00:00:00.000
+      date_from: 2022-01-01T00:00:00.000
       grouping_key: 
         node: node
   dest:
@@ -94,3 +94,39 @@ Vaisala:
       - {name: sensirion_sht21_temperature, source_name: 'sensirion-sht21-temperature', datatype: float, na: Null}     
       - {name: sensirion_sht30_humidity, source_name: 'sensirion-sht30-humidity', datatype: float, na: Null}   
       - {name: sensirion_sht30_temperature, source_name: 'sensirion-sht30-temperature', datatype: float, na: Null} 
+Licor:
+  source:
+      type: influxDB
+      table: measurements
+      date_from: 2022-01-01T00:00:00.000
+      grouping_key: 
+        node: node
+  dest:
+      type: DB
+      table: licor_data
+      db_prefix: CarboSense_MySQL
+      date_from: 2022-01-01T00:00:00.000
+      grouping_key: 
+        node: SensorUnit_ID
+      date_column: DATE(FROM_UNIXTIME(time))
+      na: -999
+  columns:
+      - {name: time,  source_name: 'time', datatype: int, na: Null}
+      - {name: SensorUnit_ID, source_name: node, datatype: int, na: Null}
+      - {name: battery, source_name: battery, datatype: float, na: 0}
+      - {name: calibration_a, source_name: 'calibration-a', datatype: int, na: 0}
+      - {name: calibration_b, source_name: 'calibration-b', datatype: int, na: 0}
+      - {name: sensirion_sht21_humidity, source_name: 'sensirion-sht21-humidity', datatype: float, na: Null}   
+      - {name: sensirion_sht21_temperature, source_name: 'sensirion-sht21-temperature', datatype: float, na: Null}     
+      - {name: sensirion_sht30_humidity, source_name: 'sensirion-sht30-humidity', datatype: float, na: Null}   
+      - {name: sensirion_sht30_temperature, source_name: 'sensirion-sht30-temperature', datatype: float, na: Null} 
+      - {name: sensirion_sht21_humidity, source_name: 'sensirion-sht21-humidity', datatype: float, na: Null}
+      - {name: bosch_bmp280_pressure, source_name: 'bosch-bmp280-pressure', datatype: float, na: Null}
+      - {name: licor_li850_cell_pressure, source_name: 'licor-li850-cell-pressure', datatype: float, na: Null}
+      - {name: licor_li850_cell_temperature, source_name: 'licor-li850-cell-temperature', datatype: float, na: Null}
+      - {name: licor_li850_co2, source_name: 'licor-li850-co2', datatype: float, na: Null}
+      - {name: licor_li850_co2_absorption, source_name: 'licor-li850-co2-absorption', datatype: float, na: Null}
+      - {name: licor_li850_flow_rate, source_name: 'licor-li850-flow-rate', datatype: float, na: Null}
+      - {name: licor_li850_h2o, source_name: 'licor-li850-h2o', datatype: float, na: Null}
+      - {name: licor_li850_h2o_absorption, source_name: 'licor-li850-h2o-absorption', datatype: float, na: Null}
+      - {name: licor_li850_h2o_dew_point, source_name: 'licor-li850-h2o-dew_point', datatype: float, na: Null}
