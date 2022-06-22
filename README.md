@@ -126,7 +126,7 @@ For documentation on the previous carbosense pipeline, please refer to [this doc
 ## sensorutils
 This is a python package containing utilities used in all other scripts. To install it in the project, run the following command from the main repository directory:
 ```
-pip install -e ./sensorutils
+pip install -e .
 ```
 
 
