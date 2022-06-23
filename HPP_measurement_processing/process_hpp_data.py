@@ -393,6 +393,19 @@ def fit_rh_threshold(data: pd.DataFrame) -> None:
     ax = fig.add_subplot(211)
     ax.scatter(dt['ref_H2O'], dt['sensor_RH'])
 
+def make_plot_path_name(b_pth: pl.Path, id: int, sensor_type: du.AvailableSensors, mode: str, ext="pdf") -> pl.Path:
+    """
+    Makes a pathname for a plot given the
+    basepath, the calibration mode and the sensor id
+    """
+    curdate = dt.date.today()
+    match mode:
+        case "process":
+           md = "predictions"
+        case "calibrate":
+            md = "calibration"
+    pth = b_pth / f"{sensor_type.value}_{id}_{md}_{curdate}.{ext}"
+    return pth
 
 
 # Setup parser
@@ -450,6 +463,9 @@ end = dt.datetime.now() if not args.end else args.end
 backfill_days = (end - start).days
 #Species to calibrate
 species = 'CO2'
+
+
+
 for current_id in ids_to_process:
     id = current_id.value
     logger.debug(f"Processing sensor id {id}")
@@ -464,7 +480,7 @@ for current_id in ids_to_process:
             logger.info(f"The missing dates for {id} are {missing_dates}")
             # Get calibration parameters
             # The / operator here is used to concatenate paths
-            wp_path = b_pth / (f'LP8_predictions_{id}.pdf')
+            wp_path = make_plot_path_name(b_pth, id, st, args.mode)
             pdf = PdfPages(wp_path, 'a')
             # Iterate over missing dates
             for date in missing_dates:
@@ -504,7 +520,8 @@ for current_id in ids_to_process:
                     cal.persist_level2_data(ses, l2_dt)
                     #FIXME make it more flexible, e.g by designing a filtering function 
                     t_threshold = 35
-                    co2_pred_filtered = predicted[predicted["sensor_t"] < t_threshold]
+                    rh_threshold = 85
+                    co2_pred_filtered = predicted[(predicted["sensor_t"] < t_threshold) & (predicted["sensor_RH"] < rh_threshold)]
                     #Check prediction quality
                     if 'ref_CO2' in predicted.columns:
                         pred_quality = cal.compute_quality_indices(co2_pred_filtered, ref_col=ref_col, fit=False)
@@ -553,7 +570,6 @@ for current_id in ids_to_process:
                         cal_features.reset_index(), duration=dur.days, mode=cal.CalModes.CHAMBER, sensor=args.sensor_type)
                     cal_fit = LP8_CO2_calibration(
                         cal_df, reg, target=tg_col, dummy=False)
-                    cal_df.to_csv( b_pth / (f'LP8_features_{id}.pdf'))
                 except (ValueError, DataError) as E:
                     logger.exception(E)
                     logger.info("No valid data for {id}")
@@ -568,8 +584,7 @@ for current_id in ids_to_process:
                 # fit_rh_threshold(co2_pred_all)
                 #Plot full timeseries
                 ts_plot = cal.plot_CO2_calibration(co2_pred, pred_col=pred_col, orig_col=orig_col, ref_col=ref_col)
-                base_name = f"{st.name}_{id}_{cd.serial}_{cd.start:%Y%m%d}_{cd.end:%Y%m%d}"
-                wp_path = b_pth / (f'{base_name}.pdf')
+                wp_path = make_plot_path_name(b_pth, cd.serial, st, args.mode)
                 ts_plot.savefig(wp_path)
                 # Persist parameters
                 computed_when = dt.datetime.now()
@@ -578,7 +593,7 @@ for current_id in ids_to_process:
                 # Compute model statistics
                 t_threshold = 33
                 model_statistics = cal.compute_quality_indices(
-                    co2_pred, ref_col=tg_col, pred_col=pred_col, t_threshold=t_threshold)
+                    co2_pred, ref_col=tg_col, pred_col=pred_col)
                 # Persist fit and model statistics
                 with Session() as session:
                     if not model_statistics.valid():
@@ -620,7 +635,7 @@ for current_id in ids_to_process:
                 cal_pred = cal.apply_HPP_calibration(cal_features, cal_params)
                 #Plot (one plot by day)
                 figs = cal_pred.set_index('date').groupby(pd.Grouper(freq='1d')).apply(lambda x: pd.Series({'plot':cal.plot_HPP_calibration(x.reset_index())})).reset_index()
-                wp_path = b_pth / (f'{st.value}_bottle_cal_{id}_.pdf')
+                wp_path = make_plot_path_name(b_pth, id, st, args.mode)
                 #Create titles
                 titles = figs.apply(lambda x: f"{x.date}, cycle: {x.date}", axis=1).tolist()
                 save_multipage(figs['plot'].tolist(), wp_path,  titles)
@@ -636,7 +651,7 @@ for current_id in ids_to_process:
                 logger.info(f"No valid calibrations for {id} between {start} and {end}")
                 continue
         case "process", (du.AvailableSensors.HPP | du.AvailableSensors.Vaisala | du.AvailableSensors.Licor) as st:
-            wp_path = b_pth / (f'{st.value}_predictions_{id}.pdf')
+            wp_path = make_plot_path_name(b_pth, id, st, args.mode)
             pdf = PdfPages(wp_path, 'a')
             av_t = get_averaging_time(st, True)
             #List missing dates
