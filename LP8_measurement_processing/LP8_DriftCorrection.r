@@ -23,7 +23,7 @@ require(RMySQL)
 require(chron)
 library(MASS)
 library(rpart)
-
+library(tidyverse)
 
 ## source
 
@@ -157,38 +157,75 @@ if(length(args)==3){
 #
 
 
-REF_SITES <- NULL
+ref_sites_query <- 
+"
+SELECT
+	CASE WHEN loc.LocationName='DUE1' THEN 'DUE' ELSE loc.LocationName END,
+	Y_LV03 AS x,
+	X_LV03 AS y,
+	h,
+	Canton AS canton,
+	loc.Date_UTC_from,
+	loc.Date_UTC_to
+FROM Location AS loc
+WHERE LocationName IN
+(	
+	SELECT
+	LocationName 
+	FROM Deployment AS dep
 
-REF_SITES <- rbind(REF_SITES,data.frame(name="DUEBSL",x=250902,y=688680,h=432, canton="ZH", status=1,Date_UTC_from = strptime("20170701000000","%Y%m%d%H%M%S",tz="UTC"), Date_UTC_to = strptime("21000101000000","%Y%m%d%H%M%S",tz="UTC"),stringsAsFactors = F))
+WHERE dep.SensorUnit_ID BETWEEN 400 AND 500
+AND dep.LocationName NOT IN ('DUE2', 'DUE3', 'DUE4', 'DUE5', 'DUE6')
+) OR LocationName IN ('PAY', 'RIG', 'HAE', 'GIMM', 'LAEG','BRM')
+"
+con<-carboutil::get_conn(group="CarboSense_MySQL")
+REF_SITES <- mutate(collect(tbl(con, sql(ref_sites_query))), status=1)
 
-REF_SITES <- rbind(REF_SITES,data.frame(name="DUE",   x=250902,y=688680,h=432, canton="ZH", status=1,Date_UTC_from = strptime("20170701000000","%Y%m%d%H%M%S",tz="UTC"), Date_UTC_to = strptime("21000101000000","%Y%m%d%H%M%S",tz="UTC"),stringsAsFactors = F))
-REF_SITES <- rbind(REF_SITES,data.frame(name="PAY",   x=184776,y=562285,h=488, canton="VD", status=1,Date_UTC_from = strptime("20170701000000","%Y%m%d%H%M%S",tz="UTC"), Date_UTC_to = strptime("21000101000000","%Y%m%d%H%M%S",tz="UTC"),stringsAsFactors = F))
+REF_SITES <- bind_rows(REF_SITES, 
+data.frame(name="DUEBSL",x=250902,y=688680,h=432, canton="ZH", status=1,Date_UTC_from = strptime("20170701000000","%Y%m%d%H%M%S",tz="UTC"), Date_UTC_to = strptime("21000101000000","%Y%m%d%H%M%S",tz="UTC"),stringsAsFactors = F))
 
-REF_SITES <- rbind(REF_SITES,data.frame(name="RIG",   x=213437,y=677834,h=1030, canton="SZ", status=0,Date_UTC_from = strptime("20170101000000","%Y%m%d%H%M%S",tz="UTC"), Date_UTC_to = strptime("21000101000000","%Y%m%d%H%M%S",tz="UTC"),stringsAsFactors = F))
-REF_SITES <- rbind(REF_SITES,data.frame(name="BRM",   x=226777,y=655840,h=797,  canton="LU", status=1,Date_UTC_from = strptime("20170101000000","%Y%m%d%H%M%S",tz="UTC"), Date_UTC_to = strptime("21000101000000","%Y%m%d%H%M%S",tz="UTC"),stringsAsFactors = F))
-REF_SITES <- rbind(REF_SITES,data.frame(name="LAEG",  x=259462,y=672251,h=855,  canton="ZH", status=1,Date_UTC_from = strptime("20170101000000","%Y%m%d%H%M%S",tz="UTC"), Date_UTC_to = strptime("21000101000000","%Y%m%d%H%M%S",tz="UTC"),stringsAsFactors = F))
-REF_SITES <- rbind(REF_SITES,data.frame(name="HAE",   x=240180,y=628874,h=430,  canton="SO", status=0,Date_UTC_from = strptime("20170101000000","%Y%m%d%H%M%S",tz="UTC"), Date_UTC_to = strptime("21000101000000","%Y%m%d%H%M%S",tz="UTC"),stringsAsFactors = F))
-REF_SITES <- rbind(REF_SITES,data.frame(name="GIMM",  x=211397,y=585510,h=478,  canton="BE", status=1,Date_UTC_from = strptime("20170101000000","%Y%m%d%H%M%S",tz="UTC"), Date_UTC_to = strptime("21000101000000","%Y%m%d%H%M%S",tz="UTC"),stringsAsFactors = F))
-
-REF_SITES <- rbind(REF_SITES,data.frame(name="MAGN",  x=113199,y=715497,h=203, canton="TI", status=1,Date_UTC_from = strptime("20180816160000","%Y%m%d%H%M%S",tz="UTC"), Date_UTC_to = strptime("21000101000000","%Y%m%d%H%M%S",tz="UTC"),stringsAsFactors = F))
-REF_SITES <- rbind(REF_SITES,data.frame(name="ZUE",   x=247989,y=682448,h=409, canton="ZH", status=0,Date_UTC_from = strptime("20170101000000","%Y%m%d%H%M%S",tz="UTC"), Date_UTC_to = strptime("21000101000000","%Y%m%d%H%M%S",tz="UTC"),stringsAsFactors = F))
-REF_SITES <- rbind(REF_SITES,data.frame(name="ZHBR",  x=248471,y=685132,h=626, canton="ZH", status=0,Date_UTC_from = strptime("20170101000000","%Y%m%d%H%M%S",tz="UTC"), Date_UTC_to = strptime("21000101000000","%Y%m%d%H%M%S",tz="UTC"),stringsAsFactors = F))
-REF_SITES <- rbind(REF_SITES,data.frame(name="ZSCH",  x=247242,y=681942,h=413, canton="ZH", status=0,Date_UTC_from = strptime("20170101000000","%Y%m%d%H%M%S",tz="UTC"), Date_UTC_to = strptime("21000101000000","%Y%m%d%H%M%S",tz="UTC"),stringsAsFactors = F))
-REF_SITES <- rbind(REF_SITES,data.frame(name="ALBS",  x=240700,y=680699,h=810, canton="ZH", status=0,Date_UTC_from = strptime("20170101000000","%Y%m%d%H%M%S",tz="UTC"), Date_UTC_to = strptime("21000101000000","%Y%m%d%H%M%S",tz="UTC"),stringsAsFactors = F))
-REF_SITES <- rbind(REF_SITES,data.frame(name="BNTG",  x=202974,y=606849,h=938, canton="BE", status=0,Date_UTC_from = strptime("20170101000000","%Y%m%d%H%M%S",tz="UTC"), Date_UTC_to = strptime("21000101000000","%Y%m%d%H%M%S",tz="UTC"),stringsAsFactors = F))
-REF_SITES <- rbind(REF_SITES,data.frame(name="FROB",  x=248105,y=634732,h=867, canton="SO", status=0,Date_UTC_from = strptime("20170101000000","%Y%m%d%H%M%S",tz="UTC"), Date_UTC_to = strptime("21000101000000","%Y%m%d%H%M%S",tz="UTC"),stringsAsFactors = F))
-REF_SITES <- rbind(REF_SITES,data.frame(name="CHRI",  x=269035,y=618695,h=493, canton="BS", status=1,Date_UTC_from = strptime("20181120000000","%Y%m%d%H%M%S",tz="UTC"), Date_UTC_to = strptime("21000101000000","%Y%m%d%H%M%S",tz="UTC"),stringsAsFactors = F))
-REF_SITES <- rbind(REF_SITES,data.frame(name="TAEN",  x=259812,y=710499,h=538, canton="TG", status=0,Date_UTC_from = strptime("20170101000000","%Y%m%d%H%M%S",tz="UTC"), Date_UTC_to = strptime("21000101000000","%Y%m%d%H%M%S",tz="UTC"),stringsAsFactors = F))
-REF_SITES <- rbind(REF_SITES,data.frame(name="SEMP",  x=218512,y=658235,h=580, canton="LU", status=0,Date_UTC_from = strptime("20170101000000","%Y%m%d%H%M%S",tz="UTC"), Date_UTC_to = strptime("21000101000000","%Y%m%d%H%M%S",tz="UTC"),stringsAsFactors = F))
-REF_SITES <- rbind(REF_SITES,data.frame(name="ESMO",  x=263906,y=685350,h=556, canton="ZH", status=0,Date_UTC_from = strptime("20170101000000","%Y%m%d%H%M%S",tz="UTC"), Date_UTC_to = strptime("21000101000000","%Y%m%d%H%M%S",tz="UTC"),stringsAsFactors = F))
-REF_SITES <- rbind(REF_SITES,data.frame(name="SAVE",  x=121297,y=593583,h=767, canton="VS", status=0,Date_UTC_from = strptime("20170101000000","%Y%m%d%H%M%S",tz="UTC"), Date_UTC_to = strptime("21000101000000","%Y%m%d%H%M%S",tz="UTC"),stringsAsFactors = F))
-REF_SITES <- rbind(REF_SITES,data.frame(name="RECK",  x=253563,y=681394,h=443, canton="ZH", status=0,Date_UTC_from = strptime("20170101000000","%Y%m%d%H%M%S",tz="UTC"), Date_UTC_to = strptime("21000101000000","%Y%m%d%H%M%S",tz="UTC"),stringsAsFactors = F))
-REF_SITES <- rbind(REF_SITES,data.frame(name="SSAL",  x= 92824,y=716877,h=902, canton="TI", status=1,Date_UTC_from = strptime("20190405170000","%Y%m%d%H%M%S",tz="UTC"), Date_UTC_to = strptime("21000101000000","%Y%m%d%H%M%S",tz="UTC"),stringsAsFactors = F))
-REF_SITES <- rbind(REF_SITES,data.frame(name="SOTT",  x=167442,y=546245,h=775, canton="VD", status=0,Date_UTC_from = strptime("20190719140000","%Y%m%d%H%M%S",tz="UTC"), Date_UTC_to = strptime("21000101000000","%Y%m%d%H%M%S",tz="UTC"),stringsAsFactors = F))
+REF_SITES <- mutate(REF_SITES, timestamp_from=as.numeric(Date_UTC_from), timestamp_to=as.numeric(Date_UTC_to), status=1)
 
 
-REF_SITES$timestamp_from <- as.numeric(difftime(time1=REF_SITES$Date_UTC_from,time2=strptime("19700101000000","%Y%m%d%H%M%S",tz="UTC"),units="secs",tz="UTC"))
-REF_SITES$timestamp_to   <- as.numeric(difftime(time1=REF_SITES$Date_UTC_to,  time2=strptime("19700101000000","%Y%m%d%H%M%S",tz="UTC"),units="secs",tz="UTC"))
+
+#Disable sites
+
+
+# REF_SITES <- NULL
+
+# REF_SITES <- rbind(REF_SITES,data.frame(name="DUEBSL",x=250902,y=688680,h=432, canton="ZH", status=1,Date_UTC_from = strptime("20170701000000","%Y%m%d%H%M%S",tz="UTC"), Date_UTC_to = strptime("21000101000000","%Y%m%d%H%M%S",tz="UTC"),stringsAsFactors = F))
+
+# REF_SITES <- rbind(REF_SITES,data.frame(name="DUE",   x=250902,y=688680,h=432, canton="ZH", status=1,Date_UTC_from = strptime("20170701000000","%Y%m%d%H%M%S",tz="UTC"), Date_UTC_to = strptime("21000101000000","%Y%m%d%H%M%S",tz="UTC"),stringsAsFactors = F))
+# REF_SITES <- rbind(REF_SITES,data.frame(name="PAY",   x=184776,y=562285,h=488, canton="VD", status=1,Date_UTC_from = strptime("20170701000000","%Y%m%d%H%M%S",tz="UTC"), Date_UTC_to = strptime("21000101000000","%Y%m%d%H%M%S",tz="UTC"),stringsAsFactors = F))
+
+# REF_SITES <- rbind(REF_SITES,data.frame(name="RIG",   x=213437,y=677834,h=1030, canton="SZ", status=0,Date_UTC_from = strptime("20170101000000","%Y%m%d%H%M%S",tz="UTC"), Date_UTC_to = strptime("21000101000000","%Y%m%d%H%M%S",tz="UTC"),stringsAsFactors = F))
+# REF_SITES <- rbind(REF_SITES,data.frame(name="BRM",   x=226777,y=655840,h=797,  canton="LU", status=1,Date_UTC_from = strptime("20170101000000","%Y%m%d%H%M%S",tz="UTC"), Date_UTC_to = strptime("21000101000000","%Y%m%d%H%M%S",tz="UTC"),stringsAsFactors = F))
+# REF_SITES <- rbind(REF_SITES,data.frame(name="LAEG",  x=259462,y=672251,h=855,  canton="ZH", status=1,Date_UTC_from = strptime("20170101000000","%Y%m%d%H%M%S",tz="UTC"), Date_UTC_to = strptime("21000101000000","%Y%m%d%H%M%S",tz="UTC"),stringsAsFactors = F))
+# REF_SITES <- rbind(REF_SITES,data.frame(name="HAE",   x=240180,y=628874,h=430,  canton="SO", status=0,Date_UTC_from = strptime("20170101000000","%Y%m%d%H%M%S",tz="UTC"), Date_UTC_to = strptime("21000101000000","%Y%m%d%H%M%S",tz="UTC"),stringsAsFactors = F))
+# REF_SITES <- rbind(REF_SITES,data.frame(name="GIMM",  x=211397,y=585510,h=478,  canton="BE", status=1,Date_UTC_from = strptime("20170101000000","%Y%m%d%H%M%S",tz="UTC"), Date_UTC_to = strptime("21000101000000","%Y%m%d%H%M%S",tz="UTC"),stringsAsFactors = F))
+
+# REF_SITES <- rbind(REF_SITES,data.frame(name="MAGN",  x=113199,y=715497,h=203, canton="TI", status=1,Date_UTC_from = strptime("20180816160000","%Y%m%d%H%M%S",tz="UTC"), Date_UTC_to = strptime("21000101000000","%Y%m%d%H%M%S",tz="UTC"),stringsAsFactors = F))
+# REF_SITES <- rbind(REF_SITES,data.frame(name="ZUE",   x=247989,y=682448,h=409, canton="ZH", status=0,Date_UTC_from = strptime("20170101000000","%Y%m%d%H%M%S",tz="UTC"), Date_UTC_to = strptime("21000101000000","%Y%m%d%H%M%S",tz="UTC"),stringsAsFactors = F))
+# REF_SITES <- rbind(REF_SITES,data.frame(name="ZHBR",  x=248471,y=685132,h=626, canton="ZH", status=0,Date_UTC_from = strptime("20170101000000","%Y%m%d%H%M%S",tz="UTC"), Date_UTC_to = strptime("21000101000000","%Y%m%d%H%M%S",tz="UTC"),stringsAsFactors = F))
+# REF_SITES <- rbind(REF_SITES,data.frame(name="ZSCH",  x=247242,y=681942,h=413, canton="ZH", status=0,Date_UTC_from = strptime("20170101000000","%Y%m%d%H%M%S",tz="UTC"), Date_UTC_to = strptime("21000101000000","%Y%m%d%H%M%S",tz="UTC"),stringsAsFactors = F))
+# REF_SITES <- rbind(REF_SITES,data.frame(name="ALBS",  x=240700,y=680699,h=810, canton="ZH", status=0,Date_UTC_from = strptime("20170101000000","%Y%m%d%H%M%S",tz="UTC"), Date_UTC_to = strptime("21000101000000","%Y%m%d%H%M%S",tz="UTC"),stringsAsFactors = F))
+# REF_SITES <- rbind(REF_SITES,data.frame(name="BNTG",  x=202974,y=606849,h=938, canton="BE", status=0,Date_UTC_from = strptime("20170101000000","%Y%m%d%H%M%S",tz="UTC"), Date_UTC_to = strptime("21000101000000","%Y%m%d%H%M%S",tz="UTC"),stringsAsFactors = F))
+# REF_SITES <- rbind(REF_SITES,data.frame(name="FROB",  x=248105,y=634732,h=867, canton="SO", status=0,Date_UTC_from = strptime("20170101000000","%Y%m%d%H%M%S",tz="UTC"), Date_UTC_to = strptime("21000101000000","%Y%m%d%H%M%S",tz="UTC"),stringsAsFactors = F))
+# REF_SITES <- rbind(REF_SITES,data.frame(name="CHRI",  x=269035,y=618695,h=493, canton="BS", status=1,Date_UTC_from = strptime("20181120000000","%Y%m%d%H%M%S",tz="UTC"), Date_UTC_to = strptime("21000101000000","%Y%m%d%H%M%S",tz="UTC"),stringsAsFactors = F))
+# REF_SITES <- rbind(REF_SITES,data.frame(name="TAEN",  x=259812,y=710499,h=538, canton="TG", status=0,Date_UTC_from = strptime("20170101000000","%Y%m%d%H%M%S",tz="UTC"), Date_UTC_to = strptime("21000101000000","%Y%m%d%H%M%S",tz="UTC"),stringsAsFactors = F))
+# REF_SITES <- rbind(REF_SITES,data.frame(name="SEMP",  x=218512,y=658235,h=580, canton="LU", status=0,Date_UTC_from = strptime("20170101000000","%Y%m%d%H%M%S",tz="UTC"), Date_UTC_to = strptime("21000101000000","%Y%m%d%H%M%S",tz="UTC"),stringsAsFactors = F))
+# REF_SITES <- rbind(REF_SITES,data.frame(name="ESMO",  x=263906,y=685350,h=556, canton="ZH", status=0,Date_UTC_from = strptime("20170101000000","%Y%m%d%H%M%S",tz="UTC"), Date_UTC_to = strptime("21000101000000","%Y%m%d%H%M%S",tz="UTC"),stringsAsFactors = F))
+# REF_SITES <- rbind(REF_SITES,data.frame(name="SAVE",  x=121297,y=593583,h=767, canton="VS", status=0,Date_UTC_from = strptime("20170101000000","%Y%m%d%H%M%S",tz="UTC"), Date_UTC_to = strptime("21000101000000","%Y%m%d%H%M%S",tz="UTC"),stringsAsFactors = F))
+# REF_SITES <- rbind(REF_SITES,data.frame(name="RECK",  x=253563,y=681394,h=443, canton="ZH", status=0,Date_UTC_from = strptime("20170101000000","%Y%m%d%H%M%S",tz="UTC"), Date_UTC_to = strptime("21000101000000","%Y%m%d%H%M%S",tz="UTC"),stringsAsFactors = F))
+# REF_SITES <- rbind(REF_SITES,data.frame(name="SSAL",  x= 92824,y=716877,h=902, canton="TI", status=1,Date_UTC_from = strptime("20190405170000","%Y%m%d%H%M%S",tz="UTC"), Date_UTC_to = strptime("21000101000000","%Y%m%d%H%M%S",tz="UTC"),stringsAsFactors = F))
+# REF_SITES <- rbind(REF_SITES,data.frame(name="SOTT",  x=167442,y=546245,h=775, canton="VD", status=0,Date_UTC_from = strptime("20190719140000","%Y%m%d%H%M%S",tz="UTC"), Date_UTC_to = strptime("21000101000000","%Y%m%d%H%M%S",tz="UTC"),stringsAsFactors = F))
+
+
+# REF_SITES$timestamp_from <- as.numeric(difftime(time1=REF_SITES$Date_UTC_from,time2=strptime("19700101000000","%Y%m%d%H%M%S",tz="UTC"),units="secs",tz="UTC"))
+# REF_SITES$timestamp_to   <- as.numeric(difftime(time1=REF_SITES$Date_UTC_to,  time2=strptime("19700101000000","%Y%m%d%H%M%S",tz="UTC"),units="secs",tz="UTC"))
+
+
+
 
 ### ----------------------------------------------------------------------------------------------------------------------------
 
@@ -196,8 +233,12 @@ REF_SITES$timestamp_to   <- as.numeric(difftime(time1=REF_SITES$Date_UTC_to,  ti
 
 # Table "Deployment"
 
+
+
+
+
 if(!COMP_DUE){
-  query_str       <- paste("SELECT * FROM Deployment WHERE SensorUnit_ID BETWEEN 1010 and 1334 and LocationName NOT IN ('DUE1','DUE2','DUE3','DUE4','DUE5','MET1') and Date_UTC_from >= '2017-07-01 00:00:00';",sep="")
+  query_str       <- paste("SELECT * FROM Deployment WHERE SensorUnit_ID BETWEEN 1010 and 1334 and LocationName NOT IN ('DUE1','DUE2','DUE3','DUE6','DUE4','DUE5','MET1') and Date_UTC_from >= '2017-07-01 00:00:00';",sep="")
 }
 if(COMP_DUE){
   query_str       <- paste("SELECT * FROM Deployment WHERE SensorUnit_ID BETWEEN 1010 and 1334 and LocationName = 'DUE1' and Date_UTC_to >= '2017-12-01 00:00:00';",sep="")
@@ -255,9 +296,8 @@ tbl_location_MCH <- dbFetch(res, n=-1)
 dbClearResult(res)
 dbDisconnect(con)
 
-# 
-
-tbl_location_LP8 <- tbl_location[which(tbl_location$LocationName%in%tbl_deployment$LocationName[which(tbl_deployment$SensorUnit_ID%in%c(1010:1334))]),]
+# Location of LP8 sensors
+tbl_location_LP8 <- dplyr::filter(tbl_location, LocationName %in% tbl_deployment$LocationName)
 
 
 ### ----------------------------------------------------------------------------------------------------------------------------
@@ -266,55 +306,72 @@ tbl_location_LP8 <- tbl_location[which(tbl_location$LocationName%in%tbl_deployme
 #
 #  (start of automatic data export from MCH: 2018-04-15 (timestamp: 1523750400))
 
-query_str <- paste("SELECT DISTINCT LocationName FROM METEOSWISS_Measurements WHERE timestamp > 1523750400 and Windspeed != -999;",sep="")
-drv       <- dbDriver("MySQL")
+
+# query_str <- paste("SELECT DISTINCT LocationName FROM METEOSWISS_Measurements WHERE timestamp > 1523750400 and Windspeed != -999;",sep="")
+# drv       <- dbDriver("MySQL")
+# con<-carboutil::get_conn(group="CarboSense_MySQL")
+# res       <- dbSendQuery(con, query_str)
+# MCH_SITES <- dbFetch(res, n=-1)
+# dbClearResult(res)
+# dbDisconnect(con)
+
+# MCH_SITES <- as.vector(MCH_SITES[,1])
+
+# MCH_WIND  <- NULL
+
+# for(MCH_SITE in MCH_SITES){
+  
+#   query_str <- paste("SELECT timestamp,Winddirection,Windspeed,Sunshine FROM METEOSWISS_Measurements WHERE timestamp >= ",REF_data_timestamp_from," and timestamp < ",REF_data_timestamp_to," and LocationName = '",MCH_SITE,"';",sep="")
+#   drv       <- dbDriver("MySQL")
+#   con<-carboutil::get_conn(group="CarboSense_MySQL")
+#   res       <- dbSendQuery(con, query_str)
+#   tmp       <- dbFetch(res, n=-1)
+#   dbClearResult(res)
+#   dbDisconnect(con)
+  
+#   if(dim(tmp)[1]==0){
+#     next
+#   }
+  
+#   tmp <- tmp[order(tmp$timestamp),]
+  
+#   for(ith_col in c(2,3,4)){
+#     id_setToNA    <- which(tmp[,ith_col]==-999)
+#     if(length(id_setToNA)>0){
+#       tmp[id_setToNA,ith_col] <- NA
+#     }
+#   }
+  
+#   colnames(tmp) <- c("timestamp",paste(toupper(MCH_SITE),"_WDIR",sep=""),paste(toupper(MCH_SITE),"_WSPEED",sep=""),paste(toupper(MCH_SITE),"_SUNSHINE",sep=""))
+  
+#   if(is.null(MCH_WIND)){
+#     MCH_WIND <- tmp
+#   }else{
+#     MCH_WIND <- merge(MCH_WIND,tmp,by="timestamp",all=T)
+#     MCH_WIND1 <- dplyr::full_join(MCH_WIND,tmp, by="timestamp")
+
+#     print(all.equal(MCH_WIND, MCH_WIND1))
+#   }
+# }
+
+#Function to rename columsn
+rename_fun<- function(x) sub("([a-zA-Z]+)_([a-zA-Z]+)","\\2_\\1", x)
+
+#Get all windspeeds
 con<-carboutil::get_conn(group="CarboSense_MySQL")
-res       <- dbSendQuery(con, query_str)
-MCH_SITES <- dbFetch(res, n=-1)
-dbClearResult(res)
+wind_query <- glue::glue_sql("SELECT LocationName, timestamp,Winddirection AS WDIR, Windspeed AS WSPEED, Sunshine AS SUNSHINE FROM METEOSWISS_Measurements WHERE timestamp >= {REF_data_timestamp_from} and timestamp < {REF_data_timestamp_to} AND LocationName IN (SELECT DISTINCT LocationName FROM METEOSWISS_Measurements WHERE timestamp > 1523750400 and Windspeed != -999)")
+MCH_WIND_LONG <- collect(tbl(con,sql(wind_query))) 
 dbDisconnect(con)
 
-MCH_SITES <- as.vector(MCH_SITES[,1])
+#Make table wide
+MCH_WIND <- tidyr::pivot_wider(MCH_WIND_LONG, id_cols = timestamp, names_from = "LocationName", values_from = c(WDIR,WSPEED,SUNSHINE)) %>% 
+rename_at(vars(-timestamp), rename_fun ) %>%
+dplyr::mutate_at(vars(-timestamp), function(x) na_if(x, -999))
+#Add date to the table
+MCH_WIND$date    <- lubridate::as_datetime(MCH_WIND$timestamp)
+tbl_location_MCH <- tbl_location_MCH[which(tbl_location_MCH$LocationName%in%unique(MCH_WIND_LONG$LocationName)),]
 
-MCH_WIND  <- NULL
-
-for(MCH_SITE in MCH_SITES){
-  
-  query_str <- paste("SELECT timestamp,Winddirection,Windspeed,Sunshine FROM METEOSWISS_Measurements WHERE timestamp >= ",REF_data_timestamp_from," and timestamp < ",REF_data_timestamp_to," and LocationName = '",MCH_SITE,"';",sep="")
-  drv       <- dbDriver("MySQL")
-  con<-carboutil::get_conn(group="CarboSense_MySQL")
-  res       <- dbSendQuery(con, query_str)
-  tmp       <- dbFetch(res, n=-1)
-  dbClearResult(res)
-  dbDisconnect(con)
-  
-  if(dim(tmp)[1]==0){
-    next
-  }
-  
-  tmp <- tmp[order(tmp$timestamp),]
-  
-  for(ith_col in c(2,3,4)){
-    id_setToNA    <- which(tmp[,ith_col]==-999)
-    if(length(id_setToNA)>0){
-      tmp[id_setToNA,ith_col] <- NA
-    }
-  }
-  
-  colnames(tmp) <- c("timestamp",paste(toupper(MCH_SITE),"_WDIR",sep=""),paste(toupper(MCH_SITE),"_WSPEED",sep=""),paste(toupper(MCH_SITE),"_SUNSHINE",sep=""))
-  
-  if(is.null(MCH_WIND)){
-    MCH_WIND <- tmp
-  }else{
-    MCH_WIND <- merge(MCH_WIND,tmp,by="timestamp",all=T)
-  }
-}
-
-MCH_WIND$date    <- strptime("19700101000000","%Y%m%d%H%M%S",tz="UTC") + MCH_WIND$timestamp
-
-tbl_location_MCH <- tbl_location_MCH[which(tbl_location_MCH$LocationName%in%MCH_SITES),]
-
-rm(tmp)
+rm(MCH_WIND_LONG)
 gc()
 
 
@@ -387,160 +444,226 @@ if(F){
 
 ## Import of CO2 data (+) from NABEL DUE/RIG/HAE/PAY + UNIBE BRM + EMPA LAEG + UNIBE GIMM
 
-query_str <- paste("SELECT timestamp,CO2_DRY_CAL,CO2_DRY_F,H2O,H2O_F FROM NABEL_DUE WHERE CO2_DRY_CAL != -999 and H2O != -999 and H2O_F=1 and timestamp >= ",REF_data_timestamp_from," and timestamp < ",REF_data_timestamp_to,";",sep="")
-drv       <- dbDriver("MySQL")
+
+pic_query_str <-
+"WITH DUE AS(
+    SELECT 'DUE' AS Location, timestamp, CO2 AS CO2, CO2_DRY_F * H2O_F AS CO2_F FROM NABEL_DUE WHERE CO2_DRY_CAL != -999 and H2O != -999 and H2O_F=1  AND timestamp >= {REF_data_timestamp_from} AND timestamp < {REF_data_timestamp_to}
+  ),
+  PAY AS(
+    SELECT 'PAY' AS Location, timestamp, CO2_WET_COMP AS CO2, 1 AS CO2_F FROM NABEL_PAY WHERE CO2_WET_COMP != -999 AND timestamp >= {REF_data_timestamp_from} AND timestamp < {REF_data_timestamp_to}
+  ),
+  RIG AS(
+    SELECT 'RIG' AS Location, timestamp, CO2_WET_COMP  AS CO2, 1 AS CO2_F FROM NABEL_RIG WHERE CO2_WET_COMP != -999 and timestamp >= {REF_data_timestamp_from} AND timestamp < {REF_data_timestamp_to}
+  ),
+  HAE AS(
+    SELECT 'HAE' AS Location, timestamp, CO2_WET_COMP AS CO2,  1 AS CO2_F FROM NABEL_HAE WHERE CO2_WET_COMP != -999 and timestamp >= {REF_data_timestamp_from} AND timestamp < {REF_data_timestamp_to}
+  ),
+  LAEG AS(
+    SELECT 'LAEG' AS Location, timestamp, CO2, CO2_F FROM EMPA_LAEG WHERE CO2 != -999 and CO2_F = 1 and timestamp >= {REF_data_timestamp_from} AND timestamp < {REF_data_timestamp_to}
+  ),
+  GIMM AS(
+    SELECT 'GIMM' AS Location, timestamp, CO2, CO2_F FROM UNIBE_GIMM WHERE CO2 != -999 and CO2_F = 1 and timestamp >= {REF_data_timestamp_from} AND timestamp < {REF_data_timestamp_to}
+  ),
+  BRM AS(
+    SELECT 'BRM' AS Location, timestamp,CO2,CO2_F FROM UNIBE_BRM WHERE CO2 != -999 and CO2_F = 1 and timestamp >= {REF_data_timestamp_from} AND timestamp < {REF_data_timestamp_to}
+  )
+  SELECT
+  *
+  FROM DUE
+  UNION ALL
+  SELECT
+  *
+  FROM PAY
+  UNION ALL
+  SELECT
+  *
+  FROM HAE
+  UNION ALL
+  SELECT
+  *
+  FROM RIG
+  UNION ALL
+  SELECT
+  *
+  FROM LAEG
+  UNION ALL
+  SELECT
+  *
+  FROM GIMM
+  UNION ALL
+  SELECT
+  *
+  FROM BRM
+"
+
+
+#Rename functions to switch from CO2_LOCATION to LOCATION_CO2
+rename_fun<- function(x) sub("(CO2|CO2_F)_(LAEG|DUE|HAE|BRM|GIMM|PAY)","\\2_\\1", x)
+
+
+pic_query <- glue::glue_sql(pic_query_str)
+print(pic_query)
 con<-carboutil::get_conn(group="CarboSense_MySQL")
-res       <- dbSendQuery(con, query_str)
-data      <- dbFetch(res, n=-1)
-dbClearResult(res)
-dbDisconnect(con)
-
-colnames(data)[which(colnames(data)=="CO2_DRY_CAL")] <- "CO2_DRY"
-
-data       <- data[order(data$timestamp),]
-
-data$CO2   <- data$CO2_DRY * (1 - data$H2O/100)
-data$CO2_F <- data$CO2_DRY_F * data$H2O_F
-
-colnames(data)[which(colnames(data)=="CO2")]   <- "DUE_CO2"
-colnames(data)[which(colnames(data)=="CO2_F")] <- "DUE_CO2_F"
-
-data       <- data[,c(which(colnames(data)=="timestamp"),which(colnames(data)=="DUE_CO2"),which(colnames(data)=="DUE_CO2_F"))]
-
-# 
-
-query_str <- paste("SELECT timestamp,CO2_WET_COMP FROM NABEL_PAY WHERE CO2_WET_COMP != -999 and timestamp >= ",REF_data_timestamp_from," and timestamp < ",REF_data_timestamp_to,";",sep="")
-drv       <- dbDriver("MySQL")
-con<-carboutil::get_conn(group="CarboSense_MySQL")
-res       <- dbSendQuery(con, query_str)
-tmp       <- dbFetch(res, n=-1)
-dbClearResult(res)
-dbDisconnect(con)
-
-colnames(tmp)[which(colnames(tmp)=="CO2_WET_COMP")] <- "CO2"
-tmp$CO2_F     <- rep(1,dim(tmp)[1])
-tmp           <- tmp[,c(which(colnames(tmp)=="timestamp"),which(colnames(tmp)=="CO2"),which(colnames(tmp)=="CO2_F"))]
-tmp           <- tmp[order(tmp$timestamp),]
-colnames(tmp) <- c("timestamp","PAY_CO2","PAY_CO2_F")
-data          <- merge(data,tmp,all=T)
-
+pic_data <- collect(tbl(con, sql(pic_query)))
+pic_data <- mutate(pic_data, CO2=if_else(CO2 ==-999 | CO2_F ==0, NA_real_, CO2))
 #
+print(pic_data)
+data <- tidyr::pivot_wider(pic_data,id_col=c(timestamp), names_from=c(Location), values_from=c(CO2, CO2_F))
+data <- rename_at(data, vars(-timestamp), rename_fun)
 
-query_str <- paste("SELECT timestamp,CO2_WET_COMP FROM NABEL_RIG WHERE CO2_WET_COMP != -999 and timestamp >= ",REF_data_timestamp_from," and timestamp < ",REF_data_timestamp_to,";",sep="")
-drv       <- dbDriver("MySQL")
-con<-carboutil::get_conn(group="CarboSense_MySQL")
-res       <- dbSendQuery(con, query_str)
-tmp       <- dbFetch(res, n=-1)
-dbClearResult(res)
-dbDisconnect(con)
-
-colnames(tmp)[which(colnames(tmp)=="CO2_WET_COMP")] <- "CO2"
-tmp$CO2_F     <- rep(1,dim(tmp)[1])
-tmp           <- tmp[,c(which(colnames(tmp)=="timestamp"),which(colnames(tmp)=="CO2"),which(colnames(tmp)=="CO2_F"))]
-tmp           <- tmp[order(tmp$timestamp),]
-colnames(tmp) <- c("timestamp","RIG_CO2","RIG_CO2_F")
-data          <- merge(data,tmp,all=T)
-
-#
-
-query_str <- paste("SELECT timestamp,CO2_WET_COMP FROM NABEL_HAE WHERE CO2_WET_COMP != -999 and timestamp >= ",REF_data_timestamp_from," and timestamp < ",REF_data_timestamp_to,";",sep="")
-drv       <- dbDriver("MySQL")
-con<-carboutil::get_conn(group="CarboSense_MySQL")
-res       <- dbSendQuery(con, query_str)
-tmp       <- dbFetch(res, n=-1)
-dbClearResult(res)
-dbDisconnect(con)
-
-colnames(tmp)[which(colnames(tmp)=="CO2_WET_COMP")] <- "CO2"
-tmp$CO2_F     <- rep(1,dim(tmp)[1])
-tmp           <- tmp[,c(which(colnames(tmp)=="timestamp"),which(colnames(tmp)=="CO2"),which(colnames(tmp)=="CO2_F"))]
-tmp           <- tmp[order(tmp$timestamp),]
-colnames(tmp) <- c("timestamp","HAE_CO2","HAE_CO2_F")
-data          <- merge(data,tmp,all=T)
-
-#
-
-query_str <- paste("SELECT timestamp,CO2,CO2_F FROM EMPA_LAEG WHERE CO2 != -999 and CO2_F = 1 and timestamp >= ",REF_data_timestamp_from," and timestamp < ",REF_data_timestamp_to,";",sep="")
-drv       <- dbDriver("MySQL")
-con<-carboutil::get_conn(group="CarboSense_MySQL")
-res       <- dbSendQuery(con, query_str)
-tmp       <- dbFetch(res, n=-1)
-dbClearResult(res)
-dbDisconnect(con)
-
-tmp           <- tmp[order(tmp$timestamp),]
-colnames(tmp) <- c("timestamp","LAEG_CO2","LAEG_CO2_F")
-data          <- merge(data,tmp,all=T)
-
-#
-
-query_str <- paste("SELECT timestamp,CO2,CO2_F FROM UNIBE_GIMM WHERE CO2 != -999 and CO2_F = 1 and timestamp >= ",REF_data_timestamp_from," and timestamp < ",REF_data_timestamp_to,";",sep="")
-drv       <- dbDriver("MySQL")
-con<-carboutil::get_conn(group="CarboSense_MySQL")
-res       <- dbSendQuery(con, query_str)
-tmp       <- dbFetch(res, n=-1)
-dbClearResult(res)
-dbDisconnect(con)
-
-tmp           <- tmp[order(tmp$timestamp),]
-colnames(tmp) <- c("timestamp","GIMM_CO2","GIMM_CO2_F")
-data          <- merge(data,tmp,all=T)
-
-#
-
-query_str <- paste("SELECT timestamp,CO2,CO2_F FROM UNIBE_BRM WHERE CO2 != -999 and CO2_F = 1 and timestamp >= ",REF_data_timestamp_from," and timestamp < ",REF_data_timestamp_to,";",sep="")
-drv       <- dbDriver("MySQL")
-con<-carboutil::get_conn(group="CarboSense_MySQL")
-res       <- dbSendQuery(con, query_str)
-tmp       <- dbFetch(res, n=-1)
-dbClearResult(res)
-dbDisconnect(con)
-
-tmp           <- tmp[order(tmp$timestamp),]
-colnames(tmp) <- c("timestamp","BRM_CO2","BRM_CO2_F")
-data          <- merge(data,tmp,all=T)
-
-#
-
-rm(tmp)
+print(data)
+rm(pic_data)
 gc()
 
+# query_str <- paste("SELECT timestamp,CO2_DRY_CAL,CO2_DRY_F,H2O,H2O_F FROM NABEL_DUE WHERE CO2_DRY_CAL != -999 and H2O != -999 and H2O_F=1 and timestamp >= ",REF_data_timestamp_from," and timestamp < ",REF_data_timestamp_to,";",sep="")
+# drv       <- dbDriver("MySQL")
+# con<-carboutil::get_conn(group="CarboSense_MySQL")
+# res       <- dbSendQuery(con, query_str)
+# data      <- dbFetch(res, n=-1)
+# dbClearResult(res)
+# dbDisconnect(con)
+
+# colnames(data)[which(colnames(data)=="CO2_DRY_CAL")] <- "CO2_DRY"
+
+# data       <- data[order(data$timestamp),]
+
+# data$CO2   <- data$CO2_DRY * (1 - data$H2O/100)
+# data$CO2_F <- data$CO2_DRY_F * data$H2O_F
+
+# colnames(data)[which(colnames(data)=="CO2")]   <- "DUE_CO2"
+# colnames(data)[which(colnames(data)=="CO2_F")] <- "DUE_CO2_F"
+
+# data       <- data[,c(which(colnames(data)=="timestamp"),which(colnames(data)=="DUE_CO2"),which(colnames(data)=="DUE_CO2_F"))]
+
+# # 
+
+# query_str <- paste("SELECT timestamp,CO2_WET_COMP FROM NABEL_PAY WHERE CO2_WET_COMP != -999 and timestamp >= ",REF_data_timestamp_from," and timestamp < ",REF_data_timestamp_to,";",sep="")
+# drv       <- dbDriver("MySQL")
+# con<-carboutil::get_conn(group="CarboSense_MySQL")
+# res       <- dbSendQuery(con, query_str)
+# tmp       <- dbFetch(res, n=-1)
+# dbClearResult(res)
+# dbDisconnect(con)
+
+# colnames(tmp)[which(colnames(tmp)=="CO2_WET_COMP")] <- "CO2"
+# tmp$CO2_F     <- rep(1,dim(tmp)[1])
+# tmp           <- tmp[,c(which(colnames(tmp)=="timestamp"),which(colnames(tmp)=="CO2"),which(colnames(tmp)=="CO2_F"))]
+# tmp           <- tmp[order(tmp$timestamp),]
+# colnames(tmp) <- c("timestamp","PAY_CO2","PAY_CO2_F")
+# data          <- merge(data,tmp,all=T)
+
+# #
+
+# query_str <- paste("SELECT timestamp,CO2_WET_COMP FROM NABEL_RIG WHERE CO2_WET_COMP != -999 and timestamp >= ",REF_data_timestamp_from," and timestamp < ",REF_data_timestamp_to,";",sep="")
+# drv       <- dbDriver("MySQL")
+# con<-carboutil::get_conn(group="CarboSense_MySQL")
+# res       <- dbSendQuery(con, query_str)
+# tmp       <- dbFetch(res, n=-1)
+# dbClearResult(res)
+# dbDisconnect(con)
+
+# colnames(tmp)[which(colnames(tmp)=="CO2_WET_COMP")] <- "CO2"
+# tmp$CO2_F     <- rep(1,dim(tmp)[1])
+# tmp           <- tmp[,c(which(colnames(tmp)=="timestamp"),which(colnames(tmp)=="CO2"),which(colnames(tmp)=="CO2_F"))]
+# tmp           <- tmp[order(tmp$timestamp),]
+# colnames(tmp) <- c("timestamp","RIG_CO2","RIG_CO2_F")
+# data          <- merge(data,tmp,all=T)
+
+# #
+
+# query_str <- paste("SELECT timestamp,CO2_WET_COMP FROM NABEL_HAE WHERE CO2_WET_COMP != -999 and timestamp >= ",REF_data_timestamp_from," and timestamp < ",REF_data_timestamp_to,";",sep="")
+# drv       <- dbDriver("MySQL")
+# con<-carboutil::get_conn(group="CarboSense_MySQL")
+# res       <- dbSendQuery(con, query_str)
+# tmp       <- dbFetch(res, n=-1)
+# dbClearResult(res)
+# dbDisconnect(con)
+
+# colnames(tmp)[which(colnames(tmp)=="CO2_WET_COMP")] <- "CO2"
+# tmp$CO2_F     <- rep(1,dim(tmp)[1])
+# tmp           <- tmp[,c(which(colnames(tmp)=="timestamp"),which(colnames(tmp)=="CO2"),which(colnames(tmp)=="CO2_F"))]
+# tmp           <- tmp[order(tmp$timestamp),]
+# colnames(tmp) <- c("timestamp","HAE_CO2","HAE_CO2_F")
+# data          <- merge(data,tmp,all=T)
+
+# #
+
+# query_str <- paste("SELECT timestamp,CO2,CO2_F FROM EMPA_LAEG WHERE CO2 != -999 and CO2_F = 1 and timestamp >= ",REF_data_timestamp_from," and timestamp < ",REF_data_timestamp_to,";",sep="")
+# drv       <- dbDriver("MySQL")
+# con<-carboutil::get_conn(group="CarboSense_MySQL")
+# res       <- dbSendQuery(con, query_str)
+# tmp       <- dbFetch(res, n=-1)
+# dbClearResult(res)
+# dbDisconnect(con)
+
+# tmp           <- tmp[order(tmp$timestamp),]
+# colnames(tmp) <- c("timestamp","LAEG_CO2","LAEG_CO2_F")
+# data          <- merge(data,tmp,all=T)
+
 #
 
-id_setToNA <- which(data$DUE_CO2 == -999 | data$DUE_CO2_F == 0)
-if(length(id_setToNA)>0){
-  data$DUE_CO2[id_setToNA] <- NA
-}
+# query_str <- paste("SELECT timestamp,CO2,CO2_F FROM UNIBE_GIMM WHERE CO2 != -999 and CO2_F = 1 and timestamp >= ",REF_data_timestamp_from," and timestamp < ",REF_data_timestamp_to,";",sep="")
+# drv       <- dbDriver("MySQL")
+# con<-carboutil::get_conn(group="CarboSense_MySQL")
+# res       <- dbSendQuery(con, query_str)
+# tmp       <- dbFetch(res, n=-1)
+# dbClearResult(res)
+# dbDisconnect(con)
 
-id_setToNA <- which(data$RIG_CO2 == -999 | data$RIG_CO2_F == 0)
-if(length(id_setToNA)>0){
-  data$RIG_CO2[id_setToNA] <- NA
-}
+# tmp           <- tmp[order(tmp$timestamp),]
+# colnames(tmp) <- c("timestamp","GIMM_CO2","GIMM_CO2_F")
+# data          <- merge(data,tmp,all=T)
 
-id_setToNA <- which(data$PAY_CO2 == -999 | data$PAY_CO2_F == 0)
-if(length(id_setToNA)>0){
-  data$PAY_CO2[id_setToNA] <- NA
-}
+#
 
-id_setToNA <- which(data$HAE_CO2 == -999 | data$HAE_CO2_F == 0)
-if(length(id_setToNA)>0){
-  data$HAE_CO2[id_setToNA] <- NA
-}
+# query_str <- paste("SELECT timestamp,CO2,CO2_F FROM UNIBE_BRM WHERE CO2 != -999 and CO2_F = 1 and timestamp >= ",REF_data_timestamp_from," and timestamp < ",REF_data_timestamp_to,";",sep="")
+# drv       <- dbDriver("MySQL")
+# con<-carboutil::get_conn(group="CarboSense_MySQL")
+# res       <- dbSendQuery(con, query_str)
+# tmp       <- dbFetch(res, n=-1)
+# dbClearResult(res)
+# dbDisconnect(con)
 
-id_setToNA <- which(data$LAEG_CO2 == -999 | data$LAEG_CO2_F == 0)
-if(length(id_setToNA)>0){
-  data$LAEG_CO2[id_setToNA] <- NA
-}
+# tmp           <- tmp[order(tmp$timestamp),]
+# colnames(tmp) <- c("timestamp","BRM_CO2","BRM_CO2_F")
+# data          <- merge(data,tmp,all=T)
 
-id_setToNA <- which(data$GIMM_CO2 == -999 | data$GIMM_CO2_F == 0)
-if(length(id_setToNA)>0){
-  data$GIMM_CO2[id_setToNA] <- NA
-}
+#
 
-id_setToNA <- which(data$BRM_CO2 == -999 | data$BRM_CO2_F == 0)
-if(length(id_setToNA)>0){
-  data$BRM_CO2[id_setToNA] <- NA
-}
+# id_setToNA <- which(data$DUE_CO2 == -999 | data$DUE_CO2_F == 0)
+# if(length(id_setToNA)>0){
+#   data$DUE_CO2[id_setToNA] <- NA
+# }
+
+# id_setToNA <- which(data$RIG_CO2 == -999 | data$RIG_CO2_F == 0)
+# if(length(id_setToNA)>0){
+#   data$RIG_CO2[id_setToNA] <- NA
+# }
+
+# id_setToNA <- which(data$PAY_CO2 == -999 | data$PAY_CO2_F == 0)
+# if(length(id_setToNA)>0){
+#   data$PAY_CO2[id_setToNA] <- NA
+# }
+
+# id_setToNA <- which(data$HAE_CO2 == -999 | data$HAE_CO2_F == 0)
+# if(length(id_setToNA)>0){
+#   data$HAE_CO2[id_setToNA] <- NA
+# }
+
+# id_setToNA <- which(data$LAEG_CO2 == -999 | data$LAEG_CO2_F == 0)
+# if(length(id_setToNA)>0){
+#   data$LAEG_CO2[id_setToNA] <- NA
+# }
+
+# id_setToNA <- which(data$GIMM_CO2 == -999 | data$GIMM_CO2_F == 0)
+# if(length(id_setToNA)>0){
+#   data$GIMM_CO2[id_setToNA] <- NA
+# }
+
+# id_setToNA <- which(data$BRM_CO2 == -999 | data$BRM_CO2_F == 0)
+# if(length(id_setToNA)>0){
+#   data$BRM_CO2[id_setToNA] <- NA
+# }
 
 data <- data[,which(!colnames(data)%in%c("DUE_CO2_F","RIG_CO2_F","PAY_CO2_F","GIMM_CO2_F","BRM_CO2_F","HAE_CO2_F","LAEG_CO2_F"))]
 
@@ -578,7 +701,7 @@ data$N_CO2     <- apply(!is.na(data[,id_COL_CO2]),1,sum)
 
 ## Import of CO2 data (+) from deployed HPPs
 
-query_str <- paste("SELECT SensorUnit_ID, LocationName FROM Deployment WHERE SensorUnit_ID BETWEEN 426 and 445 and LocationName NOT IN ('DUE1','DUE2','DUE3','DUE4','DUE5','MET1');",sep="")
+query_str <- paste("SELECT SensorUnit_ID, LocationName FROM Deployment WHERE SensorUnit_ID BETWEEN 426 and 445 and LocationName NOT IN ('DUE1','DUE2','DUE3','DUE4','DUE6','DUE5','MET1');",sep="")
 drv       <- dbDriver("MySQL")
 con<-carboutil::get_conn(group="CarboSense_MySQL")
 res       <- dbSendQuery(con, query_str)
@@ -591,39 +714,67 @@ dbDisconnect(con)
 
 HPP_data <- NULL
 
+con <- carboutil::get_conn(group="CarboSense_MySQL")
+min_ts_query <- "SELECT min(timestamp) AS ts FROM CarboSense_HPP_CO2  WHERE SensorUnit_ID BETWEEN 426 and 445 and LocationName NOT IN ('DUE1','DUE2','DUE3','DUE4','DUE6','DUE5','MET1')"
+min_ts <- collect(tbl(con, sql(min_ts_query)))$ts
+dbDisconnect(con)
+
 for(ith_HPP_SU_LOC in 1:dim(HPP_SU_LOC)[1]){
+
+
+
+  print(paste("Loading HPP data from ",HPP_SU_LOC$LocationName[ith_HPP_SU_LOC] ))
   
-  query_str <- paste("SELECT timestamp,CO2_CAL_ADJ FROM CarboSense_HPP_CO2 WHERE LocationName = '",HPP_SU_LOC$LocationName[ith_HPP_SU_LOC],"' and SensorUnit_ID = ",HPP_SU_LOC$SensorUnit_ID[ith_HPP_SU_LOC]," and CO2_CAL_ADJ != -999 and Valve = 0 and timestamp >= ",REF_data_timestamp_from," and timestamp < ",REF_data_timestamp_to,";",sep="")
-  drv       <- dbDriver("MySQL")
   con<-carboutil::get_conn(group="CarboSense_MySQL")
-  res       <- dbSendQuery(con, query_str)
-  tmp       <- dbFetch(res, n=-1)
-  dbClearResult(res)
-  dbDisconnect(con)
-  
+
+  HPP_data_query <-  glue::glue_sql("
+                      SELECT 
+                      timestamp,
+                      CO2_CAL_ADJ AS CO2
+                      FROM CarboSense_HPP_CO2 
+                      WHERE LocationName = {HPP_SU_LOC$LocationName[ith_HPP_SU_LOC]} AND SensorUnit_ID = {HPP_SU_LOC$SensorUnit_ID[ith_HPP_SU_LOC]}
+                      AND timestamp BETWEEN {REF_data_timestamp_from} AND {REF_data_timestamp_to} AND Valve = 0 AND CO2_CAL_ADJ <> -999
+                      ", .con=con)
+
+  print(HPP_data_query)
+
+
+  # query_str <- paste("SELECT timestamp, AVG(CO2_CAL_ADJ) FROM CarboSense_HPP_CO2 WHERE LocationName = '",HPP_SU_LOC$LocationName[ith_HPP_SU_LOC],"' and SensorUnit_ID = ",HPP_SU_LOC$SensorUnit_ID[ith_HPP_SU_LOC]," and CO2_CAL_ADJ != -999 and Valve = 0 and timestamp >= ",REF_data_timestamp_from," and timestamp < ",REF_data_timestamp_to,";",sep="")
+  # drv       <- dbDriver("MySQL")
+  # res       <- dbSendQuery(con, query_str)
+  # tmp       <- dbFetch(res, n=-1)
+  tmp <- collect(tbl(con, sql(HPP_data_query)))
+    dbDisconnect(con)
+  print(tmp)
   if(dim(tmp)[1]==0){
     next
   }
+  tmp <- dplyr::mutate(tmp, date = lubridate::as_datetime(tmp$timestamp, tz="UTC"))
+  #dbClearResult(res)
+
+
+
   
-  colnames(tmp)[which(colnames(tmp)=="CO2_CAL_ADJ")] <- "CO2"
+  # colnames(tmp)[which(colnames(tmp)=="CO2_CAL_ADJ")] <- "CO2"
+  print(tmp)
+  tmp           <- tmp[order(tmp$date),]
   
-  tmp           <- tmp[order(tmp$timestamp),]
-  
-  colnames(tmp) <- c("timestamp",
-                     paste("HPP_",HPP_SU_LOC$LocationName[ith_HPP_SU_LOC],"_",HPP_SU_LOC$SensorUnit_ID[ith_HPP_SU_LOC],"_CO2",  sep=""))
+   colnames(tmp) <- c("timestamp",
+                      paste("HPP_",HPP_SU_LOC$LocationName[ith_HPP_SU_LOC],"_",HPP_SU_LOC$SensorUnit_ID[ith_HPP_SU_LOC],"_CO2",  sep=""), "date")
   
   if(ith_HPP_SU_LOC==1){
     HPP_data <- tmp
   }else{
-    HPP_data <- merge(HPP_data,tmp,all=T)
+    HPP_data <- dplyr::full_join(HPP_data,tmp,all=T, by=c("timestamp","date"))
   }
 }
 
 #
+HPP_data <- timeAverage(HPP_data ,avg.time = "10 min",statistic="mean",start.date = strftime(strptime(min_ts,"%Y%m%d%H0000",tz="UTC"),"%Y%m%d%H%M%S",tz="UTC"))
 
-HPP_data$date      <- strptime("19700101000000","%Y%m%d%H%M%S",tz="UTC") + HPP_data$timestamp
-HPP_data$date      <- as.POSIXct(HPP_data$date,tz="UTC")
-HPP_data           <- timeAverage(HPP_data,avg.time = "10 min",statistic="mean",start.date = strftime(strptime(min(HPP_data$date),"%Y%m%d%H0000",tz="UTC"),"%Y%m%d%H%M%S",tz="UTC"))
+#HPP_data$date      <- strptime("19700101000000","%Y%m%d%H%M%S",tz="UTC") + HPP_data$timestamp
+#HPP_data$date      <- as.POSIXct(HPP_data$date,tz="UTC")
+#HPP_data           <- timeAverage(HPP_data,avg.time = "10 min",statistic="mean",start.date = strftime(strptime(min(HPP_data$date),"%Y%m%d%H0000",tz="UTC"),"%Y%m%d%H%M%S",tz="UTC"))
 HPP_data           <- as.data.frame(HPP_data,stringsAsFactors=F)
 HPP_data$timestamp <- as.numeric(difftime(time1=HPP_data$date,time2=strptime("19700101000000","%Y%m%d%H%M%S",tz="UTC"),units="secs",tz="UTC"))
 
@@ -700,7 +851,7 @@ if(apply_SU_events){
 #
 #  Loop over all sensor units 
 #
-
+print("Starting drift correction")
 if(T){
   
   anchor_events_SU_ALL       <- NULL
@@ -720,7 +871,7 @@ if(T){
     
     if(!COMP_DUE){
       id_depl   <- which(tbl_deployment$SensorUnit_ID==SU_id
-                         & !tbl_deployment$LocationName%in%c("DUE1","DUE2","DUE3","DUE4","DUE5","MET1"))
+                         & !tbl_deployment$LocationName%in%c("DUE1","DUE2","DUE3","DUE4","DUE5","MET1",'DUE6'))
     }
     if(COMP_DUE){
       id_depl   <- which(tbl_deployment$SensorUnit_ID==SU_id
@@ -736,6 +887,8 @@ if(T){
     #
     
     for(ith_depl in 1:n_id_depl){
+
+      
       
       # Apply SU events or not
       
@@ -792,7 +945,9 @@ if(T){
       
       # Get location information for deployment
       
-      id_loc    <- which(tbl_location$LocationName==tbl_deployment$LocationName[id_depl[ith_depl]])
+      id_loc    <- which(tbl_location$LocationName==tbl_deployment$LocationName[id_depl[ith_depl]] & 
+      tbl_deployment$Date_UTC_from[id_depl[ith_depl]]>= tbl_location$Date_UTC_from )
+      print(paste("ID loc is:", id_loc))
       
       ALTITUDE  <- tbl_location$h[id_loc]
       CANTON    <- tbl_location$Canton[id_loc]
@@ -1025,8 +1180,8 @@ if(T){
                                           & REF_SITES$canton=="TI"
                                           & !REF_SITES$name%in%c("SSAL"))
           
-          if(length(id_REF_options)==0){
-            id_REF_options <- which(REF_SITES$name=="DUEBSL")
+          if(length(id_REF_options)==0 || is.null(id_REF_options)){
+            id_REF_options <- which(REF_SITES$name=="DUE")
           }
           
           multiple_refsite_options <- T
@@ -1034,7 +1189,14 @@ if(T){
         
         
         if(is.null(id_REF_options) | length(id_REF_options)==0){
-          stop("IS.NULL(id_REF_options)/length(id_REF_options)=0: 'id_REF_options'")
+          print(id_REF_options)
+          print(tbl_deployment[id_depl[ith_depl],])
+          #id_REF_options <- which(REF_SITES$name=="DUEBSL")
+           id_REF_options         <- which(REF_SITES$status==1
+                                          & REF_SITES$timestamp_from < id_wind_ts_from
+                                          & REF_SITES$timestamp_to   > id_wind_ts_to)
+          print("Selected DUEBSL as reference site")
+          #stop("IS.NULL(id_REF_options)/length(id_REF_options)=0: 'id_REF_options'")
         }
         
         dist2REF                <- sqrt((tbl_location$Y_LV03[id_loc]-REF_SITES$y)^2+(tbl_location$X_LV03[id_loc]-REF_SITES$x)^2)
@@ -1053,11 +1215,11 @@ if(T){
           if(multiple_refsite_options==F & ith_id_REF_selected>1){
             next
           }
-          
+          print(paste("IDs", id_REF_selected[ith_id_REF_selected]))
           REF_site_selected      <- REF_SITES$name[id_REF_selected[ith_id_REF_selected]]
           dist2REF_site_selected <- dist2REF[id_REF_selected[ith_id_REF_selected]]
           
-          if(REF_site_selected=="DUEBSL"){
+          if(REF_site_selected=="DUEBSL" || is.na(REF_site_selected)){
             pos_REF_CO2 <- which(colnames(data)==paste("DUE_CO2_BSL",sep=""))
           }else{
             pos_REF_CO2 <- grep(pattern = paste(REF_site_selected,"[[:print:]]{1,5}","CO2$",sep=""),x = colnames(data))

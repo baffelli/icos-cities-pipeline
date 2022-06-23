@@ -86,7 +86,18 @@ if(T){
   # res        <- dbSendQuery(con, query_str)
   # tmp        <- dbFetch(res, n=-1)
   # dbClearResult(res)
-  tmp <- dplyr::collect(dplyr::tbl(con, dplyr::sql(query_str)))
+
+  get_last_date(con, SensorUnit_ID){
+    qs <- glue::glue_sql("SELECT Date_UTC_From FROM Calibration WHERE LocationName ='DUE1' AND SensorUnit_ID = ${SensorUnit_ID}")
+    get_data(con, qs)
+  }
+
+  get_data <- function(con, query){
+      dplyr::collect(dplyr::tbl(con, dplyr::sql(query)))
+
+  }
+
+  tmp <- get_data(con, query_str))
   #Do not forget to disconnect
   dbDisconnect(con)
   #Extract results
@@ -94,18 +105,18 @@ if(T){
 }
 
 
-if(F){
+# if(F){
   
-  query_str  <- paste("SELECT SensorUnit_ID FROM Calibration where LocationName='DUE2' and Date_UTC_to = '2019-05-29 07:10:00' and SensorUnit_ID>=1010;",sep="")
-  drv        <- dbDriver("MySQL")
-  con<-carboutil::get_conn(group="CarboSense_MySQL")
-  res        <- dbSendQuery(con, query_str)
-  tmp        <- dbFetch(res, n=-1)
-  dbClearResult(res)
-  dbDisconnect(con)
+#   query_str  <- paste("SELECT SensorUnit_ID FROM Calibration where LocationName='DUE2' and Date_UTC_to = '2019-05-29 07:10:00' and SensorUnit_ID>=1010;",sep="")
+#   drv        <- dbDriver("MySQL")
+#   con<-carboutil::get_conn(group="CarboSense_MySQL")
+#   res        <- dbSendQuery(con, query_str)
+#   tmp        <- dbFetch(res, n=-1)
+#   dbClearResult(res)
+#   dbDisconnect(con)
   
-  SensorUnit_ID_2_cal <- as.numeric(tmp$SensorUnit_ID)
-}
+#   SensorUnit_ID_2_cal <- as.numeric(tmp$SensorUnit_ID)
+# }
 
 #Instead: change the query with "SELECT distinct SensorUnit_ID FROM Calibration 
 #WHERE LocationName='DUE1' AND Date_UTC_to='2100-01-01 00:00:00' AND SensorUnit_ID>1008

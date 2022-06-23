@@ -39,24 +39,25 @@ dbFetch <- function(...) lubridate::with_tz(DBI::dbFetch(...), tz='UTC')
 ## ARGUMENTS
 
 parser <- ArgumentParser(description='Process HPP data')
-parser$add_argument('PARTIAL_COMPUTATION', type="logical", nargs=1, help='Perform partial computation?')
 parser$add_argument('SelectedLocationName', type="character", nargs='?', default=NULL, help='Location to process')
+parser$add_argument('--partial', help='Perform partial computation?', action="store_true")
 args <- parser$parse_args(commandArgs(trailingOnly=TRUE))
 
 
-if(args$PARTIAL_COMPUTATION){
+if(args$partial){
 
   Computation_date_from      <- lubridate::now() - lubridate::days(x=20)
   Computation_timestamp_from <- as.numeric(Computation_date_from)
 }
+PARTIAL_COMPUTATION  <- args$partial
+
   
 
-if(length(args)==2){
-  PARTIAL_COMPUTATION  <- args$PARTIAL_COMPUTATION
+if(is.null(args$SelectedLocationName)){
   SelectedLocationName <- args$SelectedLocationName
+}else{
+  SelectedLocationName <- NULL
 }
-
-
 ### ----------------------------------------------------------------------------------------------------------------------------
 
 ## MODEL
@@ -295,25 +296,36 @@ for(ith_SensorUnit_ID_2_proc in 1:n_SensorUnit_ID_2_proc){
       
       
       # Import measurement from Decentlab Influx-DB
-      
-      timeFilter <- paste("time >= ",tbl_deployment$timestamp_from[id_depl[ith_depl]],"s AND time < ",tbl_deployment$timestamp_to[id_depl[ith_depl]],"s",sep="")
+      start_query <- as.integer(tbl_deployment$Date_UTC_from[id_depl[ith_depl]])
+      stop_query <- tbl_deployment$timestamp_to[id_depl[ith_depl]]
+      timeFilter <- paste("time >= ",start_query,"s AND time < ",stop_query,"s",sep="")
       device     <- paste("/",SensorUnit_ID_2_proc[ith_SensorUnit_ID_2_proc],"/",sep="")
       print(timeFilter)
       print(paste("requesting data for", SensorUnit_ID_2_proc[ith_SensorUnit_ID_2_proc]))
       tmp0 <- tryCatch({
-        query(domain=DL_DB_domain,
-              apiKey=DL_DB_apiKey,
-              timeFilter=timeFilter,
-              device = device,
-              location = "//",
-              sensor = "/calibration|senseair-hpp-ir-signal|senseair-hpp-pressure-filtered|senseair-hpp-status|senseair-hpp-temperature-mcu|sensirion-sht21-humidity|sensirion-sht21-temperature/",
-              channel = "//",
-              aggFunc = "mean",
-              aggInterval = "1m",
-              doCast = FALSE,
-              timezone = 'UTC')
+        # query(domain=DL_DB_domain,
+        #       apiKey=DL_DB_apiKey,
+        #       timeFilter=timeFilter,
+        #       device = device,
+        #       location = "//",
+        #       sensor = "/calibration|senseair-hpp-ir-signal|senseair-hpp-pressure-filtered|senseair-hpp-co2-filtered|senseair-hpp-status|senseair-hpp-temperature-mcu|sensirion-sht21-humidity|sensirion-sht21-temperature/",
+        #       channel = "//",
+        #       aggFunc = "mean",
+        #       aggInterval = "1m",
+        #       doCast = FALSE,
+        #       timezone = 'UTC')
+      carboutil::query_decentlab(
+      carboutil::get_decentlab_api_key(),
+      time_filter =timeFilter,
+      device = device,
+      location = "//",
+      sensor = "//",
+      agg_func = "mean",
+      agg_int = "1m"
+    )
       },
       error=function(cond){
+        print(cond)
         return(NULL)
       }
       )
@@ -331,61 +343,82 @@ for(ith_SensorUnit_ID_2_proc in 1:n_SensorUnit_ID_2_proc){
       # tmp0$time <- round(as.numeric(difftime(time1=tmp0$time,time2=strptime("19700101000000","%Y%m%d%H%M%S",tz="UTC"),units="secs",tz="UTC"))*1e6)
       # tmp0      <- data.frame(reshape::cast(tmp0, time ~ series, fun.aggregate = mean), check.names = FALSE)
       # tmp0$time <- strptime("19700101000000","%Y%m%d%H%M%S",tz="UTC") + tmp0$time/1e6
-      
-      tmp0      <- as.data.table(tmp0)
-      tmp0$time <- round(as.numeric(difftime(time1=tmp0$time,time2=strptime("19700101000000","%Y%m%d%H%M%S",tz="UTC"),units="secs",tz="UTC"))*1e3)
-      tmp0      <- dcast.data.table(tmp0, time ~ series, fun.aggregate = mean,value.var = "value")
-      tmp0$time <- strptime("19700101000000","%Y%m%d%H%M%S",tz="UTC") + tmp0$time/1e3
-      tmp0      <- as.data.frame(tmp0)
-      print(paste("Finished reshaping data for", SensorUnit_ID_2_proc[ith_SensorUnit_ID_2_proc]))
+      # print(tmp0)
+      # tmp0      <- as.data.table(tmp0)
+      # tmp0$time <- round(as.numeric(difftime(time1=tmp0$time,time2=strptime("19700101000000","%Y%m%d%H%M%S",tz="UTC"),units="secs",tz="UTC"))*1e3)
+      # tmp0      <- dcast.data.table(tmp0, time ~ series, fun.aggregate = mean,value.var = "value")
+      # tmp0$time <- strptime("19700101000000","%Y%m%d%H%M%S",tz="UTC") + tmp0$time/1e3
+      # tmp0      <- as.data.frame(tmp0)
+      # print(paste("Finished reshaping data for", SensorUnit_ID_2_proc[ith_SensorUnit_ID_2_proc]))
       
       # Modification of colnames
       
-      cn            <- colnames(tmp0)
-      cn            <- gsub(pattern = "-",  replacement = "_", x = cn)
-      cn            <- gsub(pattern = "\\.",replacement = "_", x = cn)
-      cn            <- gsub(pattern = paste(SensorUnit_ID_2_proc[ith_SensorUnit_ID_2_proc],"_",sep=""), replacement = "", x = cn)
+      new_names <- c(
+      "battery"                  = "battery",                           
+      "valve"                    = "calibration",                       
+      "hpp_co2"                  = "senseair_hpp_co2_filtered",         
+      "hpp_ir"                   = "senseair_hpp_ir_signal",            
+      "hpp_lpl"                  = "senseair_hpp_lpl_signal",           
+      "hpp_ntc5_dT"              = "senseair_hpp_ntc5_diff_temp",       
+      "hpp_ntc6_T"               = "senseair_hpp_ntc6_se_temp",         
+      "hpp_status"               = "senseair_hpp_status",               
+      "hpp_pressure"             = "senseair_hpp_pressure_filtered",    
+      "hpp_temperature_detector" = "senseair_hpp_temperature_detector", 
+      "hpp_temperature_mcu"      = "senseair_hpp_temperature_mcu",      
+      "sht21_RH"                 = "sensirion_sht21_humidity",          
+      "sht21_T"                  = "sensirion_sht21_temperature",       
+      "date"                     = "time")                              
       
-      cn            <- gsub(pattern = "battery",                           replacement = "battery",                  x=cn)
-      cn            <- gsub(pattern = "calibration",                       replacement = "valve",                    x=cn)
-      cn            <- gsub(pattern = "senseair_hpp_co2_filtered",         replacement = "hpp_co2",                  x=cn)
-      cn            <- gsub(pattern = "senseair_hpp_ir_signal",            replacement = "hpp_ir",                   x=cn)
-      cn            <- gsub(pattern = "senseair_hpp_lpl_signal",           replacement = "hpp_lpl",                  x=cn)
-      cn            <- gsub(pattern = "senseair_hpp_ntc5_diff_temp",       replacement = "hpp_ntc5_dT",              x=cn)
-      cn            <- gsub(pattern = "senseair_hpp_ntc6_se_temp",         replacement = "hpp_ntc6_T",               x=cn)
-      cn            <- gsub(pattern = "senseair_hpp_status",               replacement = "hpp_status",               x=cn)
-      cn            <- gsub(pattern = "senseair_hpp_pressure_filtered",    replacement = "hpp_pressure",             x=cn)
-      cn            <- gsub(pattern = "senseair_hpp_temperature_detector", replacement = "hpp_temperature_detector", x=cn)
-      cn            <- gsub(pattern = "senseair_hpp_temperature_mcu",      replacement = "hpp_temperature_mcu",      x=cn)
-      cn            <- gsub(pattern = "sensirion_sht21_humidity",          replacement = "sht21_RH",                 x=cn)
-      cn            <- gsub(pattern = "sensirion_sht21_temperature",       replacement = "sht21_T",                  x=cn)
-      cn            <- gsub(pattern = "time",                              replacement = "date",                     x=cn)
+      sensor_data <- 
+      dplyr::rename_all(tmp0, function(x) stringr::str_replace_all(x, "-", "_")) %>%
+      dplyr::rename(!!!new_names)
+
+    
+      # cn            <- colnames(tmp0)
+      # cn            <- gsub(pattern = "-",  replacement = "_", x = cn)
+      # cn            <- gsub(pattern = "\\.",replacement = "_", x = cn)
+      # cn            <- gsub(pattern = paste(SensorUnit_ID_2_proc[ith_SensorUnit_ID_2_proc],"_",sep=""), replacement = "", x = cn)
       
-      colnames(tmp0) <- cn
+      # cn            <- gsub(pattern = "battery",                           replacement = "battery",                  x=cn)
+      # cn            <- gsub(pattern = "calibration",                       replacement = "valve",                    x=cn)
+      # cn            <- gsub(pattern = "senseair_hpp_co2_filtered",         replacement = "hpp_co2",                  x=cn)
+      # cn            <- gsub(pattern = "senseair_hpp_ir_signal",            replacement = "hpp_ir",                   x=cn)
+      # cn            <- gsub(pattern = "senseair_hpp_lpl_signal",           replacement = "hpp_lpl",                  x=cn)
+      # cn            <- gsub(pattern = "senseair_hpp_ntc5_diff_temp",       replacement = "hpp_ntc5_dT",              x=cn)
+      # cn            <- gsub(pattern = "senseair_hpp_ntc6_se_temp",         replacement = "hpp_ntc6_T",               x=cn)
+      # cn            <- gsub(pattern = "senseair_hpp_status",               replacement = "hpp_status",               x=cn)
+      # cn            <- gsub(pattern = "senseair_hpp_pressure_filtered",    replacement = "hpp_pressure",             x=cn)
+      # cn            <- gsub(pattern = "senseair_hpp_temperature_detector", replacement = "hpp_temperature_detector", x=cn)
+      # cn            <- gsub(pattern = "senseair_hpp_temperature_mcu",      replacement = "hpp_temperature_mcu",      x=cn)
+      # cn            <- gsub(pattern = "sensirion_sht21_humidity",          replacement = "sht21_RH",                 x=cn)
+      # cn            <- gsub(pattern = "sensirion_sht21_temperature",       replacement = "sht21_T",                  x=cn)
+      # cn            <- gsub(pattern = "time",                              replacement = "date",                     x=cn)
+      
+      # colnames(tmp0) <- cn
       
       
-      # Ensure that all required columns are defined
+      # # Ensure that all required columns are defined
       
-      cn_required   <- c("date","battery","valve","hpp_ir","hpp_co2","hpp_pressure","hpp_status","hpp_temperature_mcu","sht21_RH","sht21_T")
-      n_cn_required <- length(cn_required)
+      # cn_required   <- c("date","battery","valve","hpp_ir","hpp_co2","hpp_pressure","hpp_status","hpp_temperature_mcu","sht21_RH","sht21_T")
+      # n_cn_required <- length(cn_required)
       
-      sensor_data <- as.data.frame(matrix(NA,ncol=n_cn_required,nrow=dim(tmp0)[1]),stringsAsFactors=F)
+      # sensor_data <- as.data.frame(matrix(NA,ncol=n_cn_required,nrow=dim(tmp0)[1]),stringsAsFactors=F)
       
-      for(ith_cn_req in 1:n_cn_required){
-        pos_tmp0 <- which(colnames(tmp0)==cn_required[ith_cn_req])
-        if(length(pos_tmp0)>0){
-          sensor_data[,ith_cn_req] <- tmp0[,pos_tmp0]
-        }else{
-          sensor_data[,ith_cn_req] <- NA
-        }
-      }
+      # for(ith_cn_req in 1:n_cn_required){
+      #   pos_tmp0 <- which(colnames(tmp0)==cn_required[ith_cn_req])
+      #   if(length(pos_tmp0)>0){
+      #     sensor_data[,ith_cn_req] <- tmp0[,pos_tmp0]
+      #   }else{
+      #     sensor_data[,ith_cn_req] <- NA
+      #   }
+      # }
       
-      colnames(sensor_data) <- cn_required
+      # colnames(sensor_data) <- cn_required
       
    
 
-      rm(cn_required,n_cn_required,tmp0)
-      gc()
+      # rm(cn_required,n_cn_required,tmp0)
+      # gc()
       
       
       # Apply pressure calibration
@@ -416,11 +449,11 @@ for(ith_SensorUnit_ID_2_proc in 1:n_SensorUnit_ID_2_proc){
       }
       
       print(paste("Before averaging",nrow(sensor_data)))
-
+    
 
       # Force time to full preceding minute / check data imported from Influx-DB (no duplicates)
       sensor_data <- dplyr::arrange(sensor_data, date)
-      sensor_data <- openair::timeAverage(sensor_data, avg.time='1 min')
+      #sensor_data <- openair::timeAverage(sensor_data, avg.time='1 min')
       
       lubridate::second(sensor_data$date) <- 0
       sensor_data$timestamp <- as.numeric(sensor_data$date)
@@ -433,22 +466,20 @@ for(ith_SensorUnit_ID_2_proc in 1:n_SensorUnit_ID_2_proc){
       
       #sensor_data$timestamp <- as.numeric(difftime(time1=sensor_data$date,time2=lubridate::origin))
       #sensor_data           <- sensor_data[c(T,diff(sensor_data$timestamp)>50),]
-      
+
       sensor_data$date      <- strptime(strftime(sensor_data$date,"%Y%m%d%H%M00",tz="UTC"),"%Y%m%d%H%M%S",tz="UTC")
       # sensor_data$timestamp <- as.numeric(difftime(time1=sensor_data$date,time2=strptime("19700101000000","%Y%m%d%H%M%S",tz="UTC"),tz="UTC",units="secs"))
-      print(sensor_data)
       sensor_data           <- sensor_data[!duplicated(sensor_data$date),]
       print(paste("After averaging",nrow(sensor_data)))
-    
       # Set CO2 measurements to NA if status !=0
       
       id_set_to_NA <- which(!sensor_data$hpp_status%in%c(0,32))
+     
       if(length(id_set_to_NA)){
         sensor_data$hpp_co2[id_set_to_NA] <- NA
       }
       
       id_set_to_NA <- which(sensor_data$hpp_status==32)
-      
       if(length(id_set_to_NA)>0){
         write.table(x = sensor_data[id_set_to_NA,],file = paste("/project/CarboSense/",SensorUnit_ID_2_proc[ith_SensorUnit_ID_2_proc],".csv",sep=""),sep=";",col.names=T,row.names=F)
       }
@@ -481,6 +512,7 @@ for(ith_SensorUnit_ID_2_proc in 1:n_SensorUnit_ID_2_proc){
       #Absolute humidity
       sensor_data$sht21_H2O <- carboutil::relative_to_absolute_humidity(sensor_data$sht21_RH, sensor_data$sht21_T+273.15, sensor_data$hpp_pressure*1e2)
       # BCP
+      print("Applying BCP")
       if(!is.null(tbl_refGasCylDepl)){
         
         sensor_data$CO2        <- NA
@@ -508,13 +540,12 @@ for(ith_SensorUnit_ID_2_proc in 1:n_SensorUnit_ID_2_proc){
       
       
       # Apply calibration for individual sensor
-      
       sensor_data$CO2_CAL         <- NA
       sensor_data$CO2_CAL_BCP     <- NA
       sensor_data$CO2_CAL_DRY     <- NA
       sensor_data$CO2_CAL_BCP_DRY <- NA
       
-      sensor_data$days            <- as.numeric(difftime(time1=sensor_data$date,time2=strptime("20170101000000","%Y%m%d%H%M%S",tz="UTC"),tz="UTC",units="days"))
+      sensor_data$days  <- as.numeric(difftime(time1=sensor_data$date,time2=strptime("20170101000000","%Y%m%d%H%M%S",tz="UTC"),tz="UTC",units="days"))
       
       
       for(ith_sensor in 1:n_id_sensors){
@@ -536,7 +567,7 @@ for(ith_SensorUnit_ID_2_proc in 1:n_SensorUnit_ID_2_proc){
         # sensor period
         data2cal   <- data2cal & sensor_data$date>=tbl_sensors$Date_UTC_from[id_sensors[ith_sensor]] & sensor_data$date<=tbl_sensors$Date_UTC_to[id_sensors[ith_sensor]]
         
-        
+
         # apply model to mean
         
         if(sum(data2cal)>0){
@@ -708,6 +739,7 @@ for(ith_SensorUnit_ID_2_proc in 1:n_SensorUnit_ID_2_proc){
 
       
       print(paste("After",nrow(sensor_data))) 
+      print(sensor_data)
       drv             <- dbDriver("MySQL")
       con <-carboutil::get_conn()
       res             <- dbSendQuery(con, query_str)
@@ -723,9 +755,8 @@ for(ith_SensorUnit_ID_2_proc in 1:n_SensorUnit_ID_2_proc){
       sensor_data <- mutate_at(sensor_data, c("CO2_CAL_BCP","CO2_CAL_DRY","CO2_CAL_BCP_DRY"), function(x) replace(x, is.na(x), -999) )
       #Find duplicates
       dp <- which(duplicated(sensor_data[,c("timestamp","LocationName")]))
-      print(sensor_data[dp,])
       #
-      
+      print(n_id_insert)
       if(n_id_insert>0){
         #print(paste("TO insert", sensor_data))
         print(paste("Insert data for SU",SensorUnit_ID_2_proc[ith_SensorUnit_ID_2_proc]))
@@ -835,9 +866,11 @@ for(ith_SensorUnit_ID_2_proc in 1:n_SensorUnit_ID_2_proc){
 ### ----------------------------------------------------------------------------------------------------------------------------
 
 # Label dates
-
+print("Labeling")
 label_date_00   <- strptime("20170101000000","%Y%m%d%H%M%S",tz="UTC")
-label_date_01   <- strptime("20210101000000","%Y%m%d%H%M%S",tz="UTC")
+label_date_01   <- strptime("20220101000000","%Y%m%d%H%M%S",tz="UTC")
+
+#label_date_01   <- max(sensor_data$date)
 label_dates     <- seq(label_date_00,label_date_01,by = "month")
 label_dates_str <- strftime(label_dates,"%m/%y",tz="UTC")
 
