@@ -57,7 +57,6 @@ parser.add_argument('--backfill', default=0, type=int, help='Backfill time for i
 args = parser.parse_args()
 logger.info('Started')
 #Mapping table <> sensor type
-breakpoint()
 
 #Get API key from secrets
 passw = sec.get_key('decentlab')
