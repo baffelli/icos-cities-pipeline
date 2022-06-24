@@ -959,11 +959,22 @@ def map_inlets(inlet_a: pd.Series, inlet_b: pd.Series) -> pd.Series:
     'a' and 'b' depending on wether `inlet_a` or `inlet_b` are set to 1.
     """
     return pd.Series([['', 'a', 'b', ''][i] for i in (inlet_a + inlet_b * 2)],  dtype="string")
+
+def filter_HPP_data(dt: pd.DataFrame) -> pd.DataFrame:
+    """
+    Filter a dataframe of HPP data removing the rows
+    with missing CO2 / T / RH
+    """
+    invalid = dt['sensor_t'].isna() | dt['sensor_RH'].isna() | dt['sensor_CO2'].isna()
+    return dt[~invalid]
+
+
 def prepare_HPP_features(dt: pd.DataFrame, ir_col: str = "sensor_ir_lpl", fit: bool = True, plt: str = '1d') -> pd.DataFrame:
     """
     Prepare features for CO2 calibration / predictions
     """
     dt_new = dt.copy().reset_index()
+
     dt_new['date'] = pd.to_datetime(dt_new['time'], unit='s')
     dt_new['sensor_t_abs'] = calc.absolute_temperature(dt_new['sensor_t'])
     # Water content
@@ -986,6 +997,7 @@ def prepare_HPP_features(dt: pd.DataFrame, ir_col: str = "sensor_ir_lpl", fit: b
     dt_new['normal_cycle'] = dt_new['cal_cycle_end'].cumsum()
     #Elapsed time (for calibration cycle)
     elaps_lm = lambda x: (x['date'] - x['date'].min()).dt.total_seconds()
+
     if dt_new.cal_cycle.max() > 0:
         dt_new['inlet_elapsed'] = dt_new.groupby('inlet_cycle').apply(elaps_lm).values
         dt_new['cal_elapsed'] = dt_new.groupby('cal_cycle').apply(elaps_lm).values
