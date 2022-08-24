@@ -1,0 +1,80 @@
+
+{
+    "DUE": {
+        "source": {
+            "type":"file",
+            "re": "((DUE Test .*)|(CarboSens.*)|(DUE O3 .*))\\.(csv|CSV)",
+            "path": "DUE"},
+        "dest": {
+            "type": "DB",
+            "path": "NABEL_DUE",
+            "db_prefix":"CarboSense_MySQL"
+        }
+        },
+    "RIG": {
+        "source": {
+            "type":"file",
+            "re": "RIG Gase .*\\.csv",
+            "path": "RIG"},
+        "dest": {
+            "type": "DB",
+            "path": "NABEL_RIG",
+            "db_prefix":"CarboSense_MySQL"
+        }
+        },
+    "HAE": {
+        "source": {
+            "type":"file",
+            "re": "HAE Gase .*\\.csv",
+            "path": "HAE"},
+        "dest": {
+            "type": "DB",
+            "path": "NABEL_HAE",
+            "db_prefix":"CarboSense_MySQL"
+        }
+        },
+    "PAY": {
+        "source":{
+            "type":"file",
+            "re": "NO NO2 O3 CO2 H2O .*\\.csv",
+            "path": "PAY"},
+        "dest": {
+            "type": "DB",
+            "path": "NABEL_PAY",
+            "db_prefix":"CarboSense_MySQL"
+        }
+        },
+    "BRM": {
+        "source": {
+            "type":"DB",
+            "db_prefix":"empaGSN",
+            "path": "beromuenster_12m_1min_cal"},
+        "dest": {
+            "type": "DB",
+            "path": "UNIBE_BRM",
+            "db_prefix":"CarboSense_MySQL"
+        }
+        },
+    "GIMM": {
+        "source": {
+            "type":"DB",
+            "db_prefix":"empaGSN",
+            "path":"gimmiz_1min_cal"},
+        "dest": {
+            "type": "DB",
+            "path": "UNIBE_GIMM",
+            "db_prefix":"CarboSense_MySQL"
+        }
+        },
+    "LAEG":{
+        "source": {
+            "type":"DB",
+            "db_prefix":"empaGSN",
+            "path":"laegern_1min_cal"},
+        "dest": {
+            "type": "DB",
+            "path": "EMPA_LAEG",
+            "db_prefix":"CarboSense_MySQL"
+        }
+        }
+}

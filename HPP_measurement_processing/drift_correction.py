@@ -192,53 +192,55 @@ resample_duration = '1h'
 with Session() as session:
     drift_data = pivot_drift_data(cal.get_drift_correction_data(session, args.id, start, end, ref_loc=refs), ref_loc=refs)
 
-
-#Apply correction for each deployment
-for loc, local_offset_data in drift_data.groupby('location'):
-    #Decide the type of calibration depending on where the sensor was deployed
-    #If the sensor was collocated with a picarro sensor, compute a two point 
-    #regression versus that reference, otherwise only fit
-    #the offset (computed as the difference between reference and sensor value over a sliding window using `ref_stn` location as reference value)
-    if loc in refs:
-        target = ('ref_loc_CO2', loc)
-        regressors = ['CO2', 'temperature']
-        two_point = True
-    else:
-        target = 'offset'
-        regressors = ['location_elapsed', 'temperature']
-        two_point = False
-    #Prepare data
-    drift_data_offset = prepare_data(local_offset_data.set_index('date').groupby('location').resample(resample_duration).mean().reset_index(), master_stn=refs[0], ref_stn=refs[1])
+if not drift_data.empty:
+    #Apply correction for each deployment
+    for loc, local_offset_data in drift_data.groupby('location'):
+        #Decide the type of calibration depending on where the sensor was deployed
+        #If the sensor was collocated with a picarro sensor, compute a two point 
+        #regression versus that reference, otherwise only fit
+        #the offset (computed as the difference between reference and sensor value over a sliding window using `ref_stn` location as reference value)
+        if loc in refs:
+            target = ('ref_loc_CO2', loc)
+            regressors = ['CO2', 'temperature']
+            two_point = True
+        else:
+            target = 'offset'
+            regressors = ['location_elapsed', 'temperature']
+            two_point = False
+        #Prepare data
+        drift_data_offset = prepare_data(local_offset_data.set_index('date').groupby('location').resample(resample_duration).mean().reset_index(), master_stn=refs[0], ref_stn=refs[1])
+        
+        offset_fits = drift_data_offset.set_index('date').groupby(pd.Grouper(freq=group_freq)).apply(lambda x: fit_drift(x.reset_index(), target=target, regs=regressors))
+        prediction_data = prepare_data(local_offset_data.reset_index(), fit=False, master_stn=refs[0], ref_stn=refs[1]).set_index('date')
+        #Iterate over the fits and apply the correction
+        data_corrected = pd.concat([apply_drift_correction(prediction_data.reset_index(), x, two_point=two_point) for x in offset_fits.tolist()])
     
-    offset_fits = drift_data_offset.set_index('date').groupby(pd.Grouper(freq=group_freq)).apply(lambda x: fit_drift(x.reset_index(), target=target, regs=regressors))
-    prediction_data = prepare_data(local_offset_data.reset_index(), fit=False, master_stn=refs[0], ref_stn=refs[1]).set_index('date')
-    #Iterate over the fits and apply the correction
-    data_corrected = pd.concat([apply_drift_correction(prediction_data.reset_index(), x, two_point=two_point) for x in offset_fits.tolist()])
+    plt_path = args.plot.with_name(f"drift_correction_{args.id}.pdf")
+    with PdfPages(plt_path) as pdf:
+        data_corrected.set_index('date').groupby(pd.Grouper(freq='7d')).apply(lambda x: pdf.savefig(plot_drift_correction(x.reset_index())))
+    #Combine columns
+    data_corrected['pressure'] = data_corrected['pressure'] .combine_first(data_corrected['pressure_interp'] )
 
-plt_path = args.plot.with_name(f"drift_correction_{args.id}.pdf")
-with PdfPages(plt_path) as pdf:
-    data_corrected.set_index('date').groupby(pd.Grouper(freq='7d')).apply(lambda x: pdf.savefig(plot_drift_correction(x.reset_index())))
+    #Store data
+    with Session() as ses:
+        #Create an upsert method
+        upsert = db_utils.create_upsert_metod(md)
+        #Rename columns
+        names = {
+            'timestamp' : 'timestamp',
+            'sensor_id' : 'sensor_id',
+            'location' : 'location',
+            'CO2' : 'CO2',
+            'temperature' : 'temperature',
+            'relative_humidity' : 'relative_humidity',
+            'pressure_final': 'pressure',
+            'CO2_drift_corrected': "CO2_drift_corrected",
+            'inlet': 'inlet'
+        }
+        data_final = data_corrected.rename(columns=names)[names.values()]
+        data_final.to_sql(mods.Level3Data.__tablename__, ses.connection() , method=upsert, index=False, if_exists='append')
+        ses.commit()
 
+else:
+    logger.info(f"No data for {args.id}")
 
-#Combine columns
-data_corrected['pressure'] = data_corrected['pressure'] .combine_first(data_corrected['pressure_interp'] )
-
-#Store data
-with Session() as ses:
-    #Create an upsert method
-    upsert = db_utils.create_upsert_metod(md)
-    #Rename columns
-    names = {
-        'timestamp' : 'timestamp',
-        'sensor_id' : 'sensor_id',
-        'location' : 'location',
-        'CO2' : 'CO2',
-        'temperature' : 'temperature',
-        'relative_humidity' : 'relative_humidity',
-        'pressure_final': 'pressure',
-        'CO2_drift_corrected': "CO2_drift_corrected",
-        'inlet': 'inlet'
-    }
-    data_final = data_corrected.rename(columns=names)[names.values()]
-    data_final.to_sql(mods.Level3Data.__tablename__, ses.connection() , method=upsert, index=False, if_exists='append')
-    ses.commit()
