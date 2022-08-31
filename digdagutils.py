@@ -68,7 +68,7 @@ def get_username(are: Any) -> None:
     lg = os.getlogin()
     digdag.env.store({'username': lg})
 
-def configure_paths(base: str) -> None:
+def configure_paths(base: str = 'basi') -> None:
     """
     Configure paths used in subsequent tasks
     """

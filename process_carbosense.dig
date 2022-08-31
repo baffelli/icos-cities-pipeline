@@ -1,7 +1,7 @@
 timezone: Europe/Zurich
 
 #Get username and store it
-#in the digdag environment and configure various paths
+#in the digdag environment and configure various paths (for example {base_folder})
 +configure_paths:
     +store:
         py>: digdagutils.configure_paths

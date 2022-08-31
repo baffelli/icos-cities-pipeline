@@ -622,10 +622,9 @@ for current_id in ids_to_process:
             target = ['cyl_CO2']
             features = ['sensor_CO2']
             cal_data_filtered = cal.filter_HPP_data(cal_data)
-
-            if not cal_data_filtered.empty:
-                cal_features = cal.prepare_HPP_features(cal_data_filtered, fit=True)
-                cal_features_filtered = cal.filter_cal(cal_features, endog=features, exog=target)
+            cal_features = cal.prepare_HPP_features(cal_data_filtered, fit=True)
+            cal_features_filtered = cal.filter_cal(cal_features, endog=features, exog=target)
+            if not cal_data_filtered.empty and not cal_features_filtered.empty:
                 #Calibration window
                 interval = 2
                 #Call bottle calibration
@@ -651,6 +650,7 @@ for current_id in ids_to_process:
             else:
                 logger.info(f"No valid calibrations for {id} between {start} and {end}")
                 continue
+
         case "process", (du.AvailableSensors.HPP | du.AvailableSensors.Vaisala | du.AvailableSensors.Licor) as st:
             wp_path = make_plot_path_name(b_pth, id, st, args.mode)
             pdf = PdfPages(wp_path, 'a')
