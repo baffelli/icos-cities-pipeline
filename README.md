@@ -64,6 +64,18 @@ port=3306
 [client]
 socket=/var/lib/mysql/mysql.sock
 ```
+
+Anyhwere where you see  a variable of the form `{something}`, replace it with the *value* of something in your file.
+
+For example, assuming that your username is "user", the entry 
+```
+user = {insert your user here}
+```
+in the file above would be translated to:
+```
+user = user
+```
+
 An example of this file is found [here](./config/databases.cnf)
 
 At the moment, there are three databases that are necessary for the pipeline, as you can see in this file:
@@ -75,12 +87,19 @@ At the moment, there are three databases that are necessary for the pipeline, as
 
 ### Configure Decentlab API Key
 Obtain a InfluxDB API Key from decentlab. This keys allows you access to the timeseries database where the raw measurement data resides. 
-Once you have the key, store it in a yaml file called `secrets.yaml` in the `config` folder:
+Once you have the key, store it in a yaml file called `secrets.yml` in your unix home folder on the machine where the pipeline is run. 
+
+For my user (*basi*), the full path would be `~/secrets.yml`, the contents are as follows:
 ```
--decentlab:
-  -key: your-api-key
+- service:
+          name: decentlab
+          secret: some token
 ```
-Do not forget to make the file only readable from the user running the pipeline. 
+Do not forget to make the file only readable from the user running the pipeline. This can be done by the command:
+
+```
+chmod 700 ~/secrets.yml
+```
 
 
 ### Configure network shares
@@ -94,10 +113,20 @@ To setup automount, ask Stephan Henne from 503 or Patrick Burckhalter from the I
 ### Install DigDag
 Follow the instructions [here](http://docs.digdag.io/getting_started.html#downloading-the-latest-version) to install the latest version of digdag. 
 
-Additionally, configure the maximum number of task by modifying the file `~/.config/digdag/digdag` adding the entry:
+Additionally, configure the maximum number of task by creating the directory `~/.config/digdag/` with:
+```
+mkdir ~/.config/digdag/
+```
+And adding the following entry
 ```
 executor.task_max_run = 3000
 ```
+To the file `config`.
+This can be done with:
+```
+echo "executor.task_max_run = 3000" > ~/.config/digdag/config
+```
+
 
 Digdag is used to automate the run of the pipeline at daily intervals. You might have to install jdk on conda if the currently available version from the OS doesn't let you run digdag.
 
