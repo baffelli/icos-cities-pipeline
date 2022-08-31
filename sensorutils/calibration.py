@@ -707,7 +707,9 @@ def apply_HPP_calibration(dt_in: pd.DataFrame, cal_pars: List[mods.CalibrationPa
         reg_names = [n for n in pms_sm.params.keys()]
         dt_pred['CO2_pred'] = pms_sm.predict(dt_pred[reg_names].astype(float))
         return dt_pred
-    pred_objs = pd.concat([inner_pred(dt_in, pm) for pm in cal_pars]).replace({pd.NA: np.nan})
+    preds = [inner_pred(dt_in, pm) for pm in cal_pars]
+
+    pred_objs = pd.concat(preds).replace({pd.NA: np.nan})
     return pred_objs
 
 
