@@ -621,10 +621,11 @@ for current_id in ids_to_process:
             # Compute calibration features
             target = ['cyl_CO2']
             features = ['sensor_CO2']
-            
-            cal_features = cal.prepare_HPP_features(cal_data, fit=True)
-            cal_features_filtered = cal.filter_cal(cal_features, endog=features, exog=target)
-            if not cal_features_filtered.empty:
+            cal_data_filtered = cal.filter_HPP_data(cal_data)
+
+            if not cal_data_filtered.empty:
+                cal_features = cal.prepare_HPP_features(cal_data_filtered, fit=True)
+                cal_features_filtered = cal.filter_cal(cal_features, endog=features, exog=target)
                 #Calibration window
                 interval = 2
                 #Call bottle calibration
@@ -674,23 +675,27 @@ for current_id in ids_to_process:
                         orig_col = "sensor_CO2"
                         ref_col = "ref_CO2"
                         cal_data = pd.concat(cal_sets)
-                        cal_features =  cal.prepare_HPP_features(cal_data, fit=False)
-                        cal_pred = cal.apply_HPP_calibration(cal_features, [cp])
-                        l2_dt = cal.prepare_level2_data(cal_pred, cp.id)
-                        cal.persist_level2_data(session, l2_dt)
-                        session.commit()
-                        #Plot
-                        #Filter the first minute afte the beginnig of a measurement cycle before plotting
-                        min_elapsed = 240
-                        cal_pred_plot = cal_pred[(cal_pred['inlet'] == '') & (cal_pred.normal_elapsed > min_elapsed)]
-                        ts_plot = cal.plot_CO2_calibration(cal_pred_plot, orig_col=orig_col, ref_col=ref_col)
-                        loc = cal_pred.location.unique()
-                        ts_plot.suptitle(f"{st.value} {id} on {current_date} at {loc}")
-                        pdf.savefig(ts_plot)
-                        logger.info(f"Storing processed data for {id} on {current_date}")
-                        if 'ref_CO2' in cal_pred.columns:
-                            pred_quality = cal.compute_quality_indices(cal_pred, ref_col=ref_col, fit=False)
-                            pred_quality_st = dc.replace(pred_quality, **{'date': current_date.date(), 'model_id': cp.id, 'sensor_id':id})
-                            session.merge(pred_quality_st)
+                        cal_data_filtered = cal.filter_HPP_data(cal_data)
+                        if not cal_data_filtered.empty:
+                            cal_features =  cal.prepare_HPP_features(cal_data_filtered, fit=False)
+                            cal_pred = cal.apply_HPP_calibration(cal_features, [cp])
+                            l2_dt = cal.prepare_level2_data(cal_pred, cp.id)
+                            cal.persist_level2_data(session, l2_dt)
                             session.commit()
+                            #Plot
+                            #Filter the first minute afte the beginnig of a measurement cycle before plotting
+                            min_elapsed = 240
+                            cal_pred_plot = cal_pred[(cal_pred['inlet'] == '') & (cal_pred.normal_elapsed > min_elapsed)]
+                            ts_plot = cal.plot_CO2_calibration(cal_pred_plot, orig_col=orig_col, ref_col=ref_col)
+                            loc = cal_pred.location.unique()
+                            ts_plot.suptitle(f"{st.value} {id} on {current_date} at {loc}")
+                            pdf.savefig(ts_plot)
+                            logger.info(f"Storing processed data for {id} on {current_date}")
+                            if 'ref_CO2' in cal_pred.columns:
+                                pred_quality = cal.compute_quality_indices(cal_pred, ref_col=ref_col, fit=False)
+                                pred_quality_st = dc.replace(pred_quality, **{'date': current_date.date(), 'model_id': cp.id, 'sensor_id':id})
+                                session.merge(pred_quality_st)
+                                session.commit()
+                        else:
+                            logger.info(f"Skipping calibration for {st} {id} for {current_date} as there is no valid data")
             pdf.close()

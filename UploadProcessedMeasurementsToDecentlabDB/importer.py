@@ -16,6 +16,10 @@ import sqlalchemy as sqa
 import sensorutils.db as dbu
 import sensorutils.secrets as sec
 
+from typing import Dict
+
+import itertools
+
 import argparse as ap
 parser = ap.ArgumentParser(description="Export ICOS-Cities metadata to influxdb")
 
@@ -118,6 +122,10 @@ def get_entry(r):
             'time': unix_time_millis(r['ts']),
             'fields': {'value': float(r['deployed'])}}
 
+def get_info(con: sqa.engine.Connection, id: int) :
+    dts = con.execute(sqa.text(loc_query),  s1=id)
+    return dts
+
 
 def importsql(eng: sqa.engine.Engine):
 
@@ -125,10 +133,10 @@ def importsql(eng: sqa.engine.Engine):
     with eng.connect() as con:
         all_sens = con.execute(sqa.text('SELECT DISTINCT(SensorUnit_ID) AS SensorUnit_ID FROM Deployment ORDER BY SensorUnit_ID'))
 
-    dps = []
+    
     with eng.connect() as con:
-        dts = [con.execute(sqa.text(loc_query),  s1=sid) for sid, in all_sens]
-        dps = [get_entry(row._asdict()) for r in dts if (row := r.fetchone())]
+        dts = [get_info(con, sid) for sid, in all_sens]
+        dps = [[get_entry(entry._asdict()) for entry in row] for r in dts if (row := r.fetchall())]
 
     passw = sec.get_key('decentlab')
     client = influxdb.InfluxDBClient("swiss.co2.live",
@@ -140,8 +148,9 @@ def importsql(eng: sqa.engine.Engine):
                                      ssl=True,
                                      verify_ssl=True,
                                      headers={'Authorization': 'Bearer ' + passw})
+    breakpoint()
     points = [dp for dp
-              in dps
+              in itertools.chain(*dps)
               if dp['time'] != 4102444800 * 1000]
 
     print("writing %d points ..." % len(points))

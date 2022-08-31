@@ -764,6 +764,17 @@ def combine_first_column(df:pd.DataFrame) -> pd.DataFrame:
     df_col = df.groupby(df.columns, axis=1).agg(cf)
     return df_col
 
+
+# @dataclass
+# class InfluxdbTag(ABC):
+#     """
+#     Abstract baseclass to represent the
+#     tags to be written in influxb
+#     """
+
+#     @abstractmethod
+#     def make_tags()
+
 @dataclass
 class InfluxdbSource(DatabaseSource):
     """
@@ -917,14 +928,15 @@ class InfluxdbSource(DatabaseSource):
         data_long = pd.melt(input, id_vars=['time'] + group_keys).rename(columns={'variable':'sensor'})
         data_long['time'] = data_long['time']
         #Extract tags
-        keep = ['value', 'time'] + group_keys
-        extra_tags = [c for  c in data_long.columns if c not in keep]
+        keep = ['value', 'time'] 
+        extra_tags = list(set([c for  c in data_long.columns if c not in keep]) | set(group_keys))
         Helper = self.prepare_series(data_long[keep], extra_tags)
         for row in data_long.to_dict(orient='records'):
             #Split fields data and tags
             data_row = {k:v for k,v in row.items() if k in keep}
             tag_row = {k:v for k,v in row.items() if k in extra_tags}
             Helper(**data_row, **(tag_row| (self.tags or {})))
+            breakpoint()
         Helper.commit()
         logger.info("Done copying file")
 
