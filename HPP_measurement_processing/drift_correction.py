@@ -111,7 +111,7 @@ def fit_drift(in_data: pd.DataFrame, target:Union[str, Tuple[str,str]] = 'offset
     fit = OLS(valid[target],  add_constant(valid[regs])).fit()
     pms = [mods.CalibrationParameter(parameter=n, value=v) for n, v in fit.params.items()]
     #FIXME get the correct serialnumber as part of the query
-    sensor_id = str(int(in_data.sensor_id.unique()[0]))
+    sensor_id = str(int(in_data.sensor_id.dropna().unique()[0]))
     return mods.CalibrationParameters(species="CO2", 
     valid_from = in_data.date.min(), 
     valid_to = in_data.date.max(), 
@@ -153,6 +153,7 @@ def plot_drift_correction(dt: pd.DataFrame ) -> plt.figure:
     ax.legend(loc='upper left')
     lms = [300, 600]
     ax.set_ylim(lms)
+    ax.set_xlabel("Time")
     ax.tick_params(axis='x', labelrotation=90)
     #Compute diurnal cycle
     ax1 = fig.add_subplot(gs[1, 0])
@@ -160,9 +161,9 @@ def plot_drift_correction(dt: pd.DataFrame ) -> plt.figure:
     ax1.plot(dt_dc.index, dt_dc['CO2'], label='Original', color=cal.get_line_color(cal.measurementType.ORIG))
     ax1.plot(dt_dc.index, dt_dc[('ref_loc_CO2', 'DUE1')], label='Reference (Co-located)', color=cal.get_line_color(cal.measurementType.REF))
     ax1.plot(dt_dc.index, dt_dc[('ref_loc_CO2', 'LAEG')], label='Reference (LAEG)', ls='--', color=cal.get_line_color(cal.measurementType.REF))
-
     ax1.plot(dt_dc.index, dt_dc['CO2_drift_corrected'], label='Corrected', color=cal.get_line_color(cal.measurementType.CAL))
     ax1.set_ylim(lms)
+    ax1.set_xlabel("Hour")
     #Plot CO2 vs temp
     ax2 = fig.add_subplot(gs[1, 1])
     ax2.scatter(dt['temperature'], dt['CO2'], label='Original', color=cal.get_line_color(cal.measurementType.ORIG))
@@ -209,13 +210,12 @@ if not drift_data.empty:
             two_point = False
         #Prepare data
         drift_data_offset = prepare_data(local_offset_data.set_index('date').groupby('location').resample(resample_duration).mean().reset_index(), master_stn=refs[0], ref_stn=refs[1])
-        
         offset_fits = drift_data_offset.set_index('date').groupby(pd.Grouper(freq=group_freq)).apply(lambda x: fit_drift(x.reset_index(), target=target, regs=regressors))
         prediction_data = prepare_data(local_offset_data.reset_index(), fit=False, master_stn=refs[0], ref_stn=refs[1]).set_index('date')
         #Iterate over the fits and apply the correction
         data_corrected = pd.concat([apply_drift_correction(prediction_data.reset_index(), x, two_point=two_point) for x in offset_fits.tolist()])
     
-    plt_path = args.plot.with_name(f"drift_correction_{args.id}.pdf")
+    plt_path = args.plot / pl.Path(f"drift_correction_{args.id}.pdf")
     with PdfPages(plt_path) as pdf:
         data_corrected.set_index('date').groupby(pd.Grouper(freq='7d')).apply(lambda x: pdf.savefig(plot_drift_correction(x.reset_index())))
     #Combine columns
