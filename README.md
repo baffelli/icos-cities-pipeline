@@ -340,7 +340,7 @@ Finally, here are the table descriptions:
 
 ### Tables
 
-* `Deployment`:
+* `Deployment`: 
     
     Gives the location and the timespan
     when a sensor was deployed at a measurement station. The column `SensorUnit_ID` must refer to one ID in the table `SensorUnits`, while `LocationName` must be present in the `Location` table (foreign key). `CalibrationMode` should be set to 1 or 2 whenever a sensor is to be calibrated by climate chamber or co-location respectively.
