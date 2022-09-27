@@ -71,6 +71,7 @@ def get_drive(drv: str) -> pl.Path:
     Get the path to the drive with the letter `drv`. 
     For unix, this assumes that the drives are mapped using ``automount``
     """
+    breakpoint()
     if platform.system() == 'Windows':
         return pl.Path(f'{drv}:/')
     else:
@@ -913,8 +914,8 @@ class InfluxdbSource(DatabaseSource):
 
                 # Defines the number of data points to store prior to writing
                 # on the wire.
-                bulk_size = 5
-                time_precision = 's'
+                bulk_size = 1000
+                #time_precision = 'ns'
                 # autocommit must be set to True when using bulk_size
                 autocommit = True
         return CurrentHelper
@@ -933,11 +934,15 @@ class InfluxdbSource(DatabaseSource):
         keep = ['value', 'time'] 
         extra_tags = list(set([c for  c in data_long.columns if c not in keep]) | set(group_keys))
         Helper = self.prepare_series(data_long[keep], extra_tags)
-        for row in data_long.to_dict(orient='records'):
+        data_long_ns = data_long.copy()
+        data_long_ns['time'] = (data_long['time'] * 1e9).astype(int)
+        #Conver nan to none
+        for row in data_long_ns.dropna().to_dict(orient='records'):
             #Split fields data and tags
             data_row = {k:v for k,v in row.items() if k in keep}
             tag_row = {k:v for k,v in row.items() if k in extra_tags}
             Helper(**data_row, **(tag_row| (self.tags or {})))
+            
         Helper.commit()
         logger.info("Done copying file")
 

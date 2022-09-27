@@ -123,7 +123,7 @@ def list_all_sensor_ids(type: str, eng: eng.Engine) -> pd.DataFrame:
     return df
 
 
-def get_serialnumber(eng: eng.Engine, id: Union[int, str], type: str, start: Optional[dt.datetime], end: Optional[dt.datetime]) -> Union[str, int]:
+def get_serialnumber(eng: eng.Engine, id: Union[int, str], type: str, start: Optional[dt.datetime], end: Optional[dt.datetime]) -> Optional[Union[str, int]]:
     """
     Get the  serialnumber for the given sensor id and sensor type. If `start` and `end` are set,
     find the serial number of the given date period.
@@ -137,8 +137,11 @@ def get_serialnumber(eng: eng.Engine, id: Union[int, str], type: str, start: Opt
         else: 
            qr_when = qr.filter(mods.Sensor.end > dt.datetime.now())
         qr_final = qr_when.with_only_columns(mods.Sensor.serial)
-        id, *rest = ses.execute(qr_final).first()
-    return id
+        id = ses.execute(qr_final).first()
+        if id is None:
+            return None
+        else:
+            return id[0]
 
 
 def temp_query(table: pd.DataFrame, query: str, name:str='temp') -> pd.DataFrame:
