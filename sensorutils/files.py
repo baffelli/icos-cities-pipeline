@@ -830,12 +830,12 @@ class InfluxdbSource(DatabaseSource):
             *
             FROM
             (
-            SELECT FIRST("value") AS value FROM "{self.table}" WHERE {gq} sensor =~ {self.sensors_re()} AND time > '{self.date_from}' GROUP BY time(1d)
+            SELECT FIRST("value"), sensor AS value FROM "{self.table}" WHERE {gq} sensor =~ {self.sensors_re()} AND time > '{self.date_from}' GROUP BY time(1d)
             )
             """
             logger.info(f"The influxDB Query is: {q}")
             # Send query
-            fs = self.eng.query(q, epoch='s', params={
+            fs = self.eng.query(q, epoch='ms', params={
                                 f"{self.grouping_key}": group})
             # Make datafame
             if len(fs) > 0:
@@ -847,6 +847,7 @@ class InfluxdbSource(DatabaseSource):
                     available_data[k] = v
             else:
                 available_data = pd.DataFrame(columns=['date'])
+            breakpoint()
             return available_data
     @check_db
     def read_file(self, date: dt.datetime,  group:Optional[Dict[str, Union[str, int]]]=None, av_time:Optional[str]=None) -> pd.DataFrame:
@@ -936,14 +937,15 @@ class InfluxdbSource(DatabaseSource):
         Helper = self.prepare_series(data_long[keep], extra_tags)
         data_long_ns = data_long.copy()
         data_long_ns['time'] = (data_long['time'] * 1e9).astype(int)
+        data_write = data_long_ns.dropna(subset=['value'])
         #Conver nan to none
-        for row in data_long_ns.dropna().to_dict(orient='records'):
+        for row in data_write.to_dict(orient='records'):
             #Split fields data and tags
             data_row = {k:v for k,v in row.items() if k in keep}
             tag_row = {k:v for k,v in row.items() if k in extra_tags}
             Helper(**data_row, **(tag_row| (self.tags or {})))
-            
-        Helper.commit()
+        if not data_write.empty:
+            Helper.commit()
         logger.info("Done copying file")
 
 def day_ts(day: dt.datetime) -> Tuple[dt.datetime, dt.datetime]:

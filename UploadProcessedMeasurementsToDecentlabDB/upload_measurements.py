@@ -20,6 +20,7 @@ import sensorutils.files as fu
 import sensorutils.secrets as sec
 import sensorutils.data as du
 import sensorutils.decentlab as dec
+import sensorutils.log as log
 import argparse as ap
 
 import pathlib as pl 
@@ -31,6 +32,7 @@ parser.add_argument('type', type=du.AvailableSensors, help="Sensor type")
 parser.add_argument('id', type=str, help="Sensor id to copy")
 parser.add_argument('--full', action='store_true', help="If set, dump full timeseries instead of last n days (use --backfill to set the value)")
 parser.add_argument('--backfill', type=int, default=10 , help="If set, dump full timeseries instead of last n days (use --backfill to set the value)")
+parser.add_argument('--date', type=datetime.fromisoformat)
 args = parser.parse_args()
 
 #Read datasource mapping
@@ -42,8 +44,9 @@ mapping.source.attach_db(eng)
 mapping.dest.attach_db(influx_client)
 #FIXME: the group key in the configuration file should have a key called `node` for this line to work
 groups = dict(node=args.id)
-missing_dates = mapping.list_files_missing_in_dest(group=groups)
+missing_dates = mapping.list_files_missing_in_dest(group=groups, all=args.full, backfill=args.backfill) if not args.date else [args.date]
 for date in missing_dates:
+    log.logger.info(f"Copying {date}")
     source_file = mapping.source.read_file(date, group=groups)
     dest_file = mapping.map_file(source_file)
     mapping.dest.write_file(dest_file, group=groups)
