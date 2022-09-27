@@ -74,7 +74,7 @@ def get_drive(drv: str) -> pl.Path:
     if platform.system() == 'Windows':
         return pl.Path(f'{drv}:/')
     else:
-        return pl.Path('/mnt/', get_user(), '/mnt/', drv)
+        return pl.Path('/mnt/', get_user(), 'mnt', drv)
 
 
 def get_k_drive() -> pl.PurePath:
