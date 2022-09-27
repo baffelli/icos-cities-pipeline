@@ -661,7 +661,12 @@ for current_id in ids_to_process:
             #Iterate over dates
             for current_date in missing_dates:
                 day_start, day_end = du.day_range(current_date)
-                serialnumber = db_utils.get_serialnumber(engine, id, st.value, day_start, day_end)
+                # serialnumber = db_utils.get_serialnumber(engine, id, st.value, day_start, day_end)
+                try: 
+                    serialnumber = db_utils.get_serialnumber(engine, id, st.value, day_start, day_end)
+                except:
+                    print('`get_serialnumber` function failed, using `id`...')
+                    serialnumber = id
                 with Session() as session:
                     cp = cal.get_HPP_calibration(session, serialnumber, current_date, species=species)
                     if not cp:

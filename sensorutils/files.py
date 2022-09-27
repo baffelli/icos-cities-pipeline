@@ -74,14 +74,14 @@ def get_drive(drv: str) -> pl.Path:
     if platform.system() == 'Windows':
         return pl.Path(f'{drv}:/')
     else:
-        return pl.Path('/mnt/', get_user(), drv)
+        return pl.Path('/mnt/', get_user(), '/mnt/', drv)
 
 
 def get_k_drive() -> pl.PurePath:
     """
     Get the path to the K: drive, where the project folders are stored.
     For unix, this assumes that the folders in K: are mapped using ``automount``
-    under ``/mnt/{user_name}``. To set this up, contact Stephan Henne or Patrick Burkhalter from the ICT
+    under ``/mnt/{user_name}/mnt``. To set this up, contact Stephan Henne or Patrick Burkhalter from the ICT
     support.
 
     Returns
