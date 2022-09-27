@@ -39,18 +39,18 @@ _export:
 
 
 
-+meteo:
-    #Copy meteo from server
+# +meteo:
+    # Copy meteo from server
     +copy_meteoswiss:
         sh>: rsync -a amrs503@m2m.empa.ch:/data/meteoschweiz/*.csv ${data_folder}/METEO/MCH_DAILY_DATA_DUMP
-    #Import CSV into DB
+    # Import CSV into DB
     +import_meteoswiss:
         sh>: python3.10 MeteoSwissData4Carbosense/transfer_meteo_data.py ${base_folder}/config/meteo_data_mapping.yml '${data_folder}/METEO/MCH_DAILY_DATA_DUMP/' 'VQEA33*.csv'
     # Interpolate pressure at locations where a sensor was deployed
     +pressure_interpolation:
         +list_locations:
-            py>: digdagutils.list_sensors
-            dest: 'sensors'       
+           py>: digdagutils.list_sensors
+           dest: 'sensors'       
         +compute:
             for_each>: 
                 sens: ${sensors['LP8']}

@@ -787,6 +787,8 @@ class InfluxdbSource(DatabaseSource):
     converted by the client. This in unlike the other SQL DataSources where the conversion is specified by the user
     The `sensors` optional value is a list of sensors that is turned into a regex to select only the tags values corresponding
     to the desired sensors
+    `tags` is an optional mapping specifying what column from the data are used to generate the tags for writing the dataset
+    back to influxDB
     """
     eng: Optional[influxdb.client.InfluxDBClient] = None
     group: Optional[Dict[str, Union[str, int]]] = None
@@ -936,7 +938,6 @@ class InfluxdbSource(DatabaseSource):
             data_row = {k:v for k,v in row.items() if k in keep}
             tag_row = {k:v for k,v in row.items() if k in extra_tags}
             Helper(**data_row, **(tag_row| (self.tags or {})))
-            breakpoint()
         Helper.commit()
         logger.info("Done copying file")
 
