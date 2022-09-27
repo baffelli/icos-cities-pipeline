@@ -1,8 +1,11 @@
 # CarboSense/ICOS Cities Pipeline
+
 ## Introduction
+
 This repository contains *almost* all the code, configurations and scripts needed to process the ICOS-Cities/CarboSense mid- and low-cost sensor data. Usually, the entry point in the processing is done through the DigDag [DAG](process_carbosense.dig). If you inspect this (yaml) file, you will see a list of all processes and their dependencies. To learn more about digdag DAG, see the documentation [here](http://docs.digdag.io/concepts.html).
 
 ## Setup the Pipeline
+
 To setup a working pipeline, you need to follow the steps below. In case of problems, you can contact Simone Baffelli. In the following sections, we assume you work on a Linux system with python>=3.10 and with an working installation of conda/anaconda.
 
 To enable conda on DDM06, follow these steps:
@@ -12,6 +15,7 @@ To enable conda on DDM06, follow these steps:
 You are set!
 
 ### Install dependencies with conda
+
 Using conda, install all the dependencies from [icos-cities.yaml](config/icos-cities.yml):
 ```bash
 conda env create -f config/icos-cities.yml
@@ -28,6 +32,7 @@ Use the same commands as above to initialise and use the environment.
 The `carbosense-processing` envrionment is used to run the older scripts that were used during the CarboSense project.
 
 ### Install sensorutils manually
+
 *Sensorutils* is a python package containing utilities used in all other scripts. To install it in the project, run the following command from the main repository directory:
 ```
 pip install -e .
@@ -101,8 +106,8 @@ Do not forget to make the file only readable from the user running the pipeline.
 chmod 700 ~/secrets.yml
 ```
 
-
 ### Configure network shares
+
 Using automount, configure the following (Windows) network shares to be mounted on `/mnt/{username}/` in the following way:
 - `K:/Projects/` 
   - One folder per project, e.g  `K:/Projects/Nabel`  mapped on  `/mnt/{username}/Nabel`
@@ -111,6 +116,7 @@ Using automount, configure the following (Windows) network shares to be mounted 
 To setup automount, ask Stephan Henne from 503 or Patrick Burckhalter from the IT department.
 
 ### Install DigDag
+
 Follow the instructions [here](http://docs.digdag.io/getting_started.html#downloading-the-latest-version) to install the latest version of digdag. 
 
 Additionally, configure the maximum number of task by creating the directory `~/.config/digdag/` with:
@@ -127,45 +133,45 @@ This can be done with:
 echo "executor.task_max_run = 3000" > ~/.config/digdag/config
 ```
 
-
 Digdag is used to automate the run of the pipeline at daily intervals. You might have to install jdk on conda if the currently available version from the OS doesn't let you run digdag.
 
 The pipeline is self-explaining, all the processing steps are listed in the digdag DAG file.
 
-
-
 ## Running the pipeline
+
 ### Manual run
+
 To manually run the pipeline, use the following commands:
 ```bash
 conda activate icos-cities
 digdag -r icos-cities.dig
 ```
 
-
-
 ### Automated run
+
 So far, the pipeline run are scheduled to run once per day using a crontab file calling the script [start_processing.sh](start_processing.sh). 
 
 In the future, it would be ideal to install digdag as a service, so that the pipeline runs can be scheduled directly with digdag and their operation can be verified more robustly. For this, consult the digdag documentation [here](http://docs.digdag.io/command_reference.html#server-mode-commands).
 
 ## Old CarboSense Pipeline
+
 For documentation on the previous carbosense pipeline, please refer to [this document](./old_pipeline.md).
 
 ## sensorutils
+
 This is a python package containing utilities used in all other scripts. To install it in the project, run the following command from the main repository directory:
 ```
 pip install -e .
 ```
 
-
-
-
 # Pipeline documentation
 
 In the following sections, I will describe the most important sections of the pipeline and how to run / configure them.
+
 ## Importing raw sensor data
+
 ### Motivation
+
 As of today (April 2022), the raw data from the LP8/HPP sensors is stored by DecentLab on their InfluxDB database. For safety and ease of processing, the first step in the pipeline is copying the raw data to our own relational database. 
 
 This is accomplished using the script [dump_raw_data_from_influxdb.py](CarbosenseDatabaseTools/dump_raw_data_from_influxdb.py). The script needs a configuration file to map the source and the destination tables, the current configuration file is located in [co2_sensor_mapping.yml](config/co2_sensor_mapping.yml). 
@@ -206,6 +212,7 @@ Because InfluxDB uses `time` as a default timestamp column, no `date_column` is 
 The section `columns` contains the mapping between the source and the destination columns. The `name` key specifies the name of the column in the destination system, the `source_name` the name in the source system. Instrad of `source_name`, a SQL query can be used with `query` to perform data transformations. The query will be then run against an in-memory SQLLite database. 
 
 ### Using the script
+
 The script is normally run with just the configuration command line argument, as in: 
 ```
 python3 dump_raw_data_from_influxdb.py ./config/co2_sensor_mapping.yml
@@ -221,8 +228,8 @@ This will only incrementally load the data for HPP sensor 445.
 
 If you set the `--import-all` flag, a bulk import will be triggered, which will copy all the data from the source system, including the one already present there. If you set `--backfill n`, the incremental load will perform a backfill of the previous *n* days.
 
-
 ## Import Reference sensor data (Picarro CRDS)
+
 The import is performed in two steps:
 - ~~In a first step, the data is copied on a staging table, which corresponds to the old CarboSense *NABEL_DUE*, *EMPA_LAEG* etc... tables~~
 - ~~In a second step, the data from these tables is consolidated into a single table called *picarro_data*, where the location of the data is identified by a location column in the table.~~ 
@@ -235,12 +242,14 @@ python3 ./CarbosenseDatabaseTools/import_picarro_data.py ./config/picarro_mappin
 ```
 
 ### Consolidate data
+
 To consolidate the data, the following script is run:
 ```
 python3  ./REF_measurement_processing/consolidate_reference_measurements.py ./config/reference_table_mapping.yaml
 ```
 
 ### The new way:
+
 The instruction above refer to a more involved version that included staging tables for the different locations. You can also use a simpler way, by adding a `group` value to the destination configuration and calling this command:
 
 ```
@@ -250,8 +259,11 @@ python3  ./REF_measurement_processing/consolidate_reference_measurements.py ./co
 This will run the import for the configuration item `DUE` in `reference_table_mapping.yaml`. Repeat this script 
 
 ## Import Climate Chamber Calibration
+
 In this section, we will give a short overwiew of the processes / files needed to run a climate chamber / pressure chamber calibration, as this process is more manual than the regular co-located calibration, where the data is automatically imported from the NABEL exports in `K:\Projects\Nabel`
+
 ### Files
+
 - *Picarro*:
 When you run a climate chamber calibration, please place the **original** `.dat` files as exported from the Picarro instrument into a folder of your choosing (So far, this was `K:\Carbosense\Data\Klimakammer_Versuche_27022017_XXXXXXXX`). You can then import them into the database  using:
   ```
@@ -282,12 +294,12 @@ REF_measurement_processing/add_pressure_measurement_to_due7.py DUE1 DUE7
 ```
 This example copies the pressure measurement from *DUE1* to *DUE7* assuming the pressure to be homogeneous in Dübendorf.
 
-
 # Import Meteo data
+
 To import the meteo data, run:
 
 ```
-python3 MeteoSwissData4Carbosense/transfer_meteo_data.py ./config/meteo_data_mapping.yml /project/CarboSense/Data/METEO/MCH_DAILY_DATA_DUMP/' 'VQEA33*.csv'
+python3 MeteoSwissData4Carbosense/transfer_meteo_data.py ./config/meteo_data_mapping.yml /project/CarboSense/Data/METEO/MCH_DAILY_DATA_DUMP/ 'VQEA33*.csv'
 ```
 The configuration file ` ./config/meteo_data_mapping.yml` follows the same incremental logic as described  [above](#background).
 
@@ -299,6 +311,7 @@ To process the sensor data, two different modes are available:
 In the following sections, I will describe these modes
 
 ## Calibration mode
+
 The sensor data is processed using the [process_hpp_data.py](./HPP_measurement_processing/process_hpp_data.py) script. Usually, the script will process all the sensor of one type sequentially, computing the calibration parameters for all time the sensor was placed in the calibration table.
 
 To run the calibration, use
