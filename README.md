@@ -108,11 +108,11 @@ chmod 700 ~/secrets.yml
 
 ### Configure network shares
 
-Using automount, configure the following (Windows) network shares to be mounted on `/mnt/{username}/` in the following way:
+Using automount, configure the following (Windows) network shares to be mounted on `/mnt/{username}/mnt/` in the following way:
 - `K:/Projects/` 
   - One folder per project, e.g  `K:/Projects/Nabel`  mapped on  `/mnt/{username}/Nabel`
 - `G:/`
-  - On `/mnt/{username}/G`
+  - On `/mnt/{username}/mnt/G`
 To setup automount, ask Stephan Henne from 503 or Patrick Burckhalter from the IT department.
 
 ### Install DigDag
