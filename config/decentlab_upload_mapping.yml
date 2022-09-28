@@ -7,14 +7,20 @@ HPP:
       node: sensor_id
     timestamp_column: timestamp
     date_column:  DATE(FROM_UNIXTIME(timestamp))
+    column_filter: CO2 IS NOT NULL
     na: .NaN
   dest:
     type: influxDB
     db: processed
     table: measurements
     date_from: 2022-01-01T00:00:00.000
+    sensors: ['co2']
     grouping_key: 
       node: node
+    tags:
+      channel: hpp_level_00
+      title: 'co2 [ppm]'
+      unit: 'ppm'
   columns:
     - {name: time,  source_name: 'timestamp', datatype: int, na: Null}
     - {name: node, source_name: sensor_id, datatype: int, na: Null}
@@ -28,11 +34,13 @@ LP8:
       node: sensor_id
     date_column: DATE(FROM_UNIXTIME(timestamp))
     timestamp_column: timestamp
+    column_filter: CO2 IS NOT NULL
     na: -999
   dest:
     type: influxDB
     db: processed
     table: measurements
+    sensors: ['co2']
     date_from: 2022-01-01T00:00:00.000
     grouping_key: 
       node: node

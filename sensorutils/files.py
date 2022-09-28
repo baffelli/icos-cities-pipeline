@@ -830,16 +830,16 @@ class InfluxdbSource(DatabaseSource):
             *
             FROM
             (
-            SELECT FIRST("value"), sensor AS value FROM "{self.table}" WHERE {gq} sensor =~ {self.sensors_re()} AND time > '{self.date_from}' GROUP BY time(1d)
+            SELECT MEAN("value") AS value FROM "{self.table}" WHERE {gq} sensor =~ {self.sensors_re()} AND time > '{self.date_from}' GROUP BY time(1d), sensor
             )
             """
             logger.info(f"The influxDB Query is: {q}")
             # Send query
-            fs = self.eng.query(q, epoch='ms', params={
+            fs = self.eng.query(q, epoch='s', params={
                                 f"{self.grouping_key}": group})
             # Make datafame
             if len(fs) > 0:
-                available_data = pd.DataFrame([a for a in fs['measurements']])
+                available_data = pd.DataFrame([a for a in fs[self.table]])
                 available_data['date'] = pd.to_datetime(
                     available_data[self.date_column], unit='s')
                 available_data['path'] = self.table
@@ -847,7 +847,6 @@ class InfluxdbSource(DatabaseSource):
                     available_data[k] = v
             else:
                 available_data = pd.DataFrame(columns=['date'])
-            breakpoint()
             return available_data
     @check_db
     def read_file(self, date: dt.datetime,  group:Optional[Dict[str, Union[str, int]]]=None, av_time:Optional[str]=None) -> pd.DataFrame:
@@ -938,6 +937,7 @@ class InfluxdbSource(DatabaseSource):
         data_long_ns = data_long.copy()
         data_long_ns['time'] = (data_long['time'] * 1e9).astype(int)
         data_write = data_long_ns.dropna(subset=['value'])
+        logger.info(f"Data {data_write.head()}")
         #Conver nan to none
         for row in data_write.to_dict(orient='records'):
             #Split fields data and tags
@@ -945,6 +945,7 @@ class InfluxdbSource(DatabaseSource):
             tag_row = {k:v for k,v in row.items() if k in extra_tags}
             Helper(**data_row, **(tag_row| (self.tags or {})))
         if not data_write.empty:
+            logger.info("Commiting")
             Helper.commit()
         logger.info("Done copying file")
 

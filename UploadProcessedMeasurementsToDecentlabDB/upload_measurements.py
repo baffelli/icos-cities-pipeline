@@ -42,12 +42,16 @@ eng = dbu.connect_to_metadata_db()
 influx_client = dec.decentlab_client(token=sec.get_key('decentlab'), database=mapping.dest.db)
 mapping.source.attach_db(eng)
 mapping.dest.attach_db(influx_client)
-#FIXME: the group key in the configuration file should have a key called `node` for this line to work
-groups = dict(node=args.id)
-missing_dates = mapping.list_files_missing_in_dest(group=groups, all=args.full, backfill=args.backfill) if not args.date else [args.date]
-for date in missing_dates:
-    log.logger.info(f"Copying {date}")
-    source_file = mapping.source.read_file(date, group=groups)
-    dest_file = mapping.map_file(source_file)
-    mapping.dest.write_file(dest_file, group=groups)
-
+#Check id
+sn = dbu.get_serialnumber(eng, args.id, args.type.value, start=du.ICOS_START, end=du.ICOS_MISSING)
+if sn is not None:
+    #FIXME: the group key in the configuration file should have a key called `node` for this line to work
+    groups = dict(node=args.id)
+    missing_dates = mapping.list_files_missing_in_dest(group=groups, all=args.full, backfill=args.backfill) if not args.date else [args.date]
+    for date in missing_dates:
+        log.logger.info(f"Copying {date}")
+        source_file = mapping.source.read_file(date, group=groups)
+        dest_file = mapping.map_file(source_file)
+        mapping.dest.write_file(dest_file, group=groups)
+else:
+    raise ValueError(f"Sensor {args.type} with {args.id} does not exist")
