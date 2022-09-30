@@ -642,6 +642,7 @@ for current_id in ids_to_process:
                 with Session() as session:
                     logger.info(f"Storing calibration parameters for {id} in the database")
                     for el, qual in cal_fit:
+                        logger.info(f"Storing calibration parameters for {id} in the database: entry {el}")
                         if el:
                             el_ad = cal.update_hpp_calibration(session, el)
                             qual.model_id = el_ad.id
@@ -679,7 +680,7 @@ for current_id in ids_to_process:
                         if not cal_data_filtered.empty:
                             cal_features =  cal.prepare_HPP_features(cal_data_filtered, fit=False)
                             cal_pred = cal.apply_HPP_calibration(cal_features, [cp])
-                            l2_dt = cal.prepare_level2_data(cal_pred, cp.id)
+                            l2_dt = cal.prepare_level2_data(cal_pred, cp.id, pred_col='CO2_pred')
                             cal.persist_level2_data(session, l2_dt)
                             session.commit()
                             #Plot
