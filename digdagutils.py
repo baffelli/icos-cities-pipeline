@@ -17,7 +17,7 @@ def list_sensors(dest:str) -> None:
     in the digdag env in the varialbe `dest`
     """
     con = db_utils.connect_to_metadata_db()
-    all_types = ['LP8', 'HPP']
+    all_types = ['LP8', 'HPP', 'Vaisala', 'Licor']
     lst = {sens: list(db_utils.list_all_sensor_ids(sens, con)['SensorUnit_ID']) for sens in all_types}
     env = {}
     env[dest] = lst

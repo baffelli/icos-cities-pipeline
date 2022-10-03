@@ -1,7 +1,6 @@
 timezone: Europe/Zurich
 
-#Get username and store it
-#in the digdag environment and configure various paths (for example {base_folder})
+# Get username and store it in the digdag environment and configure various paths (for example {base_folder})
 +configure_paths:
     +store:
         py>: digdagutils.configure_paths
@@ -9,7 +8,7 @@ timezone: Europe/Zurich
     +show:
         py>: digdagutils.show_params
         
-#Export date
+# Export date
 _export:
     project_begin: "${moment('20220101', 'YYYYMMDD').format('YYYY-MM-DDThh:mm:ss')}"
     PYTHONBREAKPOINT: 0
@@ -18,46 +17,43 @@ _export:
     #Disable python breakpoints
     sh>: export PYTHONBREAKPOINT=0
 
-#Import reference data from DUE1 (and later from other locations)
+# Import reference data from DUE1 (and later from other locations)
 +reference_data:
     +DUE:
         sh>: python3.10 ${base_folder}/CarbosenseDatabaseTools/import_picarro_data.py ${reference_config} DUE
     +LAEG:
         sh>: python3.10 ${base_folder}/CarbosenseDatabaseTools/import_picarro_data.py ${reference_config} LAEG
 
-# #TODO dump metadata daily to files
+# #TODO: dump metadata daily to files
 # #+dump_metadata:
 #     py>: dump_table
 #     table: ['Location', 'Deployment', 'Sensors', 'SensorUnits', 'cylinder_deployment', 'ref_gas_cylinder', 'ref_gas_cylinder_analysis']
-
-
 
 #Import bottle calibration
 +reference_gas:
     +import_reference_bottles:
         sh>: python3.10 ${base_folder}/CarbosenseDatabaseTools/import_bottle_calibrations.py '${icos_folder}/Network/Sensors/HPP/Kalibriergas/Calibration Gas Data Processing/'  'cylinder_analysis_picarro.xlsx'
 
-
-
-# +meteo:
+# Copy meteorological data from a remote system, insert them into the database, and do some pressure interpolation
++meteo:
     # Copy meteo from server
-    #+copy_meteoswiss:
-       # sh>: rsync -a amrs503@m2m.empa.ch:/data/meteoschweiz/*.csv ${data_folder}/METEO/MCH_DAILY_DATA_DUMP
+    +copy_meteoswiss:
+        sh>: rsync -a --no-perms amrs503@m2m.empa.ch:/data/meteoschweiz/*.csv ${data_folder}/METEO/MCH_DAILY_DATA_DUMP
     # Import CSV into DB
-    #+import_meteoswiss:
-       # sh>: python3.10 MeteoSwissData4Carbosense/transfer_meteo_data.py ${base_folder}/config/meteo_data_mapping.yml '${data_folder}/METEO/MCH_DAILY_DATA_DUMP/' 'VQEA33*.csv'
+    +import_meteoswiss:
+        sh>: python3.10 MeteoSwissData4Carbosense/transfer_meteo_data.py ${base_folder}/config/meteo_data_mapping.yml '${data_folder}/METEO/MCH_DAILY_DATA_DUMP/' 'VQEA33*.csv'
     # Interpolate pressure at locations where a sensor was deployed
-    #+pressure_interpolation:
-        # +list_locations:
-        #    py>: digdagutils.list_sensors
-        #    dest: 'sensors'       
-        # +compute:
-        #     for_each>: 
-        #         sens: ${sensors['LP8']}
-        #     _do:
-        #         sh>: python3 MeteoSwissData4Carbosense/pressure_interpolation.py ${sens} DUE1 ${project_begin}
+    +pressure_interpolation:
+         +list_locations:
+            py>: digdagutils.list_sensors
+            dest: 'sensors'       
+         +compute:
+             for_each>: 
+                 sens: ${sensors['LP8']}
+             _do:
+                 sh>: python3 MeteoSwissData4Carbosense/pressure_interpolation.py ${sens} DUE1 ${project_begin}
 
-#Copy raw data
+# Copy raw data
 +copy_raw_data:
     #Store a list of all sensors in a digdag environment variable
     +list_sensors:
@@ -66,35 +62,60 @@ _export:
     #For each sensor, copy the raw data from influx DB into "our" DB
     +load:
         for_each>:
-            sens: ['LP8', 'HPP']
+            sens: ['LP8', 'HPP', 'Vaisala', 'Licor']
         _do:
             for_each>: 
                 i: ${sensors[sens]}
             _do:
                 sh>: python3.10 ${base_folder}/CarbosenseDatabaseTools/dump_raw_data_from_influxdb.py ${base_folder}/config/co2_sensor_mapping.yml ${sens} ${i} ${project_begin} --backfill 10
 
+# Update the level 2 table, the table with the "usable" observations
 +level2_processing:
     #List sensors to process
     +list_sensors:
         py>: digdagutils.list_sensors
         dest: 'sensors'
-    #For each HPP sensor, compute the bottle calibration
-    +bottle_calibration:
+
+    # For each HPP sensor, compute the bottle calibration
+    +hpp_bottle_calibration:
         for_each>: 
             sens: ${sensors['HPP']}
         _do: 
             sh>: python3.10 ${base_folder}/HPP_measurement_processing/process_hpp_data.py ${cal_config} calibrate HPP ${sens} --plot ${plot_folder}  --backfill 10
-    #Predict sensor values
+    +vaisala_bottle_calibration:
+        for_each>: 
+            sens: ${sensors['Vaisala']}
+        _do: 
+            sh>: python3.10 ${base_folder}/HPP_measurement_processing/process_hpp_data.py ${cal_config} calibrate Vaisala ${sens} --plot ${plot_folder}  --backfill 10
+    #+licor_bottle_calibration:
+    #    for_each>: 
+    #        sens: ${sensors['Licor']}
+    #    _do: 
+    #        sh>: python3.10 ${base_folder}/HPP_measurement_processing/process_hpp_data.py ${cal_config} calibrate Licor ${sens} --plot ${plot_folder}  --backfill 10
+
+    # Predict sensor values
     +hpp_prediction:
         for_each>: 
             i: ${sensors['HPP']}
         _do:
             sh>: python3.10 ${base_folder}/HPP_measurement_processing/process_hpp_data.py ${cal_config} process HPP ${i} --plot ${plot_folder}  --backfill 10
+    +vaisala_prediction:
+        for_each>: 
+            i: ${sensors['Vaisala']}
+        _do:
+            sh>: python3.10 ${base_folder}/HPP_measurement_processing/process_hpp_data.py ${cal_config} process Vaisala ${i} --plot ${plot_folder}  --backfill 10
+    #+licor_prediction:
+    #    for_each>: 
+    #        i: ${sensors['Licor']}
+    #    _do:
+    #        sh>: python3.10 ${base_folder}/HPP_measurement_processing/process_hpp_data.py ${cal_config} process Licor ${i} --plot ${plot_folder}  --backfill 10
     +lp8_prediction:
         for_each>: 
             i: ${sensors['LP8']}
         _do:
             sh>: python3.10 ${base_folder}/HPP_measurement_processing/process_hpp_data.py ${cal_config} process LP8 ${i} --plot ${plot_folder}  --backfill 10
+
+# Update the level 3 table
 +level3_processing:
     #For LP8 sensor apply the drift correction algorithm
     +drift_correction:
@@ -103,20 +124,24 @@ _export:
         _do: 
             sh>: python3.10 ${base_folder}/HPP_measurement_processing/drift_correction.py LP8 ${sens} --plot ${plot_folder}
 
-#Upload metadata to decentlab-db
+# Upload metadata to decentlab-db
 +metadata:
     +upload_metadata:
         sh>: python3.10  ${base_folder}/UploadProcessedMeasurementsToDecentlabDB/importer.py
 
-# #Upload data to decentlab db
+# Upload data to decentlab db
 +upload_data:
-    for_each>:
-        sens: ['LP8', 'HPP']
-    _do:
-        for_each>: 
-            i: ${sensors[sens]}
+    +list_sensors:
+        py>: digdagutils.list_sensors
+        dest: 'sensors'
+    +upload:
+        for_each>:
+            sens: ['LP8', 'HPP']
         _do:
-            sh>: python3 ${base_folder}/UploadProcessedMeasurementsToDecentlabDB/upload_measurements.py  ${base_folder}/config/decentlab_upload_mapping.yml  ${sens} ${i}
+            for_each>: 
+                i: ${sensors[sens]}
+            _do:
+                sh>: python3 ${base_folder}/UploadProcessedMeasurementsToDecentlabDB/upload_measurements.py  ${base_folder}/config/decentlab_upload_mapping.yml  ${sens} ${i}
 
 #Import calibration data (This is just an example)
 #+import_chamber:
