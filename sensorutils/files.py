@@ -71,7 +71,6 @@ def get_drive(drv: str) -> pl.Path:
     Get the path to the drive with the letter `drv`. 
     For unix, this assumes that the drives are mapped using ``automount``
     """
-    breakpoint()
     if platform.system() == 'Windows':
         return pl.Path(f'{drv}:/')
     else:
