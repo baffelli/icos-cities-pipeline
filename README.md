@@ -2,38 +2,45 @@
 
 ## Introduction
 
-This repository contains *almost* all the code, configurations and scripts needed to process the ICOS-Cities/CarboSense mid- and low-cost sensor data. Usually, the entry point in the processing is done through the DigDag [DAG](process_carbosense.dig). If you inspect this (yaml) file, you will see a list of all processes and their dependencies. To learn more about digdag DAG, see the documentation [here](http://docs.digdag.io/concepts.html).
+This repository contains *almost* all the code, configurations and scripts needed to process the ICOS Cities/CarboSense mid- and low-cost sensor data. Usually, the entry point in the processing is done through the DigDag [DAG](process_carbosense.dig). If you inspect this (yaml) file, you will see a list of all processes and their dependencies. To learn more about digdag DAG, see the documentation [here](http://docs.digdag.io/concepts.html).
+
+## System and codebase location
+
+The system that is used for the development of this work has the hostname of `ddm06676` and is only accessible within the Empa network. This is a CentOS system and is managed by Stephan Henne, not the Empa IT department. To be issued a user for `ddm06676`, please contact [Stephan Henne](mailto:stephan.henne@empa.ch). The location of the ICOS Cities codebase is `/project/CarboSense/Software`.
 
 ## Setup the Pipeline
 
-To setup a working pipeline, you need to follow the steps below. In case of problems, you can contact Simone Baffelli. In the following sections, we assume you work on a Linux system with python>=3.10 and with an working installation of conda/anaconda.
+To setup a working pipeline, you need to follow the steps below. In case of problems, you can contact [Simone Baffelli](mailto:simone.baffelli@empa.ch). In the following sections, we assume you work on a Linux system with python>=3.10 and with an working installation of conda/anaconda.
 
 To enable conda on DDM06, follow these steps:
-1. Login on the server and load the conda module using: `module load anaconda`
-2. Enable conda using `conda init`.
+
+  1. Login on the server and load the conda module using: `module load anaconda`
+  2. Enable conda using `conda init`.
 
 You are set!
 
 ### Install dependencies with conda
 
 Using conda, install all the dependencies from [icos-cities.yaml](config/icos-cities.yml):
+
 ```bash
 conda env create -f config/icos-cities.yml
 ```
-The environment is called *icos-cities*. 
-To activate the environment, use:
+
+The environment is called *icos-cities*. To activate the environment, use:
+
 ```bash
 conda activate icos-cities
 ```
 
-The repository also contains an older, mixed python and R  environment called *carbosense-processing*. Its configuration file is found in [environment.yaml](config/environment.yaml)
+The repository also contains an older, mixed python and R environment called *carbosense-processing*. Its configuration file is found in [environment.yaml](config/environment.yaml)
 
-Use the same commands as above to initialise and use the environment.
-The `carbosense-processing` envrionment is used to run the older scripts that were used during the CarboSense project.
+Use the same commands as above to initialise and use the environment. The `carbosense-processing` envrionment is used to run the older scripts that were used during the CarboSense project.
 
 ### Install sensorutils manually
 
-*Sensorutils* is a python package containing utilities used in all other scripts. To install it in the project, run the following command from the main repository directory:
+*Sensorutils* is a Python package containing utilities used in all other scripts. To install it in the project, run the following command from the main repository directory:
+
 ```
 pip install -e .
 ```
@@ -42,7 +49,7 @@ The package is found in [sensorutils](./sensorutils/)
 
 ### Configure database connections
 
-As the system relies heavily on database connections, we need to setup the database credentials such that you do not need to type them anywhere. Since the database is currently MariaDB, we will use a MySQL options file. For more informations on these files, see [here](https://mariadb.com/kb/en/configuring-mariadb-with-option-files/). 
+As the system relies heavily on database connections, we need to setup the database credentials such that you do not need to type them anywhere. Since the database is currently MariaDB, we will use a MySQL options file. For more information on these files, see [here](https://mariadb.com/kb/en/configuring-mariadb-with-option-files/). 
 
 To get started, create a file `.my.cnf` in your home folder and insert the following lines:
 
@@ -70,9 +77,7 @@ port=3306
 socket=/var/lib/mysql/mysql.sock
 ```
 
-Anyhwere where you see  a variable of the form `{something}`, replace it with the *value* of something in your file.
-
-For example, assuming that your username is "user", the entry 
+Anywhere where you see  a variable of the form `{something}`, replace it with the *value* of something in your file. For example, assuming that your username is "user", the entry 
 ```
 user = {insert your user here}
 ```
@@ -89,10 +94,9 @@ At the moment, there are three databases that are necessary for the pipeline, as
 - *NabelGsn*, *empaGSN*
   - These databases contain some of the sensor data from NABLE and EMPA. To obtain access, ask Stephan Henne
 
-
 ### Configure Decentlab API Key
-Obtain a InfluxDB API Key from decentlab. This keys allows you access to the timeseries database where the raw measurement data resides. 
-Once you have the key, store it in a yaml file called `secrets.yml` in your unix home folder on the machine where the pipeline is run. 
+
+Obtain a InfluxDB API Key from Decentlab. This keys allows you access to the timeseries database where the raw measurement data resides. Once you have the key, store it in a yaml file called `secrets.yml` in your unix home folder on the machine where the pipeline is run. 
 
 For my user (*basi*), the full path would be `~/secrets.yml`, the contents are as follows:
 ```
@@ -106,20 +110,26 @@ Do not forget to make the file only readable from the user running the pipeline.
 chmod 700 ~/secrets.yml
 ```
 
+### Configuration of `ssh` keys for meterological data
+
+The pipeline copies meteorological data originating from Meteo Schweiz from another Empa server with `rsync`. The access to this remote server is done with `ssh` keys. The set-up of these keys requires the help of [Stephan Henne](mailto:stephan.henne@empa.ch) to install each user's public `ssh` keys on the remote server.
+
 ### Configure network shares
 
 Using automount, configure the following (Windows) network shares to be mounted on `/mnt/{username}/mnt/` in the following way:
+
 - `K:/Projects/` 
-  - One folder per project, e.g  `K:/Projects/Nabel`  mapped on  `/mnt/{username}/Nabel`
+  - One folder per project, e.g  `K:/Projects/Nabel`  mapped on  `/mnt/{username}/mnt/Nabel`
+  
 - `G:/`
   - On `/mnt/{username}/mnt/G`
+  
 To setup automount, ask Stephan Henne from 503 or Patrick Burckhalter from the IT department.
 
 ### Install DigDag
 
-Follow the instructions [here](http://docs.digdag.io/getting_started.html#downloading-the-latest-version) to install the latest version of digdag. 
+Follow the instructions [here](http://docs.digdag.io/getting_started.html#downloading-the-latest-version) to install the latest version of digdag. Additionally, configure the maximum number of task by creating the directory `~/.config/digdag/` with:
 
-Additionally, configure the maximum number of task by creating the directory `~/.config/digdag/` with:
 ```
 mkdir ~/.config/digdag/
 ```
@@ -142,6 +152,7 @@ The pipeline is self-explaining, all the processing steps are listed in the digd
 ### Manual run
 
 To manually run the pipeline, use the following commands:
+
 ```bash
 conda activate icos-cities
 digdag -r icos-cities.dig
@@ -160,6 +171,7 @@ For documentation on the previous carbosense pipeline, please refer to [this doc
 ## sensorutils
 
 This is a python package containing utilities used in all other scripts. To install it in the project, run the following command from the main repository directory:
+
 ```
 pip install -e .
 ```
@@ -172,10 +184,12 @@ In the following sections, I will describe the most important sections of the pi
 
 ### Motivation
 
-As of today (April 2022), the raw data from the LP8/HPP sensors is stored by DecentLab on their InfluxDB database. For safety and ease of processing, the first step in the pipeline is copying the raw data to our own relational database. 
+As of April 2022, the raw data from the LP8/HPP sensors is stored by DecentLab on their InfluxDB database. For safety and ease of processing, the first step in the pipeline is copying the raw data to our own relational database. 
 
 This is accomplished using the script [dump_raw_data_from_influxdb.py](CarbosenseDatabaseTools/dump_raw_data_from_influxdb.py). The script needs a configuration file to map the source and the destination tables, the current configuration file is located in [co2_sensor_mapping.yml](config/co2_sensor_mapping.yml). 
+
 ### Background
+
 The script bases on the [`DataSourceMapping`](sensorutils/files.py) class, which defines a flexible mapping between (tabular) data located in different systems (so far: CSV, relational databases and influxdb) and that can automate bulk and incremental loading between these systems (loosely inspired by [embulk](https://www.embulk.org/)).
 
 The main concept in this system is the *file*. One file corresponds to the set of all measurement for one *group* and one *date*. The group is defined using the `grouping_key` keyword, while the date using the `date_column`. Using these information, the system checks which files are present on the source system that are absent in the destination. Files are then transferred with an optional column mapping / transformation step to convert / rename columns.
@@ -234,7 +248,9 @@ The import is performed in two steps:
 - ~~In a first step, the data is copied on a staging table, which corresponds to the old CarboSense *NABEL_DUE*, *EMPA_LAEG* etc... tables~~
 - ~~In a second step, the data from these tables is consolidated into a single table called *picarro_data*, where the location of the data is identified by a location column in the table.~~ 
 Below, I will explain how to run the various steps
+
 ### Import into staging tables
+
 The reference data from the Picarro CRDS are imported with the script [import_picarro_data.py](./CarbosenseDatabaseTools/import_picarro_data.py). 
 The import configuration is very similar to the one for [raw data](#importing-raw-sensor-data) so I won't describe it here. The script is usually run using
 ```
@@ -265,13 +281,14 @@ In this section, we will give a short overwiew of the processes / files needed t
 ### Files
 
 - *Picarro*:
-When you run a climate chamber calibration, please place the **original** `.dat` files as exported from the Picarro instrument into a folder of your choosing (So far, this was `K:\Carbosense\Data\Klimakammer_Versuche_27022017_XXXXXXXX`). You can then import them into the database  using:
-  ```
-  import_climate_chamber_data.py picarro your_path your_regex dest_table {dest_location}
-  ```
-  Where `your_regex` is a regular expression / glob pattern to find all the files you want to import, `dest_table` is the table where to copy the data to, `{dest_location}` is the optional *LocationName* key, for example if you want the data be copied to the *picarro_data* table, where each location has a different id to distinguish the picarros.
-  Do not forget to add the picarro id to the `Deployment` table in the database. Before / after the calibration, run a picarro calibration
-  and store the results in `G:\503_Themen\CarboSense`
+When you run a climate chamber calibration, please place the **original** `.dat` files as exported from the Picarro instrument into a folder of your choosing (So far, this was `K:\Carbosense\Data\Klimakammer_Versuche_27022017_XXXXXXXX`). You can then import them into the database using:
+```
+import_climate_chamber_data.py picarro your_path your_regex dest_table {dest_location}
+```
+Where `your_regex` is a regular expression / glob pattern to find all the files you want to import, `dest_table` is the table where to copy the data to, `{dest_location}` is the optional *LocationName* key, for example if you want the data be copied to the *picarro_data* table, where each location has a different id to distinguish the Picarros.
+
+Do not forget to add the picarro id to the `Deployment` table in the database. Before / after the calibration, run a picarro calibration and store the results in `G:\503_Themen\CarboSense` 
+
 - *Climate Chamber*: export the data (as is) from the climate chamber control software and store it in a folder of your choosing. To import the data, use:
   ```
   import_climate_chamber_data.py climate your_path your_regex dest_table {dest_location}
@@ -334,15 +351,16 @@ python3 (./HPP_measurement_processing/process_hpp_data.py  ./config/co2_sensor_m
 
 By default, the processed data is stored in the table `co2_level2`.
 
-
 # Database Structure
 
 ## Motivation 
+
 Most of the current processes in the icos-cities pipeline exchange data and store their state in the `CarboSense` database schema on `emp-sql-cs1.empa.emp-eaw.ch`.  This database also stores network metadata such as the deployment times of sensors, their geographical location and many more.
 
 In the following section, I will describe the most important tables there, their structure and how to enter data.
 
 ## Database Tables
+
 In the following, I will list the most relevant database tables and give some information how to enter / modify the data there. 
 
 As a general information, consider that the date `2100-01-01 00:00:00` stands for an unknown time while the number `-999` is used to mark missing values. The latter is an historical artifact, which has been removed from most tables and replaced with SQL-conforming `NULL`. Feel free to replace this value with `NULL` whenever you encouter it. 
@@ -376,6 +394,9 @@ Finally, here are the table descriptions:
   Lists the analysed value for filled reference gas cylinders. The values are usually imported using the python script [import_bottle_calibrations.py](./CarbosenseDatabaseTools/import_bottle_calibrations.py) after the cylinders are analysed. The table is used to compute the HPP two point calibration values
 
 * `cylinder_deployment`
-  Lists which 
+
+Lists which 
 
 ### Views
+
+To-do...
