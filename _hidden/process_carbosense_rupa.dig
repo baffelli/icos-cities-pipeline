@@ -1,4 +1,4 @@
-timezone: Europe/Zurich
+#timezone: Europe/Zurich
 
 # Get username and store it in the digdag environment and configure various paths (for example {base_folder})
 +configure_paths:
@@ -24,17 +24,21 @@ _export:
     +LAEG:
         sh>: python3.10 ${base_folder}/CarbosenseDatabaseTools/import_picarro_data.py ${reference_config} LAEG
 
-# Import bottle calibration, this has been disabled for now because this programme is causing some 
-# insersion anomolies into `ref_gas_cylinder_analysis`
-#+reference_gas:
-#    +import_reference_bottles:
-#        sh>: python3.10 ${base_folder}/CarbosenseDatabaseTools/import_bottle_calibrations.py '${icos_folder}/Network/Sensors/HPP/Kalibriergas/Calibration Gas Data Processing/'  'cylinder_analysis_picarro.xlsx'
+# #TODO: dump metadata daily to files
++dump_metadata:
+        py>: dump_table
+     table: ['Location', 'Deployment', 'Sensors', 'SensorUnits', 'cylinder_deployment', 'ref_gas_cylinder', 'ref_gas_cylinder_analysis']
+
+#Import bottle calibration
++reference_gas:
+    +import_reference_bottles:
+        sh>: python3.10 ${base_folder}/CarbosenseDatabaseTools/import_bottle_calibrations.py '${icos_folder}/Network/Sensors/HPP/Kalibriergas/Calibration Gas Data Processing/'  'cylinder_analysis_picarro.xlsx'
 
 # Copy meteorological data from a remote system, insert them into the database, and do some pressure interpolation
 +meteo:
     # Copy meteo from server
     +copy_meteoswiss:
-        sh>: rsync -av --no-perms amrs503@m2m.empa.ch:/data/meteoschweiz/*.csv ${data_folder}/METEO/MCH_DAILY_DATA_DUMP
+        sh>: rsync -a --no-perms amrs503@m2m.empa.ch:/data/meteoschweiz/*.csv ${data_folder}/METEO/MCH_DAILY_DATA_DUMP
     # Import CSV into DB
     +import_meteoswiss:
         sh>: python3.10 MeteoSwissData4Carbosense/transfer_meteo_data.py ${base_folder}/config/meteo_data_mapping.yml '${data_folder}/METEO/MCH_DAILY_DATA_DUMP/' 'VQEA33*.csv'
@@ -105,6 +109,20 @@ _export:
     #        i: ${sensors['Licor']}
     #    _do:
     #        sh>: python3.10 ${base_folder}/HPP_measurement_processing/process_hpp_data.py ${cal_config} process Licor ${i} --plot ${plot_folder}  --backfill 10
+    +lp8_prediction:
+        for_each>: 
+            i: ${sensors['LP8']}
+        _do:
+            sh>: python3.10 ${base_folder}/HPP_measurement_processing/process_hpp_data.py ${cal_config} process LP8 ${i} --plot ${plot_folder}  --backfill 10
+
+#Update the level 3 table
+# +level3_processing:
+#     #For LP8 sensor apply the drift correction algorithm
+#     +drift_correction:
+#         for_each>: 
+#             sens: ${sensors['LP8']}
+#         _do: 
+#             sh>: python3.10 ${base_folder}/HPP_measurement_processing/drift_correction.py LP8 ${sens} --plot ${plot_folder}
 
 # Upload metadata to decentlab-db
 +metadata:
@@ -118,10 +136,13 @@ _export:
         dest: 'sensors'
     +upload:
         for_each>:
-            sens: ['LP8', 'HPP', 'Vaisala', 'Licor']
+            sens: ['LP8', 'HPP']
         _do:
             for_each>: 
                 i: ${sensors[sens]}
             _do:
-                sh>: python3 ${base_folder}/UploadProcessedMeasurementsToDecentlabDB/upload_measurements.py  ${base_folder}/config/decentlab_upload_mapping.yml  ${sens} ${i}
+                sh>: python3.10 /project/CarboSense/Software/UploadProcessedMeasurementsToDecentlabDB/upload_measurements.py  /project/CarboSense/Software/config/decentlab_upload_mapping.yml  ${sens} ${i}
 
+#Import calibration data (This is just an example)
+#+import_chamber:
+    #sh:> python3.10 /project/CarboSense/Software/REF_measurement_processing/import_climate_chamber_data.py climate_new '/mnt/basi/ICOS-Cities/Network/Sensors/Senseair-LP8/Calibration April 22/Run E (Additional Calibration runs)'/ '*.xlsx' picarro_data DUE7

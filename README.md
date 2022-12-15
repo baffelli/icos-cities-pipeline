@@ -21,10 +21,10 @@ You are set!
 
 ### Install dependencies with conda
 
-Using conda, install all the dependencies from [icos-cities.yaml](config/icos-cities.yml):
+Using conda, install all the dependencies from [icos_cities.yaml](config/icos_cities.yml):
 
 ```bash
-conda env create -f config/icos-cities.yml
+conda env create -f config/icos_cities.yml
 ```
 
 The environment is called *icos-cities*. To activate the environment, use:
