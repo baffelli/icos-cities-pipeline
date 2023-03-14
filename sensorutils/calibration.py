@@ -32,7 +32,7 @@ from sensorutils import calc
 
 import copy as cp 
 
-from mpl_toolkits.axes_grid.anchored_artists import AnchoredText
+from matplotlib.offsetbox import AnchoredText
 from matplotlib.dates import DateFormatter
 import matplotlib.dates as mdates
 
