@@ -1,5 +1,6 @@
 from argparse import ArgumentError
 import imp
+import os
 from pickle import NONE
 from pymysql import Timestamp
 from sklearn.exceptions import DataConversionWarning
@@ -652,7 +653,7 @@ class DBSource(DatabaseSource):
         qs = sqa.select(table).filter(*filt).subquery()
         qf = sqa.select(*cols).distinct().select_from(qs)
         qc = qf.compile()
-        logger.info(f'The query is {qc}')
+        #logger.info(f'The query is {qc}')
         return pd.read_sql_query(qf, self.eng, parse_dates=['date']).reset_index()
 
 
@@ -832,7 +833,7 @@ class InfluxdbSource(DatabaseSource):
             SELECT MEAN("value") AS value FROM "{self.table}" WHERE {gq} sensor =~ {self.sensors_re()} AND time > '{self.date_from}' GROUP BY time(1d), sensor
             )
             """
-            logger.info(f"The influxDB Query is: {q}")
+            #logger.info(f"The influxDB Query is: {q}")
             # Send query
             fs = self.eng.query(q, epoch='s', params={
                                 f"{self.grouping_key}": group})
@@ -1015,10 +1016,10 @@ class CsvSource(DataSource):
 
 
     def list_physical_files(self) -> List[pl.Path]:
-        """}
+        """
         Find all physically available files with the current path and regexp
         """
-        return [f for f in pl.Path(self.path).glob(self.re)]
+        return [f for f in pl.Path(self.path).glob(self.re) if os.stat(f).st_size!=0]
 
     def awk_command(self) -> str:
         """
