@@ -376,7 +376,7 @@ def get_HPP_calibration_data(session: sqa.orm.Session, sensor_type: du.Available
             (qr_as_extra.c.calibration_b == 1)) 
         ).subquery()
     else:
-        sqa.select(qr_as_extra).subquery()
+        qr_filt = sqa.select(qr_as_extra).subquery()
     hpp_as = aliased(tb, qr_filt)
     ae = make_aggregate_expression(qr_filt.c.time, "time", avg_time)
     agg = get_aggregations(sensor_type, fit=True)
@@ -397,8 +397,8 @@ def get_HPP_calibration_data(session: sqa.orm.Session, sensor_type: du.Available
             sqa.func.unix_timestamp(sens_as.start),
             sqa.func.coalesce(sqa.func.unix_timestamp(sens_as.end), sqa.func.unix_timestamp()))
     ).where(
-        (((hpp_agg.c.sensor_calibration_a == 1) & (mods.CylinderDeployment.inlet == 'a'))) |
-        (((hpp_agg.c.sensor_calibration_b == 1) & (mods.CylinderDeployment.inlet == 'b')))
+         (((hpp_agg.c.sensor_calibration_a == 1) & (mods.CylinderDeployment.inlet == 'a'))) |
+         (((hpp_agg.c.sensor_calibration_b == 1) & (mods.CylinderDeployment.inlet == 'b')))
     ).order_by(hpp_agg.c.time).add_columns(sens_as.serial)
     #get the data
     res = session.execute(jq).all()
@@ -639,6 +639,56 @@ def filter_cal(data: pd.DataFrame, endog='sensor_CO2', exog='cyl_CO2', duration_
     data.inlet.isin(['a', 'b']) & (data['cal_elapsed'].between(duration_threshold, max_dur))
     data_valid = data[valid_final]
     return data_valid
+
+def filter_cal_v2(df_:pd.DataFrame, df_cyl_dep:pd.DataFrame,df_ref:pd.DataFrame, minutes_past:int=1, minutes_future:int=2)->pd.DataFrame:
+
+    df_['date'] = pd.to_datetime(df_['time'], unit='s')
+    df=df_.copy()
+    
+    df['inlet'] = map_inlets(df.calibration_a, df.calibration_b)
+    df["inlet_cycle"]=df["inlet"].ne(df["inlet"].shift()).astype(object).cumsum(skipna=True)
+    
+    df=df[(df["inlet"]=="a") | (df["inlet"]=="b")].reset_index()
+    
+    df["date"][1:len(df)-1]=[0 if len(set(df.loc[i-1:i+1,"inlet_cycle"]))==1 else df.loc[i,"date"] for i in range(1,len(df)-1)]
+    
+    df["date_end"]=df["date"]
+    df=df.groupby(["SensorUnit_ID","inlet","inlet_cycle"])\
+         .agg({"date":"first",
+               "date_end":"last"})
+    
+    #Push start and end dates
+    df["date"]=(df["date"]+pd.Timedelta(minutes=-minutes_past)).dt.floor("min")
+    df["date_end"]=(df["date_end"]+pd.Timedelta(minutes=minutes_future)).dt.ceil("min")
+    df["duration"]=(df["date_end"]-df["date"]).astype(int)/10**9
+    
+    list_co2,list_rh=[],[]
+
+    for start, end in zip(df["date"],df["date_end"]):
+        list_co2.append(df_.loc[(df_['date']>start)&(df_['date']<end),
+                                                'senseair_hpp_co2_filtered'].median())
+        list_rh.append(df_.loc[(df_['date']>start)&(df_['date']<end),
+                                                'sensirion_sht21_humidity'].median())
+    df['value'],df['rh']=list_co2,list_rh
+
+    df=df.reset_index()
+
+    #Outer join with cylinder deployment table
+    df=pd.merge(df_cyl_dep,df, on="SensorUnit_ID", how="outer")
+    df=df[df["inlet_x"]==df["inlet_y"]]
+    df=df[(df["Date_UTC_from"]<df["date"])&(df["Date_UTC_to"]>df["date_end"])]
+
+    #Inner join with ref_gas_analysis table
+    df=pd.merge(df,df_ref,on="cylinder_id",how="inner")
+    df=df[(df["fill_from"]<df["date"])&(df["fill_to"]>df["date_end"])]
+
+    #Add value delta and variable columns, rename columns and select the interested ones
+    df["value_delta"]=df["CO2"]-df["value"]
+    df["variable"]="co2_rep"
+    df=df[["cylinder_id","SensorUnit_ID","LocationName","inlet_x","date","date_end","duration","CO2","value","rh","value_delta"]]
+    df=df.rename(columns={"inlet_x":"inlet", "CO2":"value_reference","date":"date_start"})
+
+    return df
 
 
 def HPP_two_point_calibration(dt_in: pd.DataFrame, st: du.AvailableSensors, endog: List[str], exog: List[str], 
