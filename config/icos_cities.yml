@@ -29,10 +29,11 @@ dependencies:
   - mypy
   - matplotlib
   - pysftp
-  - sqlalchemy
+  - sqlalchemy=1.4.16
   - pymysql
   - pandas
   - openjdk=11
   - sphinx
   - numba
+  - tqdm
 prefix: /newhome/basi/.conda/envs/icos-cities

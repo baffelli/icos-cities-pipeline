@@ -471,8 +471,6 @@ class Level3Data(base.Base, TimeseriesData):
     pressure: float = Column(Float)
     inlet: float = Column(String)
 
-
-
 @dataclass
 class PressureInterpolation(base.Base, TimeseriesData):
     """
@@ -498,7 +496,41 @@ class PredictionPerformance(base.Base):
     rmse: Optional[float] = Column(Float)
     bias: Optional[float] = Column(Float)
     correlation: Optional[float] = Column(Float)
+    
 
+@dataclass
+class CylinderSummaries(base.Base):
+
+    __tablename__ = "cylinder_test_summaries"
+    __sa_dataclass_metadata_key__ = "sa"
+
+    cylinder_id: int = Column("cylinder_id", Integer, primary_key=True)
+    id: int = Column("SensorUnit_ID", Integer, primary_key=True)
+    location: str = Column("LocationName", String)
+    inlet: str = Column(String)
+    date_start: dt.datetime = Column(DateTime(), primary_key=True)
+    date_end: dt.datetime = Column(DateTime(), primary_key=True)
+    duration:int = Column(Integer)
+    value_reference:  float = Column(Float)
+    value: float = Column(Float)
+    rh:  float = Column(Float)
+    value_delta: float = Column(Float)
+    variable: str = Column(String)
+    period_exclude: int = Column(Integer)
+    period_valid: int = Column(Integer)
+
+@dataclass
+class RefGasCylinderExclusionPeriods(base.Base):
+
+    __tablename__ = "RefGasCylinderExclusionPeriods"
+    __sa_dataclass_metadata_key__ = "sa"
+
+    cylinder_id: int = Column("cylinder_ID", Integer, primary_key=True)
+    id: int = Column("SensorUnit_ID", Integer, primary_key=True)
+    location: str = Column("Location", String, primary_key=True)
+    start: dt.datetime = Column("Date_UTC_from", DateTime)
+    end: dt.datetime = Column("Date_UTC_to", DateTime)
+    reason: str = Column(String)
 
 def get_column_names(tb: Union[base.Base, util.AliasedClass]) -> List[str]:
     """
