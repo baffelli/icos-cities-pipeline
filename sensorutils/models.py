@@ -504,7 +504,7 @@ class CylinderSummaries(base.Base):
     __tablename__ = "cylinder_test_summaries"
     __sa_dataclass_metadata_key__ = "sa"
 
-    cylinder_id: int = Column("cylinder_id", Integer, primary_key=True)
+    cylinder_id: str = Column("cylinder_id", String, primary_key=True)
     id: int = Column("SensorUnit_ID", Integer, primary_key=True)
     location: str = Column("LocationName", String)
     inlet: str = Column(String)
@@ -525,7 +525,7 @@ class RefGasCylinderExclusionPeriods(base.Base):
     __tablename__ = "RefGasCylinderExclusionPeriods"
     __sa_dataclass_metadata_key__ = "sa"
 
-    cylinder_id: int = Column("cylinder_ID", Integer, primary_key=True)
+    cylinder_id: str = Column("cylinder_ID", String, primary_key=True)
     id: int = Column("SensorUnit_ID", Integer, primary_key=True)
     location: str = Column("Location", String, primary_key=True)
     start: dt.datetime = Column("Date_UTC_from", DateTime)
